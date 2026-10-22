@@ -1,0 +1,19 @@
+[package]
+name = "basinsync"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92"
+
+[dependencies]
+anyhow = "1"
+axum = { version = "0.8", features = ["multipart"] }
+num-bigint = "0.4"
+rust-s3 = { version = "0.38", default-features = false, features = ["tokio-rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "sync", "signal", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+proptest = "1"

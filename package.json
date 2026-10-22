@@ -1,0 +1,16 @@
+{
+  "name": "basinsync-milestone-one",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test clients/*.test.ts",
+    "test:integration": "bun clients/integration.ts",
+    "stress": "bun clients/stress.ts",
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-s3": "3.1075.0",
+    "@types/bun": "1.3.11",
+    "typescript": "6.0.2"
+  }
+}
