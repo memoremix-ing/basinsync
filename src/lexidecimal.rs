@@ -74,6 +74,10 @@ impl Viewpoint {
         Ok(Self(value))
     }
 
+    pub fn hexadecimal(&self) -> String {
+        self.0.to_str_radix(16)
+    }
+
     pub fn decimal(&self) -> String {
         self.0.to_str_radix(10)
     }

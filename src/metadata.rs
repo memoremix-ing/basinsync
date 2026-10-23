@@ -1,69 +1,23 @@
 //! Typed JSON0 metadata for multipart commits. Query parameters are ordinary strings.
 use crate::lexidecimal::Viewpoint;
-use base64::{
-    Engine,
-    alphabet::{STANDARD, URL_SAFE},
-    engine::{DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig},
-};
-use num_bigint::BigUint;
-use serde::{Deserialize, Deserializer, de::Error};
+use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CommitMetadata {
-    #[serde(deserialize_with = "text")]
+    #[serde(deserialize_with = "crate::json0::deserialize_text")]
     pub flow: String,
-    #[serde(deserialize_with = "viewpoint")]
+    #[serde(deserialize_with = "crate::json0::deserialize_viewpoint")]
     pub viewpoint: Viewpoint,
-    #[serde(deserialize_with = "bytes")]
+    #[serde(deserialize_with = "crate::json0::deserialize_bytes")]
     pub sha384: Vec<u8>,
-}
-
-fn text<'de, D: Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
-    let wire = String::deserialize(deserializer)?;
-    if let Some(value) = wire.strip_prefix("00") {
-        return Ok(format!("0{value}"));
-    }
-    if wire.starts_with('0') && wire.len() > 1 {
-        return Err(D::Error::custom("flow must be a JSON0 string"));
-    }
-    Ok(wire)
-}
-
-fn viewpoint<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Viewpoint, D::Error> {
-    let wire = String::deserialize(deserializer)?;
-    let hex = wire
-        .strip_prefix("0x")
-        .filter(|hex| !hex.is_empty() && hex.bytes().all(|b| b.is_ascii_hexdigit()))
-        .ok_or_else(|| D::Error::custom("viewpoint must be a nonnegative JSON0 bigint"))?;
-    let integer = BigUint::parse_bytes(hex.as_bytes(), 16)
-        .ok_or_else(|| D::Error::custom("invalid viewpoint"))?;
-    Viewpoint::parse(&integer.to_str_radix(10)).map_err(D::Error::custom)
-}
-
-fn bytes<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<u8>, D::Error> {
-    let wire = String::deserialize(deserializer)?;
-    let alphabet = match wire.get(..2) {
-        Some("0*") => &URL_SAFE,
-        Some("0%") => &STANDARD,
-        _ => return Err(D::Error::custom("sha384 must be JSON0 bytes")),
-    };
-    let config = GeneralPurposeConfig::new()
-        .with_decode_padding_mode(DecodePaddingMode::Indifferent)
-        .with_decode_allow_trailing_bits(true);
-    let encoded: Vec<u8> = wire.as_bytes()[2..]
-        .iter()
-        .copied()
-        .filter(|b| !matches!(b, b' ' | b'\t' | b'\n' | b'\r' | 0x0c))
-        .collect();
-    GeneralPurpose::new(alphabet, config)
-        .decode(encoded)
-        .map_err(D::Error::custom)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::Engine;
+    use num_bigint::BigUint;
     use proptest::prelude::*;
 
     #[test]

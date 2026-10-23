@@ -1,12 +1,16 @@
 import { createHash } from "node:crypto";
-import { stringify } from "./json0";
+import { parse, stringify } from "./json0";
 
-export type Position = { viewpoint: string };
+export type Position = { viewpoint: bigint };
 export type EpilogueStatus = {
   latest: Position | null;
   recent: (Position & { url: string }) | null;
 };
-export type ViewpointMismatch = { next: { viewpoint: string } };
+export type ViewpointMismatch = { next: Position };
+export type ApiError = { error: string; message: string };
+export async function parseResponse<T>(response: Response): Promise<T> {
+  return parse<T>(await response.text());
+}
 export const sha384 = (blob: Uint8Array): string =>
   createHash("sha384").update(blob).digest("hex");
 
@@ -28,5 +32,5 @@ export async function commit(url: string, flow: string, blob: Uint8Array, viewpo
 export async function epilogueStatus(url: string, flow: string): Promise<EpilogueStatus> {
   const response = await fetch(`${url}/api/v0/epilogue/status?${new URLSearchParams({ flow })}`, { cache: "no-store", signal: AbortSignal.timeout(30_000) });
   if (!response.ok) throw new Error(`status: ${response.status} ${await response.text()}`);
-  return response.json() as Promise<EpilogueStatus>;
+  return parseResponse<EpilogueStatus>(response);
 }

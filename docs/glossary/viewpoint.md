@@ -6,6 +6,5 @@
 # Viewpoint
 
 An arbitrary-precision nonnegative integer identifying a position in the
-*Epilogue*[^][epilogue]. Use *JSON0*[^][json0] bigints in commit metadata,
-decimal strings in responses, and
-*complemented*[^][twos-complement] *Lexidecimal*[^][lexidecimal] in object keys.
+*Epilogue*[^][epilogue]. Use *JSON0*[^][json0] bigints in commit metadata and
+responses, and *complemented*[^][twos-complement] *Lexidecimal*[^][lexidecimal] in object keys.

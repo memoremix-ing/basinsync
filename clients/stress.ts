@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { commit, epilogueStatus } from "./client";
+import { commit, epilogueStatus, type Position } from "./client";
+import { parse } from "./json0";
 
 // Safe against other clients advancing the same server. An external winner may
 // terminate a server; callers choose whether to restart it for another round.
@@ -17,10 +18,12 @@ export async function stress(url: string, flow: string, count = 1025, workers = 
       for (let attempt = 0; ; attempt++) {
         assert(attempt < 10_000, "contention retry budget exhausted");
         const { latest: before } = await epilogueStatus(url, flow);
-        const viewpoint = before ? BigInt(before.viewpoint) + 1n : 0n;
+        const viewpoint = before ? before.viewpoint + 1n : 0n;
         const response = await commit(url, flow, blob, viewpoint);
         if (response.status === 409) { await response.arrayBuffer(); conflicts++; continue; }
-        assert.equal(response.status, 201, await response.text());
+        const body = await response.text();
+        assert.equal(response.status, 201, body);
+        assert.deepEqual(parse<Position>(body), { viewpoint });
         assert(!accepted.has(viewpoint), "duplicate successful viewpoint");
         accepted.set(viewpoint, blob);
         break;

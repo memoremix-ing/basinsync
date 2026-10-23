@@ -5,8 +5,8 @@ import { resolve } from "node:path";
 import { spawn } from "bun";
 import { CreateBucketCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client, paginateListObjectsV2 } from "@aws-sdk/client-s3";
 import { encode as flexEncode } from "flatbuffers/js/flexbuffers.js";
-import { commit, form, epilogueStatus, sha384, sha384Bytes, type ViewpointMismatch } from "./client";
-import { stringify } from "./json0";
+import { commit, form, epilogueStatus, sha384, sha384Bytes, type ApiError, type Position, type ViewpointMismatch } from "./client";
+import { parse, stringify } from "./json0";
 import { key, fromKey } from "./diffuse16";
 import { encodeEvent, markerAt, type Marker } from "./events";
 import { stress } from "./stress";
@@ -84,12 +84,25 @@ function relay(after: (request: Request, response: Response) => Promise<Response
   return {service,url:`http://127.0.0.1:${service.port}`};
 }
 const bytes = (s: string) => new TextEncoder().encode(s);
-async function status(r: Response, expected: number) { assert.equal(r.status,expected,await r.text()); }
+async function status(r: Response, expected: number) {
+  const body = await r.text();
+  assert.equal(r.status,expected,body);
+  if (new URL(r.url).pathname.startsWith("/api/v0/")) {
+    assert.match(r.headers.get("content-type") ?? "", /^application\/json/);
+    const decoded = parse<ApiError | Position | ViewpointMismatch>(body);
+    if (expected === 409) {
+      assert("next" in decoded && typeof decoded.next.viewpoint === "bigint");
+    } else if (expected >= 400) {
+      assert("error" in decoded && typeof decoded.error === "string");
+      assert("message" in decoded && typeof decoded.message === "string");
+    }
+  }
+}
 async function mismatch(r: Response, next: bigint) {
   assert.equal(r.status,409);
-  assert.deepEqual(await r.json() as ViewpointMismatch,{
-    next:{viewpoint:next.toString()},
-  });
+  const body = await r.text();
+  assert.deepEqual(JSON.parse(body),{next:{viewpoint:`0x${next.toString(16)}`}});
+  assert.deepEqual(parse<ViewpointMismatch>(body),{next:{viewpoint:next}});
 }
 async function get(bucket: string, moment: bigint) {
   const r = await s3.send(new GetObjectCommand({Bucket:bucket,Key:key(moment)}));
@@ -161,21 +174,26 @@ try {
   await status(await fetch(`${writer.url}/epilogue`,{method:"PUT",body:form(flowA,a,0n)}),404);
   await status(await fetch(`${writer.url}/epilogue/status?flow=unversioned`),404);
   await status(await fetch(`${writer.url}/api/v0/epilogue/status`),400);
+  await status(await fetch(`${writer.url}/api/v0/epilogue`,{method:"PUT"}),400);
+  await status(await fetch(`${writer.url}/api/v0/epilogue`,{method:"POST"}),405);
   await status(await fetch(`${writer.url}/api/v0/epilogue/latest?flow=retired`),404);
   await status(await commit(writer.url,flowA,new Uint8Array(8*1024*1024),0n),413);
   const receipts = new Map<string,Map<bigint,Uint8Array>>();
   async function accepted(url: string, flow: string, blob: Uint8Array, v: bigint) {
-    const r = await commit(url,flow,blob,v); assert.equal(r.status,201,await r.text());
+    const r = await commit(url,flow,blob,v);
+    const body = await r.text();
+    assert.equal(r.status,201,body);
+    assert.deepEqual(parse<Position>(body),{viewpoint:v});
     if(!receipts.has(flow))receipts.set(flow,new Map()); receipts.get(flow)!.set(v,blob);
   }
   await accepted(writer.url,flowA,a,0n);
   await mismatch(await commit(writer.url,flowA,bytes("replacement"),0n),1n);
-  assert.deepEqual(await epilogueStatus(observer.url,flowA),{latest:{viewpoint:"0"},recent:null},"running observer replays Timeline");
+  assert.deepEqual(await epilogueStatus(observer.url,flowA),{latest:{viewpoint:0n},recent:null},"running observer replays Timeline");
   assert.deepEqual(await epilogueStatus(observer.url,flowB),{latest:null,recent:null});
   await accepted(writer.url,flowB,new Uint8Array([0,255,128]),0n);
   await accepted(observer.url,flowB,new Uint8Array(),1n);
   await accepted(writer.url,flowA,bytes("independent Flow"),1n);
-  assert.deepEqual(await epilogueStatus(writer.url,flowB),{latest:{viewpoint:"1"},recent:null});
+  assert.deepEqual(await epilogueStatus(writer.url,flowB),{latest:{viewpoint:1n},recent:null});
   console.log("put of success: Flow isolation, validation, prototype-safe ids, and live Timeline refresh");
 
   const flows = ["red","blue","0","constructor"];
@@ -216,7 +234,7 @@ try {
   const startup=trace.slice(start);
   assert.equal(startup.filter(r=>r.method==="GET"&&r.url.searchParams.get("prefix")==="timeline/").length,1);
   assert.equal(startup.filter(r=>r.method==="GET"&&r.url.pathname.includes("/timeline/")).length,total,"replay the entire Timeline");
-  for(const [flow,v] of replayed) assert.deepEqual(await epilogueStatus(writer.url,flow),{latest:{viewpoint:v.toString()},recent:null});
+  for(const [flow,v] of replayed) assert.deepEqual(await epilogueStatus(writer.url,flow),{latest:{viewpoint:v},recent:null});
   assert(!trace.some(r=>r.url.searchParams.get("prefix")?.startsWith("epilogue/")),"never list Epilogue state");
   await accepted(writer.url,flowA,bytes("after recovery"),2n);
   await stop(writer.process);await stop(observer.process);
@@ -252,8 +270,8 @@ try {
   const fixture=await bucket();
   await seed(fixture,1n,encodeEvent({[flowA]:marker(a),[flowB]:marker(new Uint8Array())}));
   const restored=await server(fixture);
-  assert.deepEqual(await epilogueStatus(restored.url,flowA),{latest:{viewpoint:"0"},recent:null});
-  assert.deepEqual(await epilogueStatus(restored.url,flowB),{latest:{viewpoint:"0"},recent:null});
+  assert.deepEqual(await epilogueStatus(restored.url,flowA),{latest:{viewpoint:0n},recent:null});
+  assert.deepEqual(await epilogueStatus(restored.url,flowB),{latest:{viewpoint:0n},recent:null});
   await status(await commit(restored.url,flowA,a,1n<<128n),409);
   await status(await commit(restored.url,flowA,a,1n),201);
   await stop(restored.process);
@@ -275,7 +293,7 @@ try {
   await status(await commit(failed.url,"f",a,0n),503);
   assert.equal(await timeout(failed.process.exited),1);assert.equal(puts,1);
   const recovered=await server(uncertain);
-  assert.deepEqual(await epilogueStatus(recovered.url,"f"),{latest:{viewpoint:"0"},recent:null});
+  assert.deepEqual(await epilogueStatus(recovered.url,"f"),{latest:{viewpoint:0n},recent:null});
   await status(await commit(recovered.url,"f",a,1n),201);
   await stop(recovered.process);
   console.log("put of success: JS-to-Rust replay, malformed-event rejection, and ambiguous Timeline PUT recovery without retries");

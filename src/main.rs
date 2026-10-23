@@ -1,7 +1,10 @@
 use anyhow::{Context, Result, bail};
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, Multipart, Query, State},
+    extract::{
+        DefaultBodyLimit, Multipart, Query, State, multipart::MultipartRejection,
+        rejection::QueryRejection,
+    },
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, put},
@@ -31,7 +34,9 @@ type Shared = Arc<App>;
 
 #[derive(Serialize)]
 struct ApiError {
+    #[serde(serialize_with = "basinsync::json0::serialize_text")]
     error: &'static str,
+    #[serde(serialize_with = "basinsync::json0::serialize_text")]
     message: String,
 }
 
@@ -133,7 +138,8 @@ impl Commit {
 
 #[derive(Serialize)]
 struct Position {
-    viewpoint: String,
+    #[serde(serialize_with = "basinsync::json0::serialize_viewpoint")]
+    viewpoint: Viewpoint,
 }
 
 #[derive(Serialize)]
@@ -144,11 +150,17 @@ struct EpilogueStatus {
 
 #[derive(Serialize)]
 struct RecentMarker {
-    viewpoint: String,
+    #[serde(serialize_with = "basinsync::json0::serialize_viewpoint")]
+    viewpoint: Viewpoint,
+    #[serde(serialize_with = "basinsync::json0::serialize_text")]
     url: String,
 }
 
-async fn commit(State(app): State<Shared>, form: Multipart) -> Result<impl IntoResponse, Failure> {
+async fn commit(
+    State(app): State<Shared>,
+    form: Result<Multipart, MultipartRejection>,
+) -> Result<impl IntoResponse, Failure> {
+    let form = form.map_err(|error| Failure::new(error.status(), "invalid_multipart", error))?;
     let request = Commit::read(form).await?;
     // Detach the transaction from the HTTP request: a disconnected client must
     // not cancel a durable PUT before we advance (or poison) the local cursor.
@@ -173,7 +185,7 @@ impl App {
         let expected = state.expected(&request.flow);
         if request.viewpoint != expected {
             let next = Position {
-                viewpoint: expected.decimal(),
+                viewpoint: expected,
             };
             return Err(Failure::Mismatch(ViewpointMismatch { next }));
         }
@@ -202,7 +214,7 @@ impl App {
                 Ok((
                     StatusCode::CREATED,
                     Json(Position {
-                        viewpoint: request.viewpoint.decimal(),
+                        viewpoint: request.viewpoint,
                     }),
                 ))
             }
@@ -229,8 +241,10 @@ struct FlowQuery {
 
 async fn epilogue_status(
     State(app): State<Shared>,
-    Query(query): Query<FlowQuery>,
+    query: Result<Query<FlowQuery>, QueryRejection>,
 ) -> Result<Json<EpilogueStatus>, Failure> {
+    let Query(query) =
+        query.map_err(|error| Failure::new(error.status(), "invalid_query", error))?;
     event::valid_flow(&query.flow).map_err(Failure::bad)?;
     let mut state = app.state.lock().await;
     if state.stopped {
@@ -244,7 +258,7 @@ async fn epilogue_status(
         .await
         .map_err(Failure::internal)?;
     let latest = state.flows.get(&query.flow).map(|viewpoint| Position {
-        viewpoint: viewpoint.decimal(),
+        viewpoint: viewpoint.clone(),
     });
     Ok(Json(EpilogueStatus {
         latest,
@@ -296,7 +310,15 @@ async fn main() -> Result<()> {
     });
     let api = Router::new()
         .route("/epilogue", put(commit))
-        .route("/epilogue/status", get(epilogue_status));
+        .route("/epilogue/status", get(epilogue_status))
+        .fallback(|| async { Failure::new(StatusCode::NOT_FOUND, "not_found", "route not found") })
+        .method_not_allowed_fallback(|| async {
+            Failure::new(
+                StatusCode::METHOD_NOT_ALLOWED,
+                "method_not_allowed",
+                "method not allowed",
+            )
+        });
     let router = Router::new()
         .nest("/api/v0", api)
         .layer(DefaultBodyLimit::max(MAX_BODY))
@@ -324,4 +346,36 @@ async fn main() -> Result<()> {
         bail!("leadership lost: conditional PUT failed");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn responses_use_json0_bigints_and_escape_literal_strings() {
+        let viewpoint = Viewpoint::parse("340282366920938463463374607431768211456").unwrap();
+        let status = EpilogueStatus {
+            latest: Some(Position { viewpoint }),
+            recent: Some(RecentMarker {
+                viewpoint: Viewpoint::zero(),
+                url: "0x/literal".into(),
+            }),
+        };
+        assert_eq!(
+            serde_json::to_value(status).unwrap(),
+            serde_json::json!({
+                "latest": {"viewpoint": "0x100000000000000000000000000000000"},
+                "recent": {"viewpoint": "0x0", "url": "00x/literal"},
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(ApiError {
+                error: "0x_literal",
+                message: "0$message".into(),
+            })
+            .unwrap(),
+            serde_json::json!({"error": "00x_literal", "message": "00$message"})
+        );
+    }
 }

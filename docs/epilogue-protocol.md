@@ -17,11 +17,11 @@
 *viewpoint*[^][viewpoint] and matching *digest*[^][sha384] before accepting a
 commit. Rejection must not advance the sequence.
 
-Responses use JSON with decimal string *viewpoints*[^][viewpoint].
+Responses use *JSON0*[^][json0] with bigint *viewpoints*[^][viewpoint].
 A *viewpoint*[^][viewpoint] mismatch returns HTTP 409:
 
 ```json
-{"next":{"viewpoint":"1"}}
+{"next":{"viewpoint":"0x1"}}
 ```
 
 `GET /api/v0/epilogue/status` reports the latest committed *viewpoint*[^][viewpoint]
@@ -29,7 +29,7 @@ and the most recent *CommitMarker*[^][commit-marker] stored in the
 *Epilogue*[^][epilogue], with a presigned GET URL:
 
 ```json
-{"latest":{"viewpoint":"1"},"recent":{"viewpoint":"0","url":"<presigned GET>"}}
+{"latest":{"viewpoint":"0x1"},"recent":{"viewpoint":"0x0","url":"<presigned GET>"}}
 ```
 
 Either field is `null` when its corresponding value is absent; both are `null`
