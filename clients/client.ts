@@ -19,11 +19,11 @@ export function form(flow: string, blob: Uint8Array, viewpoint: bigint, digest =
 }
 
 export async function commit(url: string, flow: string, blob: Uint8Array, viewpoint: bigint, digest?: string): Promise<Response> {
-  return fetch(`${url}/epilogue`, { method: "PUT", body: form(flow, blob, viewpoint, digest), signal: AbortSignal.timeout(30_000) });
+  return fetch(`${url}/api/v0/epilogue`, { method: "PUT", body: form(flow, blob, viewpoint, digest), signal: AbortSignal.timeout(30_000) });
 }
 
 export async function epilogueStatus(url: string, flow: string): Promise<EpilogueStatus> {
-  const response = await fetch(`${url}/epilogue/status?${new URLSearchParams({ flow })}`, { cache: "no-store", signal: AbortSignal.timeout(30_000) });
+  const response = await fetch(`${url}/api/v0/epilogue/status?${new URLSearchParams({ flow })}`, { cache: "no-store", signal: AbortSignal.timeout(30_000) });
   if (!response.ok) throw new Error(`status: ${response.status} ${await response.text()}`);
   return response.json() as Promise<EpilogueStatus>;
 }

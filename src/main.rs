@@ -315,9 +315,11 @@ async fn main() -> Result<()> {
         state: Mutex::new(state),
         fatal: fatal_tx,
     });
-    let router = Router::new()
+    let api = Router::new()
         .route("/epilogue", put(commit))
-        .route("/epilogue/status", get(epilogue_status))
+        .route("/epilogue/status", get(epilogue_status));
+    let router = Router::new()
+        .nest("/api/v0", api)
         .layer(DefaultBodyLimit::max(MAX_BODY))
         .with_state(app);
     let address: SocketAddr = env::var("BASINSYNC_LISTEN")

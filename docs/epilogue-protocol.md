@@ -10,7 +10,7 @@
 *Viewpoints*[^][viewpoint] increase from zero; their
 *encoded keys*[^][lexidecimal] decrease lexicographically.
 
-Common commit fields are `blob`, `sha384`, and `viewpoint`: opaque bytes,
+`PUT /api/v0/epilogue` accepts common fields `blob`, `sha384`, and `viewpoint`: opaque bytes,
 their *hexadecimal SHA-384*[^][sha384], and a decimal string. Require the expected
 *viewpoint*[^][viewpoint] and matching *digest*[^][sha384] before accepting a
 commit. Rejection must not advance the sequence.
@@ -21,7 +21,7 @@ A *viewpoint*[^][viewpoint] mismatch returns HTTP 409:
 {"next":{"viewpoint":"1"}}
 ```
 
-`GET /epilogue/status` reports the latest committed *viewpoint*[^][viewpoint]
+`GET /api/v0/epilogue/status` reports the latest committed *viewpoint*[^][viewpoint]
 and the most recent *CommitMarker*[^][commit-marker] stored in the
 *Epilogue*[^][epilogue], with a presigned GET URL:
 

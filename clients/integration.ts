@@ -133,10 +133,12 @@ try {
     if(kind==="uppercase-digest")data.set("sha384",sha384(a).toUpperCase());
     if(kind==="prefixed-digest")data.set("sha384",`0x${sha384(a)}`);
     if(kind==="short-digest")data.set("sha384",sha384(a).slice(2));
-    await status(await fetch(`${writer.url}/epilogue`,{method:"PUT",body:data}),kind.endsWith("-digest")?422:400);
+    await status(await fetch(`${writer.url}/api/v0/epilogue`,{method:"PUT",body:data}),kind.endsWith("-digest")?422:400);
   }
-  await status(await fetch(`${writer.url}/epilogue/status`),400);
-  await status(await fetch(`${writer.url}/epilogue/latest?flow=retired`),404);
+  await status(await fetch(`${writer.url}/epilogue`,{method:"PUT",body:form(flowA,a,0n)}),404);
+  await status(await fetch(`${writer.url}/epilogue/status?flow=unversioned`),404);
+  await status(await fetch(`${writer.url}/api/v0/epilogue/status`),400);
+  await status(await fetch(`${writer.url}/api/v0/epilogue/latest?flow=retired`),404);
   await status(await commit(writer.url,flowA,new Uint8Array(8*1024*1024),0n),413);
   const receipts = new Map<string,Map<bigint,Uint8Array>>();
   async function accepted(url: string, flow: string, blob: Uint8Array, v: bigint) {

@@ -12,12 +12,12 @@ Start with an *Epilogue*[^][epilogue] of opaque blobs.
 
 1. Build a Rust server that recovers its next *viewpoint*[^][viewpoint] from the
    bucket's lowest *Epilogue*[^][epilogue] key, starting at zero when empty.
-2. Accept `PUT /epilogue`: blob, hexadecimal *SHA-384*[^][sha384], decimal
+2. Accept `PUT /api/v0/epilogue`: blob, hexadecimal *SHA-384*[^][sha384], decimal
    *viewpoint*[^][viewpoint]. Reject a wrong *viewpoint*[^][viewpoint] or
    *digest*[^][sha384]; otherwise *conditionally create*[^][conditional-write]
    its *marker*[^][commit-marker]. Advance after success; return an error and
    terminate after write failure.
-3. Offer `GET /epilogue/status`. Its `latest` and `recent`
+3. Offer `GET /api/v0/epilogue/status`. Its `latest` and `recent`
    *viewpoints*[^][viewpoint] match; `recent` also contains the committed
    *marker*[^][commit-marker]'s presigned GET URL.
    On *viewpoint*[^][viewpoint] mismatch, return the expected next

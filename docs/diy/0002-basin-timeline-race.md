@@ -25,7 +25,7 @@ and refresh.
    *DifferentialEvent*[^][differential-event], then update that *Flow*[^][flow].
    Return an error and terminate after append failure.
 4. Refresh from subsequent *Timeline*[^][timeline] entries. In
-   `GET /epilogue/status?flow=<id>`, `latest` reflects committed
+   `GET /api/v0/epilogue/status?flow=<id>`, `latest` reflects committed
    *viewpoints*[^][viewpoint] while `recent` remains `null` until copying is
    implemented. Test multiple
    *Flows*[^][flow], concurrent servers, exact blob contents, and restart replay.
