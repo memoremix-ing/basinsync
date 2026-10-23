@@ -34,7 +34,7 @@ Each *DifferentialEvent*[^][differential-event] is a unary
 *FlexBuffers*[^][flexbuffers] batch containing one commitflow command:
 
 ```ts
-Array<["sync.memoremix.com", "sts/0/databasin/commitflow", {
+Array<[typeof Symbol.species, "sync.memoremix.com", "sts/0/databasin/commitflow", {
   markers: { [flow: string]: {
     viewpoint: string; sha384: string; blob: Uint8Array
   } }

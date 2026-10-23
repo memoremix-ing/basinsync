@@ -1,4 +1,7 @@
-use crate::lexidecimal::Viewpoint;
+use crate::{
+    flexbuffer::{self, Extension},
+    lexidecimal::Viewpoint,
+};
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha384};
@@ -33,7 +36,7 @@ pub struct CommitFlow {
     pub markers: BTreeMap<String, Marker>,
 }
 
-pub type Batch = Vec<(String, String, CommitFlow)>;
+pub type Batch = Vec<(Vec<u8>, String, String, CommitFlow)>;
 
 pub fn valid_flow(flow: &str) -> Result<()> {
     ensure!(
@@ -47,6 +50,7 @@ pub fn encode(flow: String, marker: Marker) -> Result<Vec<u8>> {
     valid_flow(&flow)?;
     marker.validate()?;
     let batch: Batch = vec![(
+        Extension::WellKnownSymbol("species".into()).payload()?,
         NAMESPACE.into(),
         COMMIT_FLOW.into(),
         CommitFlow {
@@ -57,16 +61,25 @@ pub fn encode(flow: String, marker: Marker) -> Result<Vec<u8>> {
 }
 
 pub fn decode(bytes: &[u8]) -> Result<CommitFlow> {
-    let batch: Batch = flexbuffers::from_slice(bytes).context("decode DifferentialEvent")?;
+    let root = flexbuffers::Reader::get_root(bytes).context("decode DifferentialEvent")?;
+    let batch = root.get_vector()?;
     ensure!(
         batch.len() == 1,
         "DifferentialEvent must contain one command"
     );
-    let (namespace, command, payload) = batch.into_iter().next().unwrap();
+    let tuple = batch.index(0)?.get_vector()?;
+    ensure!(tuple.len() == 4, "invalid command tuple");
+    ensure!(
+        flexbuffer::read(tuple.index(0)?)? == Extension::WellKnownSymbol("species".into()),
+        "command tuple must begin with Symbol.species"
+    );
+    let namespace = tuple.index(1)?.get_str()?;
+    let command = tuple.index(2)?.get_str()?;
     ensure!(
         namespace == NAMESPACE && command == COMMIT_FLOW,
         "unknown Basin command"
     );
+    let payload = CommitFlow::deserialize(tuple.index(3)?)?;
     ensure!(!payload.markers.is_empty(), "empty marker batch");
     for (flow, marker) in &payload.markers {
         valid_flow(flow)?;
@@ -91,6 +104,7 @@ mod tests {
         assert_eq!(payload.markers["雪/flow"].blob, blob);
         assert!(decode(&flexbuffers::to_vec(Vec::<u8>::new()).unwrap()).is_err());
         let bad = vec![(
+            b"#species".to_vec(),
             NAMESPACE,
             "other",
             CommitFlow {

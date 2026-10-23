@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { spawn } from "bun";
 import { CreateBucketCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client, paginateListObjectsV2 } from "@aws-sdk/client-s3";
 import { encode as flexEncode } from "flatbuffers/js/flexbuffers.js";
+import { encode as extensionEncode } from "./flexbuffer";
 import { commit, form, epilogueStatus, sha384, sha384Bytes, type ApiError, type Position, type ViewpointMismatch } from "./client";
 import { parse, stringify } from "./json0";
 import { key, fromKey } from "./diffuse16";
@@ -281,6 +282,13 @@ try {
     async()=>{const b=await bucket();await seed(b,1n,encodeEvent({f:{...marker(a),sha384:"00".repeat(48)}}));return b},
     async()=>{const b=await bucket();await seed(b,1n,encodeEvent({f:marker(a,"18446744073709551616")}));return b},
     async()=>{const b=await bucket();await seed(b,1n,flexEncode([["wrong","command",{}]]));return b},
+    ...["#species", Symbol.for("species"), Symbol.iterator, new TextEncoder().encode("#species"),
+      Array.from(new TextEncoder().encode("#species")),
+    ].map(tag=>async()=>{
+      const b=await bucket();
+      await seed(b,1n,extensionEncode([[tag,"sync.memoremix.com","sts/0/databasin/commitflow",{markers:{f:marker(a)}}]]));
+      return b;
+    }),
   ];
   for(const fixture of invalid)await badStartup(await fixture());
 
