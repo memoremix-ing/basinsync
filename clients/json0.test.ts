@@ -46,12 +46,15 @@ describe("JSON0", () => {
   );
 
   test("round-trips supported well-known and global symbols", () => {
-    for (const symbol of [Symbol.iterator, Symbol.asyncIterator, Symbol.unscopables, Symbol.for(""), Symbol.for("shared 🌎")]) {
+    for (const symbol of [Symbol.iterator, Symbol.asyncIterator, Symbol.species, Symbol.unscopables, Symbol.for(""), Symbol.for("shared 🌎")]) {
       expect(parse<symbol>(stringify(symbol))).toBe(symbol);
     }
   });
 
-  test.each(["dispose", "asyncDispose"] as const)("excludes Symbol.%s", (name) => {
+  test.each([
+    "asyncDispose", "dispose", "hasInstance", "isConcatSpreadable", "match", "matchAll",
+    "replace", "search", "split", "toPrimitive", "toStringTag",
+  ] as const)("excludes Symbol.%s", (name) => {
     expect(() => stringify(Symbol[name])).toThrow("Unrecognized symbol.");
     expect(() => parse(JSON.stringify(`0#${name}`))).toThrow("Unrecognized symbol encoding.");
   });
