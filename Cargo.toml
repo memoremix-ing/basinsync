@@ -6,12 +6,14 @@ rust-version = "1.92"
 
 [dependencies]
 anyhow = "1"
+base64 = "0.22"
 flexbuffers = "25.12.19"
 serde_bytes = "0.11"
 axum = { version = "0.8", features = ["multipart"] }
 num-bigint = "0.4"
 rust-s3 = { version = "0.38", default-features = false, features = ["tokio-rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 sha2 = "0.10"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "sync", "signal", "time"] }
 tracing = "0.1"

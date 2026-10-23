@@ -21,7 +21,7 @@ and refresh.
    List a seed, then search exponentially upward to find the latest.
 2. Replay every *DifferentialEvent*[^][differential-event] to recover the mapping
    from *Flow*[^][flow] id to latest *Viewpoint*[^][viewpoint].
-3. Add `flow` to commits. Race to conditionally append the next
+3. Add `flow` to commit metadata. Race to conditionally append the next
    *DifferentialEvent*[^][differential-event], then update that *Flow*[^][flow].
    Return an error and terminate after append failure.
 4. Refresh from subsequent *Timeline*[^][timeline] entries. In

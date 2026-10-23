@@ -10,6 +10,7 @@ use basinsync::{
     diffuse16,
     event::{self, Marker},
     lexidecimal::Viewpoint,
+    metadata::CommitMetadata,
     timeline,
 };
 use s3::{Bucket, Region, creds::Credentials};
@@ -83,68 +84,46 @@ struct Commit {
 
 impl Commit {
     async fn read(mut form: Multipart) -> Result<Self, Failure> {
-        let (mut flow, mut blob, mut sha384, mut viewpoint) = (None, None, None, None);
+        let (mut metadata, mut blob) = (None, None);
         while let Some(field) = form
             .next_field()
             .await
             .map_err(|e| Failure::new(e.status(), "invalid_multipart", e))?
         {
             let name = field.name().unwrap_or("").to_owned();
-            match name.as_str() {
-                "flow" if flow.is_none() => {
-                    flow = Some(
-                        field
-                            .text()
-                            .await
-                            .map_err(|e| Failure::new(e.status(), "invalid_multipart", e))?,
-                    );
-                }
-                "blob" if blob.is_none() => {
-                    blob = Some(
-                        field
-                            .bytes()
-                            .await
-                            .map_err(|e| Failure::new(e.status(), "invalid_multipart", e))?,
-                    );
-                }
-                "sha384" if sha384.is_none() => {
-                    sha384 = Some(
-                        field
-                            .text()
-                            .await
-                            .map_err(|e| Failure::new(e.status(), "invalid_multipart", e))?,
-                    );
-                }
-                "viewpoint" if viewpoint.is_none() => {
-                    viewpoint = Some(
-                        field
-                            .text()
-                            .await
-                            .map_err(|e| Failure::new(e.status(), "invalid_multipart", e))?,
-                    );
-                }
+            let slot = match name.as_str() {
+                "metadata" if metadata.is_none() => &mut metadata,
+                "blob" if blob.is_none() => &mut blob,
                 _ => return Err(Failure::bad("unknown, unnamed, or duplicate field")),
-            }
+            };
+            *slot = Some(
+                field
+                    .bytes()
+                    .await
+                    .map_err(|e| Failure::new(e.status(), "invalid_multipart", e))?,
+            );
         }
-        let flow = flow.ok_or_else(|| Failure::bad("missing flow"))?;
+        let CommitMetadata {
+            flow,
+            viewpoint,
+            sha384,
+        } = serde_json::from_slice(&metadata.ok_or_else(|| Failure::bad("missing metadata"))?)
+            .map_err(Failure::bad)?;
         event::valid_flow(&flow).map_err(Failure::bad)?;
         let blob = blob.ok_or_else(|| Failure::bad("missing blob"))?;
-        let viewpoint =
-            Viewpoint::parse(&viewpoint.ok_or_else(|| Failure::bad("missing viewpoint"))?)
-                .map_err(Failure::bad)?;
-        let digest = format!("{:x}", Sha384::digest(&blob));
-        if sha384.ok_or_else(|| Failure::bad("missing sha384"))? != digest {
+        let digest = Sha384::digest(&blob);
+        if sha384.as_slice() != &digest[..] {
             return Err(Failure::new(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "digest_mismatch",
-                "sha384 must equal the blob's 96-character lowercase hexadecimal SHA-384",
+                "sha384 must equal the blob's 48-byte SHA-384",
             ));
         }
         Ok(Self {
             flow,
             marker: Marker {
                 viewpoint: viewpoint.decimal(),
-                sha384: digest,
+                sha384: format!("{digest:x}"),
                 blob: blob.to_vec(),
             },
             viewpoint,

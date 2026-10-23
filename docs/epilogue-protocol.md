@@ -1,5 +1,6 @@
 [commit-marker]: <glossary/commit-marker.md>
 [epilogue]: <glossary/epilogue.md>
+[json0]: <glossary/json0.md>
 [lexidecimal]: <glossary/lexidecimal.md>
 [sha384]: <glossary/sha384.md>
 [viewpoint]: <glossary/viewpoint.md>
@@ -10,11 +11,13 @@
 *Viewpoints*[^][viewpoint] increase from zero; their
 *encoded keys*[^][lexidecimal] decrease lexicographically.
 
-`PUT /api/v0/epilogue` accepts common fields `blob`, `sha384`, and `viewpoint`: opaque bytes,
-their *hexadecimal SHA-384*[^][sha384], and a decimal string. Require the expected
+`PUT /api/v0/epilogue` accepts multipart `metadata` (*JSON0*[^][json0]) and
+`blob` (raw bytes). Metadata contains `viewpoint: bigint` and
+`sha384: Uint8Array`. Require the expected
 *viewpoint*[^][viewpoint] and matching *digest*[^][sha384] before accepting a
 commit. Rejection must not advance the sequence.
 
+Responses use JSON with decimal string *viewpoints*[^][viewpoint].
 A *viewpoint*[^][viewpoint] mismatch returns HTTP 409:
 
 ```json

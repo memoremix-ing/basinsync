@@ -5,8 +5,8 @@ import { resolve } from "node:path";
 import { spawn } from "bun";
 import { CreateBucketCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client, paginateListObjectsV2 } from "@aws-sdk/client-s3";
 import { encode as flexEncode } from "flatbuffers/js/flexbuffers.js";
-import { commit, form, epilogueStatus, sha384, type ViewpointMismatch } from "./client";
-import { encode as lexidecimal } from "./lexidecimal";
+import { commit, form, epilogueStatus, sha384, sha384Bytes, type ViewpointMismatch } from "./client";
+import { stringify } from "./json0";
 import { key, fromKey } from "./diffuse16";
 import { encodeEvent, markerAt, type Marker } from "./events";
 import { stress } from "./stress";
@@ -115,26 +115,49 @@ try {
   const traced = relay((r,response)=>{ trace.push({method:r.method,url:new URL(r.url)}); return response; });
   let writer = await server(b,traced.url);
   const observer = await server(b,traced.url);
-  const flowA = "雪/first", flowB = "__proto__";
+  const flowA = "0x雪/first", flowB = "__proto__";
   const a = bytes("359");
   assert(sha384(a).startsWith("00"));
   assert.deepEqual(await epilogueStatus(writer.url,flowA),{latest:null,recent:null});
   await mismatch(await commit(writer.url,flowA,a,1n),0n);
-  for (const kind of ["missing-flow","duplicate-flow","nul-flow","missing-blob","unknown","decimal","wrong-digest","lexidecimal-digest","uppercase-digest","prefixed-digest","short-digest"]) {
+  for (const kind of ["missing-metadata","duplicate-metadata","missing-flow","nul-flow","missing-blob","duplicate-blob","unknown-part","legacy-part","unknown-metadata","decimal","number","negative","missing-viewpoint","missing-digest","hex-digest","array-digest","wrong-digest","short-digest","long-digest","malformed-json","duplicate-property","unescaped-flow","invalid-base64"]) {
     const data = form(flowA,a,0n);
-    if(kind==="missing-flow")data.delete("flow");
-    if(kind==="duplicate-flow")data.append("flow",flowA);
-    if(kind==="nul-flow")data.set("flow","x\0y");
+    const metadata: Record<string,unknown> = {flow:flowA,viewpoint:0n,sha384:sha384Bytes(a)};
+    if(kind==="missing-flow")delete metadata.flow;
+    if(kind==="nul-flow")metadata.flow="x\0y";
+    if(kind==="unknown-metadata")metadata.surprise=true;
+    if(kind==="decimal")metadata.viewpoint="0";
+    if(kind==="number")metadata.viewpoint=0;
+    if(kind==="negative")metadata.viewpoint=-1n;
+    if(kind==="missing-viewpoint")delete metadata.viewpoint;
+    if(kind==="missing-digest")delete metadata.sha384;
+    if(kind==="hex-digest")metadata.sha384=sha384(a);
+    if(kind==="array-digest")metadata.sha384=Array.from(sha384Bytes(a));
+    if(kind==="wrong-digest")metadata.sha384=new Uint8Array(48).fill(255);
+    if(kind==="short-digest")metadata.sha384=sha384Bytes(a).slice(1);
+    if(kind==="long-digest")metadata.sha384=new Uint8Array([...sha384Bytes(a),0]);
+    data.set("metadata",stringify(metadata));
+    if(kind==="missing-metadata")data.delete("metadata");
+    if(kind==="duplicate-metadata")data.append("metadata",data.get("metadata") as string);
     if(kind==="missing-blob")data.delete("blob");
-    if(kind==="unknown")data.append("surprise","value");
-    if(kind==="decimal")data.set("viewpoint","00");
-    if(kind==="wrong-digest")data.set("sha384","ff".repeat(48));
-    if(kind==="lexidecimal-digest")data.set("sha384",lexidecimal(BigInt(`0x${sha384(a)}`)));
-    if(kind==="uppercase-digest")data.set("sha384",sha384(a).toUpperCase());
-    if(kind==="prefixed-digest")data.set("sha384",`0x${sha384(a)}`);
-    if(kind==="short-digest")data.set("sha384",sha384(a).slice(2));
-    await status(await fetch(`${writer.url}/api/v0/epilogue`,{method:"PUT",body:data}),kind.endsWith("-digest")?422:400);
+    if(kind==="duplicate-blob")data.append("blob",new Blob([a]));
+    if(kind==="unknown-part")data.append("surprise","value");
+    if(kind==="legacy-part")data.append("flow",flowA);
+    if(kind==="malformed-json")data.set("metadata","{");
+    const wire = JSON.parse(stringify(metadata));
+    if(kind==="duplicate-property")data.set("metadata",`{"flow":"f",${stringify(metadata).slice(1)}`);
+    if(kind==="unescaped-flow") {wire.flow="0x1";data.set("metadata",JSON.stringify(wire))}
+    if(kind==="invalid-base64") {wire.sha384="0*?";data.set("metadata",JSON.stringify(wire))}
+    const expected = ["wrong-digest","short-digest","long-digest"].includes(kind)?422:400;
+    await status(await fetch(`${writer.url}/api/v0/epilogue`,{method:"PUT",body:data}),expected);
   }
+  // JSON0 accepts standard base64 too; multipart part ordering is immaterial.
+  const alternate = new FormData();
+  alternate.set("blob",new Blob([a]));
+  const wire = JSON.parse(stringify({flow:flowA,viewpoint:1n,sha384:sha384Bytes(a)}));
+  wire.sha384=`0%${Buffer.from(sha384Bytes(a)).toString("base64")}`;
+  alternate.set("metadata",JSON.stringify(wire));
+  await mismatch(await fetch(`${writer.url}/api/v0/epilogue`,{method:"PUT",body:alternate}),0n);
   await status(await fetch(`${writer.url}/epilogue`,{method:"PUT",body:form(flowA,a,0n)}),404);
   await status(await fetch(`${writer.url}/epilogue/status?flow=unversioned`),404);
   await status(await fetch(`${writer.url}/api/v0/epilogue/status`),400);
@@ -155,7 +178,7 @@ try {
   assert.deepEqual(await epilogueStatus(writer.url,flowB),{latest:{viewpoint:"1"},recent:null});
   console.log("put of success: Flow isolation, validation, prototype-safe ids, and live Timeline refresh");
 
-  const flows = ["red","blue","green","constructor"];
+  const flows = ["red","blue","0","constructor"];
   const count = Number(process.env.STRESS_COMMITS ?? 1025);
   await Promise.all(flows.map(async(flow,i)=>{
     const n = Math.floor(count/flows.length)+(i<count%flows.length?1:0);
