@@ -9,6 +9,10 @@ prompt only when a concrete implementation problem exposes underspecification;
 record the smallest clarification that resolves it, without turning incidental
 implementation choices into requirements.
 
+Keep milestone scope, temporary limitations, and deferred work in the relevant
+`diy/` tutorial; shared references and glossary entries should describe enduring
+concepts and interfaces.
+
 # Documentation links
 
 Use `*multi-word phrase*[^][reference-name]` links throughout `docs/`. Wrap
@@ -16,8 +20,13 @@ the entire keyphrase, whether one word or multiple words, in single asterisks
 for italic text and link only the adjacent `^` marker. Keep the keyphrase itself
 copyable without link navigation; do not use `[keyphrase][reference-name]`. List
 every link definition at the top of its file, before the document body, using descriptive,
-stable labels and angle-bracket destinations. This makes each document's
+stable labels (in sorted order), and angle-bracket destinations. This makes each document's
 relationships easy to inspect without searching its prose.
+
+Link introduced domain terms wherever they occur in prose, including lowercase,
+plural, and synonymous forms, using the corresponding glossary entry. During
+audits, check for missing term links as well as broken links; omit self-links in
+the defining entry and links inside code.
 
 Name local reference labels after the destination filename without its extension,
 preserving case (e.g. `[server]: <../server.md>`), and verify this correspondence

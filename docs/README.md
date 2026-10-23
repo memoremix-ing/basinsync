@@ -1,4 +1,5 @@
 [0001-shallow-epilogue-commits]: <diy/0001-shallow-epilogue-commits.md>
+[0002-basin-timeline-race]: <diy/0002-basin-timeline-race.md>
 
 # basinsync
 
@@ -9,3 +10,5 @@ object storage.
 Build it incrementally, recording milestones as concise tutorials with linked
 reference and glossary entries. Begin with
 *0001 — Shallow epilogue commits*[^][0001-shallow-epilogue-commits].
+
+Continue with *0002 — Basin Timeline race*[^][0002-basin-timeline-race].

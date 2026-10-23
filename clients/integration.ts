@@ -4,270 +4,259 @@ import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { spawn } from "bun";
 import { CreateBucketCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client, paginateListObjectsV2 } from "@aws-sdk/client-s3";
-import { commit, form, latest, sha384, type ViewpointMismatch } from "./client";
-import { encode, key } from "./lexidecimal";
+import { encode as flexEncode } from "flatbuffers/js/flexbuffers.js";
+import { commit, form, epilogueStatus, sha384, type ViewpointMismatch } from "./client";
+import { encode as lexidecimal } from "./lexidecimal";
+import { key, fromKey } from "./diffuse16";
+import { encodeEvent, markerAt, type Marker } from "./events";
 import { stress } from "./stress";
 
 const root = resolve(import.meta.dir, "..");
 mkdirSync(`${root}/.local`, { recursive: true });
-const artifacts = mkdtempSync(`${root}/.local/integration-`);
+const artifacts = mkdtempSync(`${root}/.local/timeline-`);
 const processes: ReturnType<typeof spawn>[] = [];
+const relays: ReturnType<typeof Bun.serve>[] = [];
 const credentials = { accessKeyId: "basinsync-test", secretAccessKey: "basinsync-test-secret" };
 async function timeout<T>(promise: Promise<T>, ms = 15_000): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
-  try {
-    return await Promise.race([promise, new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error("deadline exceeded")), ms);
-    })]);
-  } finally { clearTimeout(timer!); }
+  try { return await Promise.race([promise, new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error("deadline exceeded")), ms);
+  })]); } finally { clearTimeout(timer!); }
 }
-
 async function freePort(): Promise<number> {
   const socket = createServer();
-  await new Promise<void>((yes, no) => { socket.once("error", no); socket.listen(0, "127.0.0.1", yes); });
-  const address = socket.address();
-  assert(address && typeof address !== "string");
-  await new Promise<void>((yes, no) => socket.close(e => e ? no(e) : yes()));
+  await new Promise<void>((yes,no) => { socket.once("error",no); socket.listen(0,"127.0.0.1",yes); });
+  const address = socket.address(); assert(address && typeof address !== "string");
+  await new Promise<void>((yes,no) => socket.close(e => e ? no(e) : yes()));
   return address.port;
 }
-
-function launch(command: string[], name: string, env: Record<string, string>) {
-  const log = openSync(`${artifacts}/${name}.log`, "w");
-  const process = spawn(command, { cwd: root, env: { ...Bun.env, ...env }, stdout: log, stderr: log });
-  closeSync(log);
-  processes.push(process);
-  return process;
-}
-
-async function stop(process: ReturnType<typeof spawn>) {
-  if (process.exitCode !== null) return;
-  process.kill("SIGINT");
-  try { await timeout(process.exited, 6000); }
-  catch { process.kill("SIGKILL"); await process.exited; }
-}
-
-async function ready(process: ReturnType<typeof spawn>, probe: () => Promise<unknown>) {
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    assert.equal(process.exitCode, null, `process exited; logs: ${artifacts}`);
-    try { await probe(); return; } catch { await Bun.sleep(25); }
-  }
-  throw new Error(`readiness deadline exceeded; logs: ${artifacts}`);
-}
-
-const endpoint = `http://127.0.0.1:${await freePort()}`;
-const s3 = new S3Client({ endpoint, region: "us-east-1", forcePathStyle: true, credentials, maxAttempts: 1 });
 let serial = 0;
+function launch(command: string[], env: Record<string,string>) {
+  const log = openSync(`${artifacts}/process-${serial++}.log`,"w");
+  const p = spawn(command,{cwd:root,env:{...Bun.env,...env},stdout:log,stderr:log});
+  closeSync(log); processes.push(p); return p;
+}
+async function stop(p: ReturnType<typeof spawn>) {
+  if (p.exitCode !== null) return;
+  p.kill("SIGINT");
+  try { await timeout(p.exited,6000); } catch { p.kill("SIGKILL"); await p.exited; }
+}
+async function ready(p: ReturnType<typeof spawn>, probe: () => Promise<unknown>) {
+  const until = Date.now()+15000;
+  while(Date.now()<until) {
+    assert.equal(p.exitCode,null,`process exited; logs: ${artifacts}`);
+    try { await probe(); return; } catch { await Bun.sleep(20); }
+  }
+  throw new Error(`readiness deadline; logs: ${artifacts}`);
+}
+const endpoint = `http://127.0.0.1:${await freePort()}`;
+const s3 = new S3Client({ endpoint, region:"us-east-1", forcePathStyle:true, credentials, maxAttempts:1 });
 async function bucket() {
-  const name = `basinsync-test-${serial++}`;
-  await s3.send(new CreateBucketCommand({ Bucket: name }));
-  return name;
+  const name = `timeline-test-${serial++}`;
+  await s3.send(new CreateBucketCommand({ Bucket:name })); return name;
+}
+function serverProcess(bucket: string, s3Endpoint: string, address: string) {
+  return launch([`${root}/target/debug/basinsync`],{
+    S3_ENDPOINT:s3Endpoint,S3_BUCKET:bucket,AWS_REGION:"us-east-1",
+    AWS_ACCESS_KEY_ID:credentials.accessKeyId,AWS_SECRET_ACCESS_KEY:credentials.secretAccessKey,
+    AWS_SESSION_TOKEN:"",BASINSYNC_LISTEN:address,
+  });
 }
 async function server(bucket: string, s3Endpoint = endpoint) {
-  const port = await freePort();
-  const url = `http://127.0.0.1:${port}`;
-  const process = launch([`${root}/target/debug/basinsync`], `server-${serial++}`, {
-    S3_ENDPOINT: s3Endpoint, S3_BUCKET: bucket, AWS_REGION: "us-east-1",
-    AWS_ACCESS_KEY_ID: credentials.accessKeyId, AWS_SECRET_ACCESS_KEY: credentials.secretAccessKey,
-    AWS_SESSION_TOKEN: "", BASINSYNC_LISTEN: `127.0.0.1:${port}`,
+  const address = `127.0.0.1:${await freePort()}`;
+  const p = serverProcess(bucket,s3Endpoint,address); const url = `http://${address}`;
+  await ready(p,async () => {
+    const r = await fetch(`${url}/ready`); assert.equal(r.status,404); await r.text();
   });
-  await ready(process, () => latest(url));
-  return { process, url };
+  return {process:p,url};
 }
-const bytes = (text: string) => new TextEncoder().encode(text);
-async function expectStatus(response: Response, status: number) { assert.equal(response.status, status, await response.text()); }
-async function expectMismatch(response: Response, expected: bigint, head: bigint | null, blob?: Uint8Array) {
-  assert.equal(response.status, 409, "viewpoint mismatch must reject the commit");
-  const error = await response.json() as ViewpointMismatch;
-  assert.deepEqual(Object.keys(error).sort(), ["latest", "next"]);
-  assert.deepEqual(error.next, { viewpoint: expected.toString() });
-  if (head === null) {
-    assert.equal(error.latest, null, "empty Epilogue has no marker to presign");
-  } else {
-    assert(error.latest);
-    assert.deepEqual(Object.keys(error.latest), ["url"]);
-    const url = new URL(error.latest.url);
-    assert(url.pathname.endsWith(`/${key(head)}`));
-    assert(url.searchParams.has("X-Amz-Signature"));
-    const download = await fetch(error.latest.url);
-    assert.equal(download.status, 200);
-    assert.deepEqual(new Uint8Array(await download.arrayBuffer()), blob);
-  }
+function relay(after: (request: Request, response: Response) => Promise<Response> | Response) {
+  const service = Bun.serve({hostname:"127.0.0.1",port:0,async fetch(request) {
+    const url = new URL(request.url);
+    const response = await fetch(`${endpoint}${url.pathname}${url.search}`,{
+      method:request.method,headers:request.headers,
+      body:request.method==="PUT" ? await request.arrayBuffer() : undefined,
+      redirect:"manual",
+    });
+    return after(request,response);
+  }});
+  relays.push(service);
+  return {service,url:`http://127.0.0.1:${service.port}`};
 }
-
-async function stored(bucket: string, viewpoint: bigint) {
-  const object = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key(viewpoint) }));
-  assert(object.Body);
-  return object.Body.transformToByteArray();
+const bytes = (s: string) => new TextEncoder().encode(s);
+async function status(r: Response, expected: number) { assert.equal(r.status,expected,await r.text()); }
+async function mismatch(r: Response, next: bigint) {
+  assert.equal(r.status,409);
+  assert.deepEqual(await r.json() as ViewpointMismatch,{
+    next:{viewpoint:next.toString()},
+  });
+}
+async function get(bucket: string, moment: bigint) {
+  const r = await s3.send(new GetObjectCommand({Bucket:bucket,Key:key(moment)}));
+  return r.Body!.transformToByteArray();
+}
+const marker = (blob: Uint8Array, viewpoint="0"): Marker => ({blob,viewpoint,sha384:sha384(blob)});
+async function seed(bucket: string, moment: bigint, payload: Uint8Array) {
+  await s3.send(new PutObjectCommand({Bucket:bucket,Key:key(moment),Body:payload}));
+}
+async function badStartup(bucket: string) {
+  assert.equal(await timeout(serverProcess(bucket,endpoint,"127.0.0.1:0").exited),1);
 }
 
 try {
-  const fs = launch([process.env.FS_BIN ?? `${root}/.local/bin/fs`, "s3", "--addr", new URL(endpoint).host, "--root", `${artifacts}/s3`], "s3", {
-    FS_ROOT_ACCESS_KEY: credentials.accessKeyId, FS_ROOT_SECRET_KEY: credentials.secretAccessKey,
+  const fs = launch([process.env.FS_BIN ?? `${root}/.local/bin/fs`,"s3","--addr",new URL(endpoint).host,"--root",`${artifacts}/s3`],{
+    FS_ROOT_ACCESS_KEY:credentials.accessKeyId,FS_ROOT_SECRET_KEY:credentials.secretAccessKey,
   });
-  await ready(fs, async () => { await s3.send(new CreateBucketCommand({ Bucket: "readiness" })); });
+  await ready(fs,async()=>{await s3.send(new CreateBucketCommand({Bucket:"readiness"}));});
   const b = await bucket();
-  let writer = await server(b);
-  assert.equal(await latest(writer.url), null);
+  // Epilogue contents must never become a source of Basin state.
+  await s3.send(new PutObjectCommand({Bucket:b,Key:"epilogue/0",Body:bytes("legacy, not a Timeline")}));
+  const trace: {method:string;url:URL}[] = [];
+  const traced = relay((r,response)=>{ trace.push({method:r.method,url:new URL(r.url)}); return response; });
+  let writer = await server(b,traced.url);
+  const observer = await server(b,traced.url);
+  const flowA = "雪/first", flowB = "__proto__";
   const a = bytes("359");
-  assert(sha384(a).startsWith("00"), "digest fixture preserves leading zero bytes");
-  await expectMismatch(await commit(writer.url, a, 1n), 0n, null);
-  await expectStatus(await commit(writer.url, a, 0n, "0z000"), 422);
-  for (const kind of ["missing", "duplicate", "unknown", "decimal", "wrong-digest", "lexidecimal-digest", "uppercase-digest", "prefixed-digest", "short-digest"]) {
-    const data = form(a, 0n);
-    if (kind === "missing") data.delete("blob");
-    if (kind === "duplicate") data.append("viewpoint", "0");
-    if (kind === "unknown") data.append("surprise", "value");
-    if (kind === "decimal") data.set("viewpoint", "00");
-    if (kind === "wrong-digest") data.set("sha384", "ff".repeat(48));
-    if (kind === "lexidecimal-digest") data.set("sha384", encode(BigInt(`0x${sha384(a)}`)));
-    if (kind === "uppercase-digest") data.set("sha384", sha384(a).toUpperCase());
-    if (kind === "prefixed-digest") data.set("sha384", `0x${sha384(a)}`);
-    if (kind === "short-digest") data.set("sha384", sha384(a).slice(2));
-    const response = await fetch(`${writer.url}/epilogue`, { method: "PUT", body: data });
-    await expectStatus(response, kind.endsWith("-digest") ? 422 : 400);
+  assert(sha384(a).startsWith("00"));
+  assert.deepEqual(await epilogueStatus(writer.url,flowA),{latest:null,recent:null});
+  await mismatch(await commit(writer.url,flowA,a,1n),0n);
+  for (const kind of ["missing-flow","duplicate-flow","nul-flow","missing-blob","unknown","decimal","wrong-digest","lexidecimal-digest","uppercase-digest","prefixed-digest","short-digest"]) {
+    const data = form(flowA,a,0n);
+    if(kind==="missing-flow")data.delete("flow");
+    if(kind==="duplicate-flow")data.append("flow",flowA);
+    if(kind==="nul-flow")data.set("flow","x\0y");
+    if(kind==="missing-blob")data.delete("blob");
+    if(kind==="unknown")data.append("surprise","value");
+    if(kind==="decimal")data.set("viewpoint","00");
+    if(kind==="wrong-digest")data.set("sha384","ff".repeat(48));
+    if(kind==="lexidecimal-digest")data.set("sha384",lexidecimal(BigInt(`0x${sha384(a)}`)));
+    if(kind==="uppercase-digest")data.set("sha384",sha384(a).toUpperCase());
+    if(kind==="prefixed-digest")data.set("sha384",`0x${sha384(a)}`);
+    if(kind==="short-digest")data.set("sha384",sha384(a).slice(2));
+    await status(await fetch(`${writer.url}/epilogue`,{method:"PUT",body:data}),kind.endsWith("-digest")?422:400);
   }
-  await expectStatus(await fetch(`${writer.url}/epilogue`, { method: "PUT", body: "not multipart" }), 400);
-  await expectStatus(await commit(writer.url, new Uint8Array(8 * 1024 * 1024), 0n), 413);
-  assert.equal(await latest(writer.url), null, "invalid requests cannot create markers");
-  await expectStatus(await commit(writer.url, a, 0n), 201);
-  await expectMismatch(await commit(writer.url, bytes("replacement"), 0n), 1n, 0n, a);
-  const head = await latest(writer.url);
-  assert(head && head.viewpoint === "0");
-  assert(new URL(head.url).searchParams.has("X-Amz-Signature"));
-  assert.deepEqual(new Uint8Array(await (await fetch(head.url)).arrayBuffer()), a);
-  const tampered = new URL(head.url);
-  tampered.searchParams.set("X-Amz-Signature", "0".repeat(64));
-  assert.equal((await fetch(tampered)).status, 403, "S3 must verify presigned signatures");
-  await assert.rejects(s3.send(new PutObjectCommand({ Bucket: b, Key: key(0n), Body: bytes("overwrite"), IfNoneMatch: "*" })),
-    (e: any) => e.$metadata?.httpStatusCode === 412);
-  assert.deepEqual(await stored(b, 0n), a);
-  console.log("put of success: validation, empty state, signed GET, and immutable first writer");
+  await status(await fetch(`${writer.url}/epilogue/status`),400);
+  await status(await fetch(`${writer.url}/epilogue/latest?flow=retired`),404);
+  await status(await commit(writer.url,flowA,new Uint8Array(8*1024*1024),0n),413);
+  const receipts = new Map<string,Map<bigint,Uint8Array>>();
+  async function accepted(url: string, flow: string, blob: Uint8Array, v: bigint) {
+    const r = await commit(url,flow,blob,v); assert.equal(r.status,201,await r.text());
+    if(!receipts.has(flow))receipts.set(flow,new Map()); receipts.get(flow)!.set(v,blob);
+  }
+  await accepted(writer.url,flowA,a,0n);
+  await mismatch(await commit(writer.url,flowA,bytes("replacement"),0n),1n);
+  assert.deepEqual(await epilogueStatus(observer.url,flowA),{latest:{viewpoint:"0"},recent:null},"running observer replays Timeline");
+  assert.deepEqual(await epilogueStatus(observer.url,flowB),{latest:null,recent:null});
+  await accepted(writer.url,flowB,new Uint8Array([0,255,128]),0n);
+  await accepted(observer.url,flowB,new Uint8Array(),1n);
+  await accepted(writer.url,flowA,bytes("independent Flow"),1n);
+  assert.deepEqual(await epilogueStatus(writer.url,flowB),{latest:{viewpoint:"1"},recent:null});
+  console.log("put of success: Flow isolation, validation, prototype-safe ids, and live Timeline refresh");
 
-  const accepted = await stress(writer.url, Number(process.env.STRESS_COMMITS ?? 1025), 16);
-  accepted.set(0n, a);
-  const keys: string[] = [];
-  for await (const page of paginateListObjectsV2({ client: s3, pageSize: 137 }, { Bucket: b, Prefix: "epilogue/" })) {
-    keys.push(...(page.Contents ?? []).map(o => o.Key!));
-  }
-  const ordered = [...accepted.keys()].sort((a,b) => a < b ? -1 : a > b ? 1 : 0);
-  assert.deepEqual(ordered, Array.from({ length: accepted.size }, (_,i) => BigInt(i)), "gapless acknowledged viewpoints");
-  assert.deepEqual(keys, ordered.map(key).reverse(), "all stored keys in descending viewpoint order");
-  // Verify every winning payload with bounded read concurrency.
-  const entries = [...accepted.entries()];
-  let read = 0;
-  await Promise.all(Array.from({ length: 16 }, async () => {
-    while (read < entries.length) {
-      const [viewpoint, blob] = entries[read++];
-      assert.deepEqual(await stored(b, viewpoint), blob);
+  const flows = ["red","blue","green","constructor"];
+  const count = Number(process.env.STRESS_COMMITS ?? 1025);
+  await Promise.all(flows.map(async(flow,i)=>{
+    const n = Math.floor(count/flows.length)+(i<count%flows.length?1:0);
+    if(n>0)receipts.set(flow,await stress(writer.url,flow,n,4));
+  }));
+  const total = [...receipts.values()].reduce((n,m)=>n+m.size,0);
+  const keys:string[]=[];
+  for await(const page of paginateListObjectsV2({client:s3,pageSize:137},{Bucket:b,Prefix:"timeline/"})) keys.push(...(page.Contents??[]).map(o=>o.Key!));
+  assert.deepEqual(keys,Array.from({length:total},(_,i)=>key(BigInt(i+1))).sort());
+  assert(fromKey(keys[0])<BigInt(total),"lowest key is a seed, not the latest Moment");
+  const replayed = new Map<string,bigint>();
+  let read=1;
+  const events = new Map<number,{flow:string;marker:Marker}>();
+  await Promise.all(Array.from({length:16},async()=>{
+    while(read<=total){
+      const m=read++;const payload=await get(b,BigInt(m));
+      const matches:{flow:string;marker:Marker}[]=[];
+      for(const flow of receipts.keys()) {try{matches.push({flow,marker:markerAt(payload,flow)})}catch{}}
+      assert.equal(matches.length,1,`one marker in event ${m}`);
+      const event=matches[0]; const v=BigInt(event.marker.viewpoint);
+      assert.equal(event.marker.sha384,sha384(event.marker.blob));
+      assert.deepEqual(event.marker.blob,receipts.get(event.flow)?.get(v));
+      events.set(m,event);
     }
   }));
-  const before = await latest(writer.url);
-  assert(before);
-  const current = BigInt(before.viewpoint);
-  for (const rejected of [0n, current + 2n]) {
-    await expectMismatch(await commit(writer.url, bytes("rejected"), rejected), current + 1n, current, accepted.get(current));
+  for(let m=1;m<=total;m++){
+    const {flow,marker}=events.get(m)!;const v=BigInt(marker.viewpoint);
+    assert.equal(v,(replayed.get(flow)??-1n)+1n); replayed.set(flow,v);
   }
-  assert.equal((await latest(writer.url))?.viewpoint, before.viewpoint, "mismatches do not advance the cursor");
+  const all=await s3.send(new ListObjectsV2Command({Bucket:b,Prefix:"epilogue/"}));
+  assert.deepEqual(all.Contents?.map(o=>o.Key),["epilogue/0"],"Flow copies are deferred");
   await stop(writer.process);
-  writer = await server(b);
-  assert.equal((await latest(writer.url))?.viewpoint, before?.viewpoint);
-  await expectStatus(await commit(writer.url, new Uint8Array(), BigInt(before!.viewpoint) + 1n), 201);
-  await stop(writer.process);
-  console.log(`put of success: ${keys.length} gapless keys and exact payloads; restart recovered the minimum key`);
+  const start=trace.length;
+  writer=await server(b,traced.url);
+  const startup=trace.slice(start);
+  assert.equal(startup.filter(r=>r.method==="GET"&&r.url.searchParams.get("prefix")==="timeline/").length,1);
+  assert.equal(startup.filter(r=>r.method==="GET"&&r.url.pathname.includes("/timeline/")).length,total,"replay the entire Timeline");
+  for(const [flow,v] of replayed) assert.deepEqual(await epilogueStatus(writer.url,flow),{latest:{viewpoint:v.toString()},recent:null});
+  assert(!trace.some(r=>r.url.searchParams.get("prefix")?.startsWith("epilogue/")),"never list Epilogue state");
+  await accepted(writer.url,flowA,bytes("after recovery"),2n);
+  await stop(writer.process);await stop(observer.process);
+  console.log(`put of success: ${total} gapless Moments, Rust/TypeScript FlexBuffers interoperability, full replay, and minimum-key seed search`);
 
-  for (let round = 0; round < Number(process.env.RACE_ROUNDS ?? 8); round++) {
-    const raceBucket = await bucket();
-    const racers = await Promise.all(Array.from({ length: 3 }, () => server(raceBucket)));
-    const payloads = racers.map((_,i) => bytes(`round ${round}, contender ${i}`));
-    const responses = await Promise.all(racers.map((r,i) => commit(r.url, payloads[i], 0n)));
-    assert.equal(responses.filter(r => r.status === 201).length, 1);
-    assert.equal(responses.filter(r => r.status === 503).length, 2);
-    const winner = responses.findIndex(r => r.status === 201);
-    for (let i=0; i<racers.length; i++) {
-      if (i === winner) continue;
-      assert.equal(await timeout(racers[i].process.exited), 1, "loser must terminate unsuccessfully");
-      assert.equal((await responses[i].json() as {error: string}).error, "leadership_lost");
-    }
-    assert.deepEqual(await stored(raceBucket, 0n), payloads[winner]);
-    await expectStatus(await commit(racers[winner].url, bytes("winner continues"), 1n), 201);
-    const page = await s3.send(new ListObjectsV2Command({ Bucket: raceBucket, Prefix: "epilogue/" }));
-    assert.deepEqual(page.Contents?.map(o => o.Key), [key(1n), key(0n)]);
-    await stop(racers[winner].process);
-  }
-  console.log("put of success: competing servers choose one winner; losers respond and exit; winner continues");
-
-  // Deliberately sparse fixtures exercise recovery without billions of commits.
-  const hugeBucket = await bucket();
-  const huge = (1n << 1024n) - 1n;
-  await s3.send(new PutObjectCommand({ Bucket: hugeBucket, Key: key(huge), Body: a }));
-  const bigWriter = await server(hugeBucket);
-  assert.equal((await latest(bigWriter.url))?.viewpoint, huge.toString());
-  await expectStatus(await commit(bigWriter.url, a, huge + 1n), 201);
-  assert.deepEqual(await stored(hugeBucket, huge + 1n), a);
-  await stop(bigWriter.process);
-
-  // Relay signed requests unchanged (including Host) to the real S3 service.
-  // Hold the first durable PUT response so the HTTP client can disconnect, then
-  // lose a second response after S3 has already accepted its marker.
-  const faultBucket = await bucket();
-  const durable = Promise.withResolvers<void>();
-  const release = Promise.withResolvers<void>();
-  let writes = 0;
-  const relay = Bun.serve({
-    hostname: "127.0.0.1", port: 0,
-    async fetch(request) {
-      const url = new URL(request.url);
-      const isPut = request.method === "PUT";
-      const upstream = await fetch(`${endpoint}${url.pathname}${url.search}`, {
-        method: request.method, headers: request.headers,
-        body: isPut ? await request.arrayBuffer() : undefined,
-        redirect: "manual",
-      });
-      if (!isPut) return upstream;
-      assert.equal(upstream.status, 200);
-      if (++writes === 1) {
-        durable.resolve();
-        await release.promise;
-        return upstream;
+  for(let round=0;round<Number(process.env.RACE_ROUNDS??8);round++){
+    const raceBucket=await bucket(); let armed=false,arrived=0;
+    const gate=Promise.withResolvers<void>();
+    const proxy=relay(async(r,response)=>{
+      if(armed&&r.method==="HEAD"&&new URL(r.url).pathname.endsWith(`/${key(1n)}`)){
+        assert.equal(response.status,404);
+        if(++arrived===3)gate.resolve(); await timeout(gate.promise);
       }
-      await upstream.arrayBuffer();
-      return new Response("injected lost response after durable PUT", { status: 503 });
-    },
-  });
-  try {
-    const faultWriter = await server(faultBucket, `http://127.0.0.1:${relay.port}`);
-    const controller = new AbortController();
-    const abandoned = fetch(`${faultWriter.url}/epilogue`, {
-      method: "PUT", body: form(a, 0n), signal: controller.signal,
-    }).then(() => {}, () => {});
-    await timeout(durable.promise);
-    controller.abort();
-    await abandoned;
-    release.resolve();
-    assert.equal((await latest(faultWriter.url))?.viewpoint, "0");
-    await expectStatus(await commit(faultWriter.url, a, 1n), 503);
-    assert.equal(await timeout(faultWriter.process.exited), 1);
-    assert.equal(writes, 2, "failed conditional PUT must not be retried");
-    const recovered = await server(faultBucket);
-    assert.equal((await latest(recovered.url))?.viewpoint, "1");
-    assert.deepEqual(await stored(faultBucket, 1n), a);
-    await expectStatus(await commit(recovered.url, a, 2n), 201);
-    await stop(recovered.process);
-    console.log("put of success: disconnected client cannot cancel cursor advance; ambiguous PUT stops and recovers on restart");
-  } finally { release.resolve(); await relay.stop(true); }
+      return response;
+    });
+    const racers=await Promise.all(Array.from({length:3},()=>server(raceBucket,proxy.url)));
+    armed=true;
+    const payloads=racers.map((_,i)=>bytes(`round ${round}, server ${i}`));
+    const responses=await Promise.all(racers.map((r,i)=>commit(r.url,"race",payloads[i],0n)));
+    armed=false;
+    assert.equal(responses.filter(r=>r.status===201).length,1);
+    assert.equal(responses.filter(r=>r.status===503).length,2);
+    const winner=responses.findIndex(r=>r.status===201);
+    for(let i=0;i<racers.length;i++)if(i!==winner)assert.equal(await timeout(racers[i].process.exited),1);
+    assert.deepEqual(markerAt(await get(raceBucket,1n),"race").blob,payloads[winner]);
+    await status(await commit(racers[winner].url,"race",a,1n),201);
+    await stop(racers[winner].process);await proxy.service.stop(true);
+  }
+  console.log("put of success: real conditional Timeline races choose one winner; losers respond and exit");
 
-  const corruptBucket = await bucket();
-  await s3.send(new PutObjectCommand({ Bucket: corruptBucket, Key: "epilogue/0", Body: a }));
-  const corrupt = launch([`${root}/target/debug/basinsync`], "corrupt-startup", {
-    S3_ENDPOINT: endpoint, S3_BUCKET: corruptBucket, AWS_REGION: "us-east-1",
-    AWS_ACCESS_KEY_ID: credentials.accessKeyId, AWS_SECRET_ACCESS_KEY: credentials.secretAccessKey,
-    BASINSYNC_LISTEN: "127.0.0.1:0",
+  // A JavaScript-produced multi-Flow command must replay in Rust, including a
+  // Flow above 64-bit Viewpoint precision that is rejected as a gap.
+  const fixture=await bucket();
+  await seed(fixture,1n,encodeEvent({[flowA]:marker(a),[flowB]:marker(new Uint8Array())}));
+  const restored=await server(fixture);
+  assert.deepEqual(await epilogueStatus(restored.url,flowA),{latest:{viewpoint:"0"},recent:null});
+  assert.deepEqual(await epilogueStatus(restored.url,flowB),{latest:{viewpoint:"0"},recent:null});
+  await status(await commit(restored.url,flowA,a,1n<<128n),409);
+  await status(await commit(restored.url,flowA,a,1n),201);
+  await stop(restored.process);
+  const invalid: (()=>Promise<string>)[] = [
+    async()=>{const b=await bucket();await s3.send(new PutObjectCommand({Bucket:b,Key:"timeline/0",Body:a}));return b},
+    async()=>{const b=await bucket();await seed(b,2n,encodeEvent({f:marker(a)}));return b},
+    async()=>{const b=await bucket();await seed(b,1n,encodeEvent({f:{...marker(a),sha384:"00".repeat(48)}}));return b},
+    async()=>{const b=await bucket();await seed(b,1n,encodeEvent({f:marker(a,"18446744073709551616")}));return b},
+    async()=>{const b=await bucket();await seed(b,1n,flexEncode([["wrong","command",{}]]));return b},
+  ];
+  for(const fixture of invalid)await badStartup(await fixture());
+
+  const uncertain=await bucket();let puts=0;
+  const faulty=relay(async(r,response)=>{
+    if(r.method==="PUT") {puts++;assert.equal(response.status,200);await response.arrayBuffer();return new Response("lost durable reply",{status:503})}
+    return response;
   });
-  assert.equal(await timeout(corrupt.exited), 1);
-  console.log("put of success: 1024-bit recovery and size-boundary commit; malformed minimum fails startup");
+  const failed=await server(uncertain,faulty.url);
+  await status(await commit(failed.url,"f",a,0n),503);
+  assert.equal(await timeout(failed.process.exited),1);assert.equal(puts,1);
+  const recovered=await server(uncertain);
+  assert.deepEqual(await epilogueStatus(recovered.url,"f"),{latest:{viewpoint:"0"},recent:null});
+  await status(await commit(recovered.url,"f",a,1n),201);
+  await stop(recovered.process);
+  console.log("put of success: JS-to-Rust replay, malformed-event rejection, and ambiguous Timeline PUT recovery without retries");
   console.log(`Integration passed. Logs: ${artifacts}`);
 } finally {
   await Promise.all(processes.map(stop));
+  await Promise.all(relays.map(r=>r.stop(true)));
   s3.destroy();
 }

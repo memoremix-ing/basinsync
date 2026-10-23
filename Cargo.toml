@@ -6,6 +6,8 @@ rust-version = "1.92"
 
 [dependencies]
 anyhow = "1"
+flexbuffers = "25.12.19"
+serde_bytes = "0.11"
 axum = { version = "0.8", features = ["multipart"] }
 num-bigint = "0.4"
 rust-s3 = { version = "0.38", default-features = false, features = ["tokio-rustls-tls"] }

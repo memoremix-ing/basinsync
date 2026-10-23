@@ -9,7 +9,7 @@ test("SHA-384 uses complete lowercase hexadecimal, including leading zero bytes"
   ]) {
     const blob = new TextEncoder().encode(text);
     expect(sha384(blob)).toBe(expected);
-    expect(form(blob, 0n).get("sha384")).toBe(expected);
+    expect(form("test", blob, 0n).get("sha384")).toBe(expected);
     expect(expected).toMatch(/^[0-9a-f]{96}$/);
   }
 });

@@ -2,5 +2,4 @@
 
 # Leader
 
-A server that can still win its expected *conditional write*[^][conditional-write]. This milestone
-terminates the process on write failure; handling race loss gracefully comes later.
+A server able to win the next expected *conditional write*[^][conditional-write].

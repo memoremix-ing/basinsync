@@ -1,5 +1,5 @@
-[viewpoint]: <viewpoint.md>
 [conditional-write]: <conditional-write.md>
+[viewpoint]: <viewpoint.md>
 
 # CommitMarker
 

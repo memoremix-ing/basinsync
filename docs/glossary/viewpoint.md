@@ -1,6 +1,6 @@
 [epilogue]: <epilogue.md>
-[twos-complement]: <twos-complement.md>
 [lexidecimal]: <lexidecimal.md>
+[twos-complement]: <twos-complement.md>
 
 # Viewpoint
 
