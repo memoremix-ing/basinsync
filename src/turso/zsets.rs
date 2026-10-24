@@ -46,9 +46,11 @@ struct Table {
 }
 type Tables = BTreeMap<i64, Table>;
 fn tables(native: &Native) -> Result<Tables> {
+    tables_conn(&native.conn)
+}
+fn tables_conn(conn: &Arc<Connection>) -> Result<Tables> {
     let mut result = BTreeMap::new();
-    let mut rows = native
-        .conn
+    let mut rows = conn
         .query("SELECT name,rootpage FROM sqlite_schema WHERE type='table' AND rootpage>0")?
         .unwrap();
     while matches!(rows.step()?, StepResult::Row) {
@@ -62,7 +64,7 @@ fn tables(native: &Native) -> Result<Tables> {
         {
             continue;
         }
-        let schema = native.conn.current_schema();
+        let schema = conn.current_schema();
         let table = schema.get_btree_table(&name).unwrap();
         ensure!(
             table.has_rowid
@@ -409,10 +411,13 @@ fn application_feed(
 }
 
 fn snapshot(native: &Native, schema: &Tables) -> Result<Feed> {
+    snapshot_conn(&native.conn, schema)
+}
+fn snapshot_conn(conn: &Arc<Connection>, schema: &Tables) -> Result<Feed> {
     let mut feed = Feed::default();
     for table in schema.values() {
         let sql = format!("SELECT * FROM \"{}\"", table.name.replace('"', "\"\""));
-        let mut rows = native.conn.query(&sql)?.unwrap();
+        let mut rows = conn.query(&sql)?.unwrap();
         loop {
             match rows.step()? {
                 StepResult::Row => feed.add(
@@ -425,7 +430,7 @@ fn snapshot(native: &Native, schema: &Tables) -> Result<Feed> {
                     1,
                 ),
                 StepResult::Done => break,
-                StepResult::IO => native.io.step()?,
+                StepResult::IO => conn.get_pager().io.step()?,
                 other => anyhow::bail!("snapshot {other:?}"),
             }
         }

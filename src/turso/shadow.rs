@@ -8,6 +8,10 @@ use std::{
 };
 use turso_core::{io::PlatformIO, storage::sqlite3_ondisk::read_varint};
 
+#[path = "snapshots.rs"]
+#[cfg(unix)]
+mod snapshots;
+
 struct Directory(PathBuf);
 impl Directory {
     fn new() -> Result<Self> {
@@ -138,6 +142,14 @@ fn read_rows(
     keys: &BTreeSet<(i64, i64)>,
     weight: i64,
 ) -> Result<Feed> {
+    read_conn_rows(&native.conn, schema, keys, weight)
+}
+fn read_conn_rows(
+    conn: &Arc<Connection>,
+    schema: &Tables,
+    keys: &BTreeSet<(i64, i64)>,
+    weight: i64,
+) -> Result<Feed> {
     let mut feed = Feed::default();
     for &(id, rowid) in keys {
         let Some(table) = schema.get(&id) else {
@@ -156,7 +168,7 @@ fn read_rows(
             table.name.replace('"', "\"\""),
             rowid_column.replace('"', "\"\"")
         );
-        let mut query = native.conn.prepare(&sql)?;
+        let mut query = conn.prepare(&sql)?;
         query.bind_at(NonZeroUsize::new(1).unwrap(), Value::from_i64(rowid))?;
         match query.step()? {
             StepResult::Row => {
@@ -445,6 +457,29 @@ impl Shadow {
         );
         Ok(feed)
     }
+}
+
+#[test]
+fn vfs_capture_sees_checkpoint_not_each_mvcc_commit() -> Result<()> {
+    let dir = Directory::new()?;
+    let path = dir.path("primary.turso");
+    let writer = disk_writer(&path, &seed(8, false)?)?;
+    let before = fs::read(&path)?;
+    for milestone in ["1", "2"] {
+        writer.state.native.conn.execute(format!(
+            "UPDATE basin SET milestone='{milestone}' WHERE id=1"
+        ))?;
+        let recorder = writer.recorder.lock().unwrap();
+        assert!(recorder.current.is_empty() && recorder.segments.is_empty());
+        assert_eq!(fs::read(&path)?, before);
+    }
+    assert_eq!(writer.state.native.storage.frames.lock().unwrap().len(), 2);
+    assert_eq!(writer.state.milestone()?, "2");
+    writer.state.native.checkpoint()?;
+    let recorder = writer.recorder.lock().unwrap();
+    assert!(!recorder.current.is_empty() || !recorder.segments.is_empty());
+    assert_ne!(fs::read(&path)?, before);
+    Ok(())
 }
 
 #[test]

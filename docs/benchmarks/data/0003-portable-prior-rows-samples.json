@@ -1,0 +1,229 @@
+{
+  "date": "2026-10-24",
+  "turso_parent": "032f5bb2c7e74107f7ef9b66d576312379000a88",
+  "turso_experiment_change": "upsvpsyl",
+  "rust": "1.88.0",
+  "profile": "unoptimized test",
+  "primary": "file-backed, 16 KiB pages, MVCC, synchronous=OFF",
+  "workload": "4096 initial rows; 96 batches of 32 strided UPSERTs; 3072 row updates per run; portable metadata enabled in both variants; no S3 or shadow; SQL strings built before timing",
+  "rounds": 3,
+  "notes": "Shared Apple M2 SSD; warm caches; final checkpoint omitted for the no-checkpoint case; checkpoint-each-batch case includes checkpoint time; not comparable to optimized end-to-end S3 benchmarks",
+  "samples": [
+    {
+      "bytes": 0,
+      "checkpoint_every": 0,
+      "round": 0,
+      "enabled": false,
+      "seconds": 0.2484395,
+      "rows_per_second": 12365.183475252526,
+      "log_bytes": 67436
+    },
+    {
+      "bytes": 0,
+      "checkpoint_every": 0,
+      "round": 0,
+      "enabled": true,
+      "seconds": 0.283182625,
+      "rows_per_second": 10848.12318552383,
+      "log_bytes": 159576
+    },
+    {
+      "bytes": 0,
+      "checkpoint_every": 0,
+      "round": 1,
+      "enabled": true,
+      "seconds": 0.286706958,
+      "rows_per_second": 10714.773095949768,
+      "log_bytes": 159576
+    },
+    {
+      "bytes": 0,
+      "checkpoint_every": 0,
+      "round": 1,
+      "enabled": false,
+      "seconds": 0.25094725,
+      "rows_per_second": 12241.61651502457,
+      "log_bytes": 67436
+    },
+    {
+      "bytes": 0,
+      "checkpoint_every": 0,
+      "round": 2,
+      "enabled": false,
+      "seconds": 0.248547709,
+      "rows_per_second": 12359.800105821936,
+      "log_bytes": 67436
+    },
+    {
+      "bytes": 0,
+      "checkpoint_every": 0,
+      "round": 2,
+      "enabled": true,
+      "seconds": 0.283112833,
+      "rows_per_second": 10850.797427469492,
+      "log_bytes": 159576
+    },
+    {
+      "bytes": 0,
+      "checkpoint_every": 1,
+      "round": 0,
+      "enabled": false,
+      "seconds": 1.5922653329999998,
+      "rows_per_second": 1929.3266871621329,
+      "log_bytes": 72720
+    },
+    {
+      "bytes": 0,
+      "checkpoint_every": 1,
+      "round": 0,
+      "enabled": true,
+      "seconds": 1.657779833,
+      "rows_per_second": 1853.0808125713277,
+      "log_bytes": 164846
+    },
+    {
+      "bytes": 0,
+      "checkpoint_every": 1,
+      "round": 1,
+      "enabled": true,
+      "seconds": 1.629616125,
+      "rows_per_second": 1885.1065308402,
+      "log_bytes": 164846
+    },
+    {
+      "bytes": 0,
+      "checkpoint_every": 1,
+      "round": 1,
+      "enabled": false,
+      "seconds": 1.6080928330000002,
+      "rows_per_second": 1910.3374736575297,
+      "log_bytes": 72720
+    },
+    {
+      "bytes": 0,
+      "checkpoint_every": 1,
+      "round": 2,
+      "enabled": false,
+      "seconds": 1.5968502500000001,
+      "rows_per_second": 1923.7871553703922,
+      "log_bytes": 72720
+    },
+    {
+      "bytes": 0,
+      "checkpoint_every": 1,
+      "round": 2,
+      "enabled": true,
+      "seconds": 1.631772792,
+      "rows_per_second": 1882.615039949753,
+      "log_bytes": 164846
+    },
+    {
+      "bytes": 1024,
+      "checkpoint_every": 0,
+      "round": 0,
+      "enabled": false,
+      "seconds": 0.276005333,
+      "rows_per_second": 11130.219719341436,
+      "log_bytes": 3219366
+    },
+    {
+      "bytes": 1024,
+      "checkpoint_every": 0,
+      "round": 0,
+      "enabled": true,
+      "seconds": 0.319906208,
+      "rows_per_second": 9602.81458495485,
+      "log_bytes": 6466467
+    },
+    {
+      "bytes": 1024,
+      "checkpoint_every": 0,
+      "round": 1,
+      "enabled": true,
+      "seconds": 0.297386417,
+      "rows_per_second": 10329.994325194752,
+      "log_bytes": 6466467
+    },
+    {
+      "bytes": 1024,
+      "checkpoint_every": 0,
+      "round": 1,
+      "enabled": false,
+      "seconds": 0.262219084,
+      "rows_per_second": 11715.394444746058,
+      "log_bytes": 3219366
+    },
+    {
+      "bytes": 1024,
+      "checkpoint_every": 0,
+      "round": 2,
+      "enabled": false,
+      "seconds": 0.264940084,
+      "rows_per_second": 11595.074454645375,
+      "log_bytes": 3219366
+    },
+    {
+      "bytes": 1024,
+      "checkpoint_every": 0,
+      "round": 2,
+      "enabled": true,
+      "seconds": 0.297523083,
+      "rows_per_second": 10325.249284943715,
+      "log_bytes": 6466467
+    },
+    {
+      "bytes": 1024,
+      "checkpoint_every": 1,
+      "round": 0,
+      "enabled": false,
+      "seconds": 0.443162708,
+      "rows_per_second": 6931.991217997522,
+      "log_bytes": 3224688
+    },
+    {
+      "bytes": 1024,
+      "checkpoint_every": 1,
+      "round": 0,
+      "enabled": true,
+      "seconds": 0.476115667,
+      "rows_per_second": 6452.2136382460185,
+      "log_bytes": 6471758
+    },
+    {
+      "bytes": 1024,
+      "checkpoint_every": 1,
+      "round": 1,
+      "enabled": true,
+      "seconds": 0.486033125,
+      "rows_per_second": 6320.5568550497455,
+      "log_bytes": 6471758
+    },
+    {
+      "bytes": 1024,
+      "checkpoint_every": 1,
+      "round": 1,
+      "enabled": false,
+      "seconds": 0.467590292,
+      "rows_per_second": 6569.854106380805,
+      "log_bytes": 3224688
+    },
+    {
+      "bytes": 1024,
+      "checkpoint_every": 1,
+      "round": 2,
+      "enabled": false,
+      "seconds": 0.464384125,
+      "rows_per_second": 6615.213213845327,
+      "log_bytes": 3224688
+    },
+    {
+      "bytes": 1024,
+      "checkpoint_every": 1,
+      "round": 2,
+      "enabled": true,
+      "seconds": 0.4828165,
+      "rows_per_second": 6362.665733254767,
+      "log_bytes": 6471758
+    }
+  ]
+}
