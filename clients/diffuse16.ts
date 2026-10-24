@@ -13,15 +13,15 @@ export function decode(wire: string): bigint {
   if (encode(value) !== wire) throw new Error("noncanonical Diffuse16");
   return value;
 }
-export function key(moment: bigint): string {
-  if (moment < 1n) throw new Error("Moment starts at one");
-  const result = `timeline/${encode(moment)}`;
+export function key(milestone: bigint): string {
+  if (milestone < 1n) throw new Error("Milestone starts at one");
+  const result = `timeline/${encode(milestone)}`;
   if (result.length > 1024) throw new Error("S3 key too long");
   return result;
 }
 export function fromKey(key: string): bigint {
   if (!key.startsWith("timeline/")) throw new Error("invalid Timeline prefix");
   const value = decode(key.slice(9));
-  if (key !== `timeline/${encode(value)}` || value < 1n) throw new Error("invalid Moment");
+  if (key !== `timeline/${encode(value)}` || value < 1n) throw new Error("invalid Milestone");
   return value;
 }

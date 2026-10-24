@@ -48,13 +48,13 @@ pub fn decode(encoded: &str) -> Result<BigInt> {
     Ok(value)
 }
 
-pub fn key(moment: &BigUint) -> Result<String> {
+pub fn key(milestone: &BigUint) -> Result<String> {
     ensure!(
-        *moment != BigUint::from(0u8),
-        "Moment zero has no Timeline object"
+        *milestone != BigUint::from(0u8),
+        "Milestone zero has no Timeline object"
     );
-    let key = format!("{PREFIX}{}", encode(&BigInt::from(moment.clone())));
-    ensure!(key.len() <= 1024, "Moment exceeds S3 key limit");
+    let key = format!("{PREFIX}{}", encode(&BigInt::from(milestone.clone())));
+    ensure!(key.len() <= 1024, "Milestone exceeds S3 key limit");
     Ok(key)
 }
 
@@ -64,7 +64,7 @@ pub fn from_key(key: &str) -> Result<BigUint> {
             .context("invalid Timeline prefix")?,
     )?
     .to_biguint()
-    .context("Moment must be positive")?;
+    .context("Milestone must be positive")?;
     ensure!(self::key(&value)? == key, "invalid Timeline key");
     Ok(value)
 }

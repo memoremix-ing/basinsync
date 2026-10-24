@@ -5,7 +5,7 @@
 [epilogue-protocol]: <epilogue-protocol.md>
 [flexbuffers]: <glossary/flexbuffers.md>
 [flow]: <glossary/flow.md>
-[moment]: <glossary/moment.md>
+[milestone]: <glossary/milestone.md>
 [sha384]: <glossary/sha384.md>
 [timeline]: <glossary/timeline.md>
 [viewpoint]: <glossary/viewpoint.md>
@@ -13,17 +13,17 @@
 # Basin Timeline
 
 The *Basin*[^][basin]'s shared *Timeline*[^][timeline] records state changes at
-`timeline/Diffuse16(moment)`. *Moments*[^][moment] start at one and increase
+`timeline/Diffuse16(milestone)`. *Milestones*[^][milestone] start at one and increase
 without gaps. *Diffuse16*[^][diffuse16] key order does not reveal the latest:
-list a seed *Moment*[^][moment], then search exponentially upward from it.
-An empty *Timeline*[^][timeline] expects *Moment*[^][moment] one.
+list a seed *Milestone*[^][milestone], then search exponentially upward from it.
+An empty *Timeline*[^][timeline] expects *Milestone*[^][milestone] one.
 
 Commitflow tuples begin with `Symbol.species`, using the
 *FlexBuffers*[^][flexbuffers] extension encoding, and carry a `markers` map
 keyed by *Flow*[^][flow] id.
 Each entry contains decimal `viewpoint`, hexadecimal *SHA-384*[^][sha384] in
 `sha384`, and binary `blob`. *Conditional creation*[^][conditional-write] of a
-*DifferentialEvent*[^][differential-event] at the next *Moment*[^][moment]
+*DifferentialEvent*[^][differential-event] at the next *Milestone*[^][milestone]
 arbitrates competing writers.
 
 `PUT /api/v0/epilogue` adds a `flow` string to the

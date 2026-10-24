@@ -189,8 +189,8 @@ impl App {
             };
             return Err(Failure::Mismatch(ViewpointMismatch { next }));
         }
-        let moment = &state.moment + 1u8;
-        let key = diffuse16::key(&moment).map_err(Failure::bad)?;
+        let milestone = &state.milestone + 1u8;
+        let key = diffuse16::key(&milestone).map_err(Failure::bad)?;
         let bytes =
             event::encode(request.flow.clone(), request.marker).map_err(Failure::internal)?;
         let result = self
@@ -206,11 +206,11 @@ impl App {
             .await;
         match result {
             Ok(response) if (200..300).contains(&response.status_code()) => {
-                state.moment = moment.clone();
+                state.milestone = milestone.clone();
                 state
                     .flows
                     .insert(request.flow.clone(), request.viewpoint.clone());
-                tracing::info!(flow = %request.flow, moment = %moment, viewpoint = %request.viewpoint.decimal(), "put of success");
+                tracing::info!(flow = %request.flow, milestone = %milestone, viewpoint = %request.viewpoint.decimal(), "put of success");
                 Ok((
                     StatusCode::CREATED,
                     Json(Position {
@@ -299,7 +299,7 @@ async fn main() -> Result<()> {
     let state = timeline::recover(&bucket)
         .await
         .context("recover Basin Timeline")?;
-    let next = &state.moment + 1u8;
+    let next = &state.milestone + 1u8;
     diffuse16::key(&next)?;
     let (fatal_tx, mut fatal_rx) = watch::channel(false);
     let mut shutdown_rx = fatal_rx.clone();
@@ -327,7 +327,7 @@ async fn main() -> Result<()> {
         .unwrap_or_else(|_| "127.0.0.1:3000".into())
         .parse()?;
     let listener = tokio::net::TcpListener::bind(address).await?;
-    tracing::info!(address = %listener.local_addr()?, next_moment = %next, "ready");
+    tracing::info!(address = %listener.local_addr()?, next_milestone = %next, "ready");
     let server = axum::serve(listener, router)
         .with_graceful_shutdown(async move {
             tokio::select! { _ = shutdown_rx.changed() => {}, _ = tokio::signal::ctrl_c() => {} }

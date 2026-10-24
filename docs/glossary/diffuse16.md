@@ -1,4 +1,4 @@
-[moment]: <moment.md>
+[milestone]: <milestone.md>
 [twos-complement]: <twos-complement.md>
 
 # Diffuse16
@@ -10,5 +10,5 @@ For negatives, take minimal `hex(~n)`, complement each nibble, reverse, and suff
 
 Examples: `0 → 0w0z`, `16 → 0w01z`, `27 → 0wb1z`, `-1 → 0wfy`, `-16 → 0w0y`.
 Decode by reversing these operations. Sequential values scatter rather than
-follow lexicographic order, avoiding hot key ranges. *Moments*[^][moment] use
+follow lexicographic order, avoiding hot key ranges. *Milestones*[^][milestone] use
 only the positive encodings.

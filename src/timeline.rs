@@ -6,7 +6,7 @@ use std::{collections::BTreeMap, future::Future};
 
 #[derive(Default)]
 pub struct Basin {
-    pub moment: BigUint,
+    pub milestone: BigUint,
     pub flows: BTreeMap<String, Viewpoint>,
     pub stopped: bool,
 }
@@ -18,8 +18,8 @@ impl Basin {
             .map_or_else(Viewpoint::zero, Viewpoint::next)
     }
 
-    pub fn apply(&mut self, moment: BigUint, command: event::CommitFlow) -> Result<()> {
-        ensure!(moment == &self.moment + 1u8, "Timeline Moment gap");
+    pub fn apply(&mut self, milestone: BigUint, command: event::CommitFlow) -> Result<()> {
+        ensure!(milestone == &self.milestone + 1u8, "Timeline Milestone gap");
         let mut updates = Vec::new();
         for (flow, marker) in command.markers {
             let viewpoint = marker.validate()?;
@@ -32,13 +32,13 @@ impl Basin {
         for (flow, viewpoint) in updates {
             self.flows.insert(flow, viewpoint);
         }
-        self.moment = moment;
+        self.milestone = milestone;
         Ok(())
     }
 }
 
 // The seed exists. Exponential probes bracket the tail, then binary search
-// resolves the last present Moment. Key order is intentionally irrelevant.
+// resolves the last present Milestone. Key order is intentionally irrelevant.
 pub async fn last_existing<F, Fut>(seed: BigUint, mut exists: F) -> Result<BigUint>
 where
     F: FnMut(BigUint) -> Fut,
@@ -63,8 +63,8 @@ where
     Ok(low)
 }
 
-pub async fn exists(bucket: &Bucket, moment: &BigUint) -> Result<bool> {
-    let (_, status) = bucket.head_object(diffuse16::key(moment)?).await?;
+pub async fn exists(bucket: &Bucket, milestone: &BigUint) -> Result<bool> {
+    let (_, status) = bucket.head_object(diffuse16::key(milestone)?).await?;
     match status {
         200 => Ok(true),
         404 => Ok(false),
@@ -73,17 +73,17 @@ pub async fn exists(bucket: &Bucket, moment: &BigUint) -> Result<bool> {
 }
 
 async fn replay(bucket: &Bucket, state: &mut Basin, tail: BigUint) -> Result<()> {
-    while state.moment < tail {
-        let moment = &state.moment + 1u8;
-        let response = bucket.get_object(diffuse16::key(&moment)?).await?;
+    while state.milestone < tail {
+        let milestone = &state.milestone + 1u8;
+        let response = bucket.get_object(diffuse16::key(&milestone)?).await?;
         ensure!(
             response.status_code() == 200,
-            "Timeline GET at {moment} returned HTTP {}",
+            "Timeline GET at {milestone} returned HTTP {}",
             response.status_code()
         );
         let command = event::decode(response.as_slice())
-            .with_context(|| format!("invalid DifferentialEvent at Moment {moment}"))?;
-        state.apply(moment, command)?;
+            .with_context(|| format!("invalid DifferentialEvent at Milestone {milestone}"))?;
+        state.apply(milestone, command)?;
     }
     Ok(())
 }
@@ -104,7 +104,7 @@ pub async fn recover(bucket: &Bucket) -> Result<Basin> {
 }
 
 pub async fn refresh(bucket: &Bucket, state: &mut Basin) -> Result<()> {
-    let first = &state.moment + 1u8;
+    let first = &state.milestone + 1u8;
     if exists(bucket, &first).await? {
         let tail = last_existing(first, |m| async move { exists(bucket, &m).await }).await?;
         replay(bucket, state, tail).await?;
@@ -132,9 +132,9 @@ mod tests {
         };
         assert!(state.apply(1u8.into(), bad).is_err());
         assert!(state.flows.is_empty());
-        assert_eq!(state.moment, 0u8.into());
+        assert_eq!(state.milestone, 0u8.into());
         let huge = (BigUint::from(1u8) << 128usize) + 1u8;
-        state.moment = huge.clone();
+        state.milestone = huge.clone();
         state
             .flows
             .insert("a".into(), Viewpoint::parse(&huge.to_string()).unwrap());
@@ -144,7 +144,7 @@ mod tests {
         };
         state.apply(&huge + 1u8, command).unwrap();
         assert_eq!(state.flows["a"].decimal(), next);
-        assert_eq!(state.moment, &huge + 1u8);
+        assert_eq!(state.milestone, &huge + 1u8);
     }
 
     #[tokio::test]

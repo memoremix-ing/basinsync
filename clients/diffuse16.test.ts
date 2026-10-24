@@ -5,7 +5,7 @@ import { encodeEvent, markerAt } from "./events";
 import { toReference } from "./flexbuffer";
 import { sha384 } from "./client";
 
-test("Diffuse16 reverses nibbles and scatters positive arbitrary-precision Moments", () => {
+test("Diffuse16 reverses nibbles and scatters positive arbitrary-precision Milestones", () => {
   for (const [n, wire] of [[0n,"0w0z"],[1n,"0w1z"],[16n,"0w01z"],[27n,"0wb1z"],[256n,"0w001z"],[-1n,"0wfy"],[-16n,"0w0y"],[-17n,"0wfey"],[-256n,"0w00y"]] as const) {
     expect(encode(n)).toBe(wire); expect(decode(wire)).toBe(n);
   }

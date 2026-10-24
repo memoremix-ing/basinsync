@@ -7,7 +7,7 @@
 [epilogue]: <../glossary/epilogue.md>
 [flexbuffers]: <../glossary/flexbuffers.md>
 [flow]: <../glossary/flow.md>
-[moment]: <../glossary/moment.md>
+[milestone]: <../glossary/milestone.md>
 [timeline]: <../glossary/timeline.md>
 [viewpoint]: <../glossary/viewpoint.md>
 
@@ -17,7 +17,7 @@ Give the *Basin*[^][basin] a shared *Timeline*[^][timeline] for changes across
 *Flows*[^][flow], replacing *Epilogue*[^][epilogue] listings for state recovery
 and refresh.
 
-1. Number *Moments*[^][moment] from one; name objects with *Diffuse16*[^][diffuse16].
+1. Number *Milestones*[^][milestone] from one; name objects with *Diffuse16*[^][diffuse16].
    List a seed, then search exponentially upward to find the latest.
 2. Replay every *DifferentialEvent*[^][differential-event] to recover the mapping
    from *Flow*[^][flow] id to latest *Viewpoint*[^][viewpoint].

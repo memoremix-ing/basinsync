@@ -105,13 +105,13 @@ async function mismatch(r: Response, next: bigint) {
   assert.deepEqual(JSON.parse(body),{next:{viewpoint:`0x${next.toString(16)}`}});
   assert.deepEqual(parse<ViewpointMismatch>(body),{next:{viewpoint:next}});
 }
-async function get(bucket: string, moment: bigint) {
-  const r = await s3.send(new GetObjectCommand({Bucket:bucket,Key:key(moment)}));
+async function get(bucket: string, milestone: bigint) {
+  const r = await s3.send(new GetObjectCommand({Bucket:bucket,Key:key(milestone)}));
   return r.Body!.transformToByteArray();
 }
 const marker = (blob: Uint8Array, viewpoint="0"): Marker => ({blob,viewpoint,sha384:sha384(blob)});
-async function seed(bucket: string, moment: bigint, payload: Uint8Array) {
-  await s3.send(new PutObjectCommand({Bucket:bucket,Key:key(moment),Body:payload}));
+async function seed(bucket: string, milestone: bigint, payload: Uint8Array) {
+  await s3.send(new PutObjectCommand({Bucket:bucket,Key:key(milestone),Body:payload}));
 }
 async function badStartup(bucket: string) {
   assert.equal(await timeout(serverProcess(bucket,endpoint,"127.0.0.1:0").exited),1);
@@ -207,7 +207,7 @@ try {
   const keys:string[]=[];
   for await(const page of paginateListObjectsV2({client:s3,pageSize:137},{Bucket:b,Prefix:"timeline/"})) keys.push(...(page.Contents??[]).map(o=>o.Key!));
   assert.deepEqual(keys,Array.from({length:total},(_,i)=>key(BigInt(i+1))).sort());
-  assert(fromKey(keys[0])<BigInt(total),"lowest key is a seed, not the latest Moment");
+  assert(fromKey(keys[0])<BigInt(total),"lowest key is a seed, not the latest Milestone");
   const replayed = new Map<string,bigint>();
   let read=1;
   const events = new Map<number,{flow:string;marker:Marker}>();
@@ -239,7 +239,7 @@ try {
   assert(!trace.some(r=>r.url.searchParams.get("prefix")?.startsWith("epilogue/")),"never list Epilogue state");
   await accepted(writer.url,flowA,bytes("after recovery"),2n);
   await stop(writer.process);await stop(observer.process);
-  console.log(`put of success: ${total} gapless Moments, Rust/TypeScript FlexBuffers interoperability, full replay, and minimum-key seed search`);
+  console.log(`put of success: ${total} gapless Milestones, Rust/TypeScript FlexBuffers interoperability, full replay, and minimum-key seed search`);
 
   for(let round=0;round<Number(process.env.RACE_ROUNDS??8);round++){
     const raceBucket=await bucket(); let armed=false,arrived=0;
