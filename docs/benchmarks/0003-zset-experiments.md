@@ -3,14 +3,18 @@
 [basin]: <../glossary/basin.md>
 [change-data-capture]: <../glossary/change-data-capture.md>
 [differential-dataflow]: <https://docs.rs/differential-dataflow/latest/differential_dataflow/input/struct.InputSession.html>
+[feldera-grammar]: <https://docs.feldera.com/sql/grammar/#materialized-tables>
 [feldera-json]: <https://docs.feldera.com/formats/json/>
 [flexbuffers]: <../glossary/flexbuffers.md>
 [flow]: <../glossary/flow.md>
 [logical-frame]: <../glossary/logical-frame.md>
 [milestone]: <../glossary/milestone.md>
 [physical-frame]: <../glossary/physical-frame.md>
+[sqlite-session]: <https://www.sqlite.org/sessionintro.html>
 [turso]: <../glossary/turso.md>
+[turso-compatibility]: <https://github.com/tursodatabase/turso/blob/032f5bb2c7e74107f7ef9b66d576312379000a88/COMPAT.md#callback-functions>
 [turso-manual]: <https://github.com/tursodatabase/turso/blob/main/docs/manual.md>
+[turso-triggers]: <https://github.com/tursodatabase/turso/blob/032f5bb2c7e74107f7ef9b66d576312379000a88/docs/sql-reference/statements/create-trigger.mdx>
 [viewpoint]: <../glossary/viewpoint.md>
 [wal]: <../glossary/wal.md>
 [z-set]: <../glossary/z-set.md>
@@ -24,6 +28,8 @@ itself. Old rows must be available somewhere, though they need not travel in
 every upstream format.
 
 These are benchmark prototypes; the server's event format is unchanged.
+The target is application-independent capture; cursor reuse is only a
+schema-specific comparison and does not meet that requirement.
 Compare the existing persistent *WAL*[^][wal] path with:
 
 - **Cursor reuse:** derive prior rows from validated *Viewpoints*[^][viewpoint]
@@ -71,6 +77,20 @@ and allocator overhead; its initial scan takes about 2 ms. With 18,432 requests,
 retained *CDC*[^][change-data-capture] records grow its database from 512 KiB to
 1,600 KiB; other variants remain at 432 KiB. *CDC*[^][change-data-capture]
 cleanup would add work beyond these measurements.
+
+The hook-plus-cache variants are small primary-relation mirrors: look up the
+old record, emit its retraction, install the new record, and emit its insertion.
+The cache is an in-memory `BTreeMap<(table_id, rowid), full_record>`, initialized
+by scanning the database. It has no separate database file or SQL engine; its
+memory grows with retained row data. This supplies old values even when the
+hook reports only an upsert. The combination passed the tested reconstructions;
+the bare hook's missing retractions do not rule it out.
+*Feldera's keyed tables*[^][feldera-grammar] likewise retain their contents to
+support upserts. These benchmarks measure our row-retention/conversion step,
+not a Feldera/DBSP runtime, reactive joins or aggregates, or its state-store
+checkpoint/recovery costs. The earlier logical-replay shadow database served
+verification, not reactive queries.
+
 Timing includes validation, SQL, capture, checkpoint, feed construction,
 serialization, event hashing, and conditional S3 PUT where applicable.
 Initial scans, reconstruction checks, S3 readback, and HTTP admission/collection
@@ -85,7 +105,7 @@ also reproduces physical files from its captured *logical frames*[^][logical-fra
 
 ## Proposed integration
 
-Start with cursor reuse for the current schema, adding a sibling to `logical`
+An application-independent row-change feed could add a sibling to `logical`
 and `physical` on `ingestturso`'s database delta:
 
 ```ts
@@ -104,15 +124,31 @@ zsets: {
 ```
 
 Rows use SQL column values: the example's counters remain decimal text.
-Include both application tables; combine repeated changes within a transaction
+Include captured application tables; combine repeated changes within a transaction
 into its net row changes. Use the enclosing *Milestone*[^][milestone] as the
 atomic batch boundary. Consumers start from matching initial state and process
 each durable batch once; publish no speculative changes before S3 succeeds.
 
-For broader SQL support, prefer a transaction-aware before/after engine hook
-over permanent *CDC*[^][change-data-capture] table writes. Its performance is
-unmeasured. A retained-row adapter is usable now when its memory cost is acceptable. These prototypes use
-one writer; schema changes and generated columns remain outside their scope.
+The pinned *Turso*[^][turso] engine exposes no supported preupdate/session API;
+its *compatibility matrix*[^][turso-compatibility] marks preupdate hooks
+unsupported. *SQLite's session extension*[^][sqlite-session] depends on its
+preupdate machinery. A transaction-aware before/after engine hook would be
+new work, not an existing API awaiting a benchmark. The existing complete
+before/after path is *CDC*[^][change-data-capture], measured above.
+*SQL triggers*[^][turso-triggers] also expose `OLD`/`NEW`; generated triggers
+writing a transactional change table are unmeasured and still add SQL writes.
+
+The retained-row adapter is the measured alternative when its memory cost is
+acceptable. These prototypes use one writer; schema changes and generated
+columns remain outside their scope. Providing old rows avoids retaining
+inputs solely to translate upserts; reactive operators may still need state.
+
+Pursue the hook-plus-cache approach for application-independent capture of
+ordinary rowid tables with stable schemas. The experiments already encode
+weighted rows beside the frames and upload them together. Server integration
+should rebuild the cache from recovered database state and discard speculative
+state after failed publication. Extend schema/type coverage and test restart
+and failure boundaries before treating the feed as generally supported.
 
 Retain the *environment and summary*[^][0003-zset-summary] and
 *raw samples (gzip JSON)*[^][0003-zset-samples].
