@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { closeSync, mkdirSync, mkdtempSync, openSync } from "node:fs";
-import { createServer } from "node:net";
+import { closeSync, mkdirSync, mkdtempSync, openSync, writeFileSync, readFileSync } from "node:fs";
+import { createServer, createConnection } from "node:net";
 import { resolve } from "node:path";
 import { spawn } from "bun";
 import { CreateBucketCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client, paginateListObjectsV2 } from "@aws-sdk/client-s3";
@@ -9,13 +9,15 @@ import { toObject, encode as extensionEncode } from "./flexbuffer";
 import { commit, form, epilogueStatus, sha384, sha384Bytes, type ApiError, type Position, type ViewpointMismatch } from "./client";
 import { parse, stringify } from "./json0";
 import { key, fromKey } from "./diffuse16";
-import { encodeEvent, markerAt, deltasAt, type Marker } from "./events";
+import { encodeEvent, markerAt, deltasAt, legacyDeltasAt, entriesAt, encodeWalEvent, type WalDelta, type Marker } from "./events";
+import { ingestWal } from "./wal";
 import { stress } from "./stress";
 
 const root = resolve(import.meta.dir, "..");
 mkdirSync(`${root}/.local`, { recursive: true });
 const artifacts = mkdtempSync(`${root}/.local/timeline-`);
 const processes: ReturnType<typeof spawn>[] = [];
+const processLogs=new Map<ReturnType<typeof spawn>,string>();
 const relays: ReturnType<typeof Bun.serve>[] = [];
 const credentials = { accessKeyId: "basinsync-test", secretAccessKey: "basinsync-test-secret" };
 async function timeout<T>(promise: Promise<T>, ms = 15_000): Promise<T> {
@@ -33,9 +35,10 @@ async function freePort(): Promise<number> {
 }
 let serial = 0;
 function launch(command: string[], env: Record<string,string>) {
-  const log = openSync(`${artifacts}/process-${serial++}.log`,"w");
+  const logPath=`${artifacts}/process-${serial++}.log`;
+  const log = openSync(logPath,"w");
   const p = spawn(command,{cwd:root,env:{...Bun.env,...env},stdout:log,stderr:log});
-  closeSync(log); processes.push(p); return p;
+  closeSync(log); processes.push(p);processLogs.set(p,logPath); return p;
 }
 async function stop(p: ReturnType<typeof spawn>) {
   if (p.exitCode !== null) return;
@@ -56,24 +59,25 @@ async function bucket() {
   const name = `timeline-test-${serial++}`;
   await s3.send(new CreateBucketCommand({ Bucket:name })); return name;
 }
-function serverProcess(bucket: string, s3Endpoint: string, address: string) {
+function serverProcess(bucket: string, s3Endpoint: string, address: string, options:Record<string,string>={}) {
   return launch([`${root}/target/debug/basinsync`],{
     S3_ENDPOINT:s3Endpoint,S3_BUCKET:bucket,AWS_REGION:"us-east-1",
     AWS_ACCESS_KEY_ID:credentials.accessKeyId,AWS_SECRET_ACCESS_KEY:credentials.secretAccessKey,
-    AWS_SESSION_TOKEN:"",BASINSYNC_LISTEN:address,
+    AWS_SESSION_TOKEN:"",BASINSYNC_LISTEN:address,...options,
   });
 }
-async function server(bucket: string, s3Endpoint = endpoint) {
+async function server(bucket: string, s3Endpoint = endpoint, options:Record<string,string>={}) {
   const address = `127.0.0.1:${await freePort()}`;
-  const p = serverProcess(bucket,s3Endpoint,address); const url = `http://${address}`;
+  const p = serverProcess(bucket,s3Endpoint,address,options); const url = `http://${address}`;
   await ready(p,async () => {
     const r = await fetch(`${url}/ready`); assert.equal(r.status,404); await r.text();
   });
-  return {process:p,url};
+  return {process:p,url,log:processLogs.get(p)!};
 }
-function relay(after: (request: Request, response: Response) => Promise<Response> | Response) {
+function relay(after: (request: Request, response: Response) => Promise<Response> | Response,before?: (request:Request)=>Promise<void>) {
   const service = Bun.serve({hostname:"127.0.0.1",port:0,async fetch(request) {
     const url = new URL(request.url);
+    await before?.(request);
     const response = await fetch(`${endpoint}${url.pathname}${url.search}`,{
       method:request.method,headers:request.headers,
       body:request.method==="PUT" ? await request.arrayBuffer() : undefined,
@@ -83,6 +87,14 @@ function relay(after: (request: Request, response: Response) => Promise<Response
   }});
   relays.push(service);
   return {service,url:`http://127.0.0.1:${service.port}`};
+}
+async function queued(log:string,flow:string,viewpoint:number){
+  const deadline=Date.now()+15000;
+  for(;;){
+    const text=readFileSync(log,"utf8").replace(/\u001b\[[0-9;]*m/g,"");
+    if(text.split("\n").some(line=>line.includes("commit queued") && line.includes(`flow=${flow}`) && line.includes(`viewpoint=${viewpoint}`)))return;
+    assert(Date.now()<deadline,`request never queued: ${flow}/${viewpoint}; ${log}`);await Bun.sleep(2);
+  }
 }
 const bytes = (s: string) => new TextEncoder().encode(s);
 async function status(r: Response, expected: number) {
@@ -206,35 +218,42 @@ try {
   const total = [...receipts.values()].reduce((n,m)=>n+m.size,0);
   const keys:string[]=[];
   for await(const page of paginateListObjectsV2({client:s3,pageSize:137},{Bucket:b,Prefix:"timeline/"})) keys.push(...(page.Contents??[]).map(o=>o.Key!));
-  assert.deepEqual(keys,Array.from({length:total},(_,i)=>key(BigInt(i+1))).sort());
-  assert(fromKey(keys[0])<BigInt(total),"lowest key is a seed, not the latest Milestone");
-  const replayed = new Map<string,bigint>();
+  const eventCount=keys.length;
+  assert.deepEqual(keys,Array.from({length:eventCount},(_,i)=>key(BigInt(i+1))).sort());
+  assert(fromKey(keys[0])<BigInt(eventCount),"lowest key is a seed, not the latest Milestone");
+  const replayed=new Map<string,bigint>();
+  const events=new Map<number,{payload:Uint8Array;delta:WalDelta;entries:ReturnType<typeof entriesAt>}>();
   let read=1;
-  const events = new Map<number,{flow:string;marker:Marker}>();
   await Promise.all(Array.from({length:16},async()=>{
-    while(read<=total){
-      const m=read++;const payload=await get(b,BigInt(m));
-      const delta = deltasAt(payload).turso["default.turso"];
-      assert.equal(delta.version, "0.9.0-pre.1+032f5bb2c7e74107f7ef9b66d576312379000a88");
-      assert(delta.logical.header instanceof Uint8Array && delta.logical.header.length === 56);
-      assert.equal(delta.logical.frames.length, 1);
-      assert(delta.logical.frames[0] instanceof Uint8Array);
-      assert.equal(delta.logical.base === null, m !== 1);
-      assert(delta.physical.pages.length > 0);
-      for (const page of delta.physical.pages) assert(page.data instanceof Uint8Array && page.data.length === 16384);
-      const matches:{flow:string;marker:Marker}[]=[];
-      for(const flow of receipts.keys()) {try{matches.push({flow,marker:markerAt(payload,flow)})}catch{}}
-      assert.equal(matches.length,1,`one marker in event ${m}`);
-      const event=matches[0]; const v=BigInt(event.marker.viewpoint);
-      assert.equal(event.marker.sha384,sha384(event.marker.blob));
-      assert.deepEqual(event.marker.blob,receipts.get(event.flow)?.get(v));
-      events.set(m,event);
+    while(read<=eventCount){
+      const m=read++,payload=await get(b,BigInt(m));
+      const delta=deltasAt(payload).turso["default.turso"] as WalDelta;
+      assert.equal(delta.version,"0.9.0-pre.1+032f5bb2c7e74107f7ef9b66d576312379000a88");
+      assert.equal(delta.physical.format,"sqlite-wal/1");
+      assert(delta.logical.header instanceof Uint8Array && delta.logical.header.length===56);
+      assert.equal(delta.logical.frames.length,1);assert(delta.logical.frames[0] instanceof Uint8Array);
+      assert.equal(delta.logical.base===null,m!==1);
+      const entries=entriesAt(payload);assert(entries.length>0 && entries.length<=32);
+      for(const {flow,marker} of entries){assert.equal(marker.sha384,sha384(marker.blob));assert.deepEqual(marker.blob,receipts.get(flow)?.get(BigInt(marker.viewpoint)));}
+      events.set(m,{payload,delta,entries});
     }
   }));
-  for(let m=1;m<=total;m++){
-    const {flow,marker}=events.get(m)!;const v=BigInt(marker.viewpoint);
-    assert.equal(v,(replayed.get(flow)??-1n)+1n); replayed.set(flow,v);
+  let parent:string|null=null;let image:Uint8Array=new Uint8Array();let seen=0;
+  for(let m=1;m<=eventCount;m++){
+    const {payload,delta,entries}=events.get(m)!;
+    assert.equal(delta.physical.base,String(m-1));assert.equal(delta.physical.milestone,String(m));assert.equal(delta.physical.parent,parent);
+    if(m===1){assert(delta.logical.base instanceof Uint8Array);image=new Uint8Array(delta.logical.base);assert.equal(delta.physical.base_sha384,sha384(image));}
+    else assert.equal(delta.physical.base_sha384,null);
+    image=ingestWal(image,delta.physical.segments);
+    for(const {flow,marker} of entries){const vp=BigInt(marker.viewpoint);assert.equal(vp,(replayed.get(flow)??-1n)+1n);replayed.set(flow,vp);seen++;}
+    parent=sha384(payload);
   }
+  assert.equal(seen,total);
+  const database=`${artifacts}/typescript-recovered.turso`;writeFileSync(database,image);
+  const inspector=spawn([`${root}/target/debug/examples/frame-fixture`,"--inspect",database],{cwd:root,stdout:"pipe",stderr:"inherit"});
+  const materialized=await new Response(inspector.stdout).json() as {milestone:string;flows:Record<string,string>};
+  assert.equal(await inspector.exited,0);assert.equal(materialized.milestone,String(eventCount));
+  assert.deepEqual(materialized.flows,Object.fromEntries([...replayed].map(([flow,vp])=>[flow,String(vp)])));
   const all=await s3.send(new ListObjectsV2Command({Bucket:b,Prefix:"epilogue/"}));
   assert.deepEqual(all.Contents?.map(o=>o.Key),["epilogue/0"],"Flow copies are deferred");
   await stop(writer.process);
@@ -242,12 +261,12 @@ try {
   writer=await server(b,traced.url);
   const startup=trace.slice(start);
   assert.equal(startup.filter(r=>r.method==="GET"&&r.url.searchParams.get("prefix")==="timeline/").length,1);
-  assert.equal(startup.filter(r=>r.method==="GET"&&r.url.pathname.includes("/timeline/")).length,total,"replay the entire Timeline");
+  assert.equal(startup.filter(r=>r.method==="GET"&&r.url.pathname.includes("/timeline/")).length,eventCount,"replay the entire Timeline");
   for(const [flow,v] of replayed) assert.deepEqual(await epilogueStatus(writer.url,flow),{latest:{viewpoint:v},recent:null});
   assert(!trace.some(r=>r.url.searchParams.get("prefix")?.startsWith("epilogue/")),"never list Epilogue state");
   await accepted(writer.url,flowA,bytes("after recovery"),2n);
   await stop(writer.process);await stop(observer.process);
-  console.log(`put of success: ${total} gapless Milestones, Rust/TypeScript FlexBuffers interoperability, full replay, and minimum-key seed search`);
+  console.log(`put of success: ${total} markers across ${eventCount} gapless Milestones; independent TS WAL ingestion, full replay, and minimum-key seed search`);
 
   for(let round=0;round<Number(process.env.RACE_ROUNDS??8);round++){
     const raceBucket=await bucket(); let armed=false,arrived=0;
@@ -274,6 +293,101 @@ try {
   }
   console.log("put of success: real conditional Timeline races choose one winner; losers respond and exit");
 
+  // A real HTTP batch preserves ordered markers, and no success or status
+  // escapes while its S3 write is still blocked before storage.
+  let modernRoot:Uint8Array|null=null;
+  for(const fail of [false,true]){
+    const batchBucket=await bucket();const gate=Promise.withResolvers<void>(),entered=Promise.withResolvers<void>();
+    let puts=0,active=0,peak=0;
+    const proxy=relay(async(request,response)=>{
+      if(request.method==="PUT"){
+        active--;if(fail){assert.equal(response.status,200);await response.arrayBuffer();return new Response("durable reply lost",{status:503});}
+      }
+      return response;
+    },async request=>{if(request.method==="PUT"){puts++;active++;peak=Math.max(peak,active);entered.resolve();await gate.promise;}});
+    const app=await server(batchBucket,proxy.url,{BASINSYNC_BATCH_MAX:"4",BASINSYNC_BATCH_WAIT_MS:"1000",RUST_LOG:"basinsync=debug"});
+    const flow=`ordered-${fail?"lost":"ok"}`;let completed=0;
+    const requests:Promise<Response>[]=[];
+    for(let viewpoint=0;viewpoint<4;viewpoint++){
+      requests.push(commit(app.url,flow,bytes(`marker-${viewpoint}`),BigInt(viewpoint)).then(r=>{completed++;return r}));
+      await queued(app.log,flow,viewpoint);
+    }
+    await timeout(entered.promise);
+    assert.equal(completed,0);
+    await assert.rejects(()=>get(batchBucket,1n),"batch is not stored yet");
+    requests.push(commit(app.url,flow,bytes("marker-4"),4n).then(r=>{completed++;return r}));
+    await queued(app.log,flow,4);
+    let statusFinished=false;
+    const statusRequest=fetch(`${app.url}/api/v0/epilogue/status?flow=${flow}`).then(r=>{statusFinished=true;return r});
+    await Bun.sleep(30);assert.equal(completed,0);assert.equal(statusFinished,false);
+    gate.resolve();
+    const results=await Promise.all(requests);
+    for(let i=0;i<results.length;i++)await status(results[i],fail?503:201);
+    assert.equal(peak,1,"Timeline uploads remain ordered");
+    const stored=await get(batchBucket,1n),entries=entriesAt(stored);
+    assert.deepEqual(entries.map(e=>e.marker.viewpoint),["0","1","2","3"]);
+    assert.deepEqual(entries.map(e=>new TextDecoder().decode(e.marker.blob)),["marker-0","marker-1","marker-2","marker-3"]);
+    if(fail){
+      await status(await statusRequest,503);
+      assert.equal(await timeout(app.process.exited),1);assert.equal(puts,1,"queued batch never uploads after failure");
+      const restored=await server(batchBucket);
+      assert.deepEqual(await epilogueStatus(restored.url,flow),{latest:{viewpoint:3n},recent:null});
+      await status(await commit(restored.url,flow,a,4n),201);await stop(restored.process);
+    }else{
+      assert.equal((await statusRequest).status,200);
+      assert.equal(puts,2,"batch count limit splits the fifth request");
+      assert.deepEqual(entriesAt(await get(batchBucket,2n)).map(e=>e.marker.viewpoint),["4"]);
+      modernRoot=stored;await stop(app.process);
+      const restored=await server(batchBucket);
+      assert.deepEqual(await epilogueStatus(restored.url,flow),{latest:{viewpoint:4n},recent:null});await stop(restored.process);
+    }
+    await proxy.service.stop(true);
+  }
+  // Byte bounds flush a batch before accepting another large request.
+  {
+    const limited=await bucket();const app=await server(limited,endpoint,{BASINSYNC_BATCH_MAX:"32",BASINSYNC_BATCH_WAIT_MS:"1000",RUST_LOG:"basinsync=debug"});
+    const large=new Uint8Array(5*1024*1024).fill(123);
+    const first=commit(app.url,"large-a",large,0n);await queued(app.log,"large-a",0);
+    const second=commit(app.url,"large-b",large,0n);await queued(app.log,"large-b",0);
+    await status(await first,201);await status(await second,201);
+    assert.equal(entriesAt(await get(limited,1n)).length,1);assert.equal(entriesAt(await get(limited,2n)).length,1);
+    await stop(app.process);
+  }
+  // Slow form bodies consume admission slots, never the worker's status queue.
+  {
+    const idle=await bucket(),app=await server(idle);const port=Number(new URL(app.url).port);
+    const sockets=await Promise.all(Array.from({length:32},()=>new Promise<ReturnType<typeof createConnection>>((yes,no)=>{
+      const socket=createConnection({host:"127.0.0.1",port},()=>{socket.write(`PUT /api/v0/epilogue HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nContent-Type: multipart/form-data; boundary=x\r\nContent-Length: 1024\r\n\r\n`);yes(socket)});socket.once("error",no);
+    })));
+    try{await Bun.sleep(30);assert.deepEqual(await timeout(epilogueStatus(app.url,"idle"),3000),{latest:null,recent:null})}finally{for(const socket of sockets)socket.destroy()}
+    await status(await commit(app.url,"idle",a,0n),201);await stop(app.process);
+  }
+  // Dropping an HTTP caller after admission does not cancel its owned batch.
+  {
+    const disconnected=await bucket(),gate=Promise.withResolvers<void>(),entered=Promise.withResolvers<void>();
+    const proxy=relay((_r,response)=>response,async r=>{if(r.method==="PUT"){entered.resolve();await gate.promise}});
+    const app=await server(disconnected,proxy.url,{BASINSYNC_BATCH_MAX:"1",RUST_LOG:"basinsync=debug"});
+    const abort=new AbortController();
+    const request=fetch(`${app.url}/api/v0/epilogue`,{method:"PUT",body:form("disconnected",a,0n),signal:abort.signal});
+    await queued(app.log,"disconnected",0);await timeout(entered.promise);abort.abort();await assert.rejects(request);gate.resolve();
+    assert.deepEqual(await epilogueStatus(app.url,"disconnected"),{latest:{viewpoint:0n},recent:null});
+    await status(await commit(app.url,"disconnected",a,1n),201);await stop(app.process);await proxy.service.stop(true);
+  }
+  assert(modernRoot);
+  for(const fault of ["version","format","parent","bootstrap","wal","logical","command-order"]){
+    const vector=toObject(modernRoot) as any[];
+    const delta=vector.at(-1)[3].turso["default.turso"];
+    if(fault==="version")delta.version="incompatible";
+    if(fault==="format")delta.physical.format="unknown";
+    if(fault==="parent")delta.physical.parent="00".repeat(48);
+    if(fault==="bootstrap")delta.physical.base_sha384="00".repeat(48);
+    if(fault==="wal")delta.physical.segments[0][56]^=1;
+    if(fault==="logical")delta.logical.frames[0][0]^=1;
+    if(fault==="command-order")vector.reverse();
+    const fixture=await bucket();await seed(fixture,1n,extensionEncode(vector));await badStartup(fixture);
+  }
+  console.log("put of success: real-route ordered batches, durable status, count/byte bounds, slow bodies, disconnects, queued failure rejection, and WAL startup integrity");
+
   // Capture real Turso frames, then re-encode their event independently in JS.
   const fixture=await bucket();
   const markers = {[flowA]:marker(a),[flowB]:marker(new Uint8Array())};
@@ -282,7 +396,7 @@ try {
   captured.stdin.end();
   const capturedBytes = new Uint8Array(await new Response(captured.stdout).arrayBuffer());
   assert.equal(await captured.exited, 0);
-  const validEvent = encodeEvent(markers, deltasAt(capturedBytes));
+  const validEvent = encodeEvent(markers, legacyDeltasAt(capturedBytes));
   await seed(fixture,1n,validEvent);
   const restored=await server(fixture);
   assert.deepEqual(await epilogueStatus(restored.url,flowA),{latest:{viewpoint:0n},recent:null});
@@ -306,9 +420,9 @@ try {
       const b = await bucket(); await seed(b, 1n, extensionEncode(event)); return b;
     }),
     async()=>{const b=await bucket();await s3.send(new PutObjectCommand({Bucket:b,Key:"timeline/0",Body:a}));return b},
-    async()=>{const b=await bucket();await seed(b,2n,encodeEvent({f:marker(a)}, deltasAt(capturedBytes)));return b},
-    async()=>{const b=await bucket();await seed(b,1n,encodeEvent({f:{...marker(a),sha384:"00".repeat(48)}}, deltasAt(capturedBytes)));return b},
-    async()=>{const b=await bucket();await seed(b,1n,encodeEvent({f:marker(a,"18446744073709551616")}, deltasAt(capturedBytes)));return b},
+    async()=>{const b=await bucket();await seed(b,2n,encodeEvent({f:marker(a)}, legacyDeltasAt(capturedBytes)));return b},
+    async()=>{const b=await bucket();await seed(b,1n,encodeEvent({f:{...marker(a),sha384:"00".repeat(48)}}, legacyDeltasAt(capturedBytes)));return b},
+    async()=>{const b=await bucket();await seed(b,1n,encodeEvent({f:marker(a,"18446744073709551616")}, legacyDeltasAt(capturedBytes)));return b},
     async()=>{const b=await bucket();await seed(b,1n,flexEncode([["wrong","command",{}]]));return b},
     ...["#species", Symbol.for("species"), Symbol.iterator, new TextEncoder().encode("#species"),
       Array.from(new TextEncoder().encode("#species")),

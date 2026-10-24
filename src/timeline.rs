@@ -9,13 +9,23 @@ pub struct Basin {
     pub milestone: BigUint,
     pub database: Option<crate::turso::State>,
     pub stopped: bool,
+    pub writer: Option<crate::turso::wal::Writer>,
+    pub head: Option<String>,
 }
 
 impl Basin {
     pub fn latest(&self, flow: &str) -> Result<Option<Viewpoint>> {
-        self.database
-            .as_ref()
-            .map_or(Ok(None), |db| db.latest(flow))
+        if let Some(writer) = &self.writer {
+            ensure!(
+                writer.cursor() == &self.milestone,
+                "unpublished database state"
+            );
+            writer.latest(flow)
+        } else {
+            self.database
+                .as_ref()
+                .map_or(Ok(None), |db| db.latest(flow))
+        }
     }
 
     pub fn expected(&self, flow: &str) -> Result<Viewpoint> {
@@ -60,6 +70,7 @@ impl Basin {
     }
 
     pub fn apply(&mut self, milestone: BigUint, command: event::CommitFlow) -> Result<()> {
+        self.freeze_writer()?;
         ensure!(milestone == &self.milestone + 1u8, "Timeline Milestone gap");
         self.validate(&command.markers)?;
         ensure!(
@@ -102,6 +113,152 @@ impl Basin {
         );
         self.database = Some(candidate);
         self.milestone = milestone;
+        Ok(())
+    }
+}
+
+pub struct Prepared {
+    bytes: Vec<u8>,
+    milestone: BigUint,
+    parent: Option<String>,
+    digest: String,
+}
+impl Prepared {
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+    pub fn milestone(&self) -> &BigUint {
+        &self.milestone
+    }
+}
+impl Basin {
+    fn freeze_writer(&mut self) -> Result<()> {
+        if let Some(writer) = &self.writer {
+            ensure!(
+                writer.cursor() == &self.milestone,
+                "unpublished database state"
+            );
+            let state = crate::turso::State::from_image(writer.image()?)?;
+            self.database = Some(state);
+            self.writer = None;
+        }
+        Ok(())
+    }
+    pub fn prepare_wal(&mut self, commands: Vec<event::FlowCommand>) -> Result<Prepared> {
+        let milestone = &self.milestone + 1u8;
+        diffuse16::key(&milestone)?;
+        ensure!(
+            self.milestone == 0u8.into() || self.head.is_some(),
+            "missing predecessor event digest"
+        );
+        if self.writer.is_none() {
+            let genesis;
+            let image = if let Some(state) = &self.database {
+                &state.image
+            } else {
+                genesis = crate::turso::State::genesis()?;
+                &genesis.image
+            };
+            let writer = crate::turso::wal::Writer::open(image)?;
+            self.writer = Some(writer);
+            self.database = None;
+        }
+        let delta = self.writer.as_mut().unwrap().prepare(
+            &self.milestone,
+            self.head.as_deref(),
+            &commands,
+        )?;
+        let bytes = event::encode_wal(commands, delta)?;
+        let digest = event::digest(&bytes);
+        Ok(Prepared {
+            bytes,
+            milestone,
+            parent: self.head.clone(),
+            digest,
+        })
+    }
+    pub async fn publish(&mut self, bucket: &Bucket, prepared: Prepared) -> Result<()> {
+        ensure!(
+            prepared.milestone == &self.milestone + 1u8 && prepared.parent == self.head,
+            "publication prefix mismatch"
+        );
+        let response = bucket
+            .put_object_with_headers(
+                diffuse16::key(&prepared.milestone)?,
+                &prepared.bytes,
+                Some(axum::http::HeaderMap::from_iter([(
+                    axum::http::header::IF_NONE_MATCH,
+                    axum::http::HeaderValue::from_static("*"),
+                )])),
+            )
+            .await?;
+        ensure!(
+            (200..300).contains(&response.status_code()),
+            "conditional PUT returned HTTP {}",
+            response.status_code()
+        );
+        self.milestone = prepared.milestone;
+        self.head = Some(prepared.digest);
+        Ok(())
+    }
+    pub fn apply_entry(&mut self, milestone: BigUint, bytes: &[u8]) -> Result<()> {
+        ensure!(milestone == &self.milestone + 1u8, "Timeline Milestone gap");
+        match event::decode_entry(bytes)? {
+            event::Entry::Legacy(command) => self.apply(milestone, command)?,
+            event::Entry::Wal { commands, delta } => {
+                delta.validate_version()?;
+                delta
+                    .physical
+                    .validate_binding(&self.milestone, self.head.as_deref())?;
+                delta.logical.validated_bytes()?;
+                self.freeze_writer()?;
+                let base = match (&self.database, &delta.logical.base) {
+                    (None, Some(base)) if self.milestone == 0u8.into() => &base.0,
+                    (Some(state), None) => &state.image,
+                    _ => anyhow::bail!("unexpected initial database image"),
+                };
+                let image = delta
+                    .physical
+                    .ingest(base, &self.milestone, self.head.as_deref())?;
+                if self.database.is_none() {
+                    let genesis = crate::turso::State::from_image(base.clone())?;
+                    ensure!(
+                        genesis.milestone()? == "0" && genesis.flows()?.is_empty(),
+                        "invalid initial database state"
+                    );
+                }
+                let mut expected: BTreeMap<String, Viewpoint> = BTreeMap::new();
+                for command in commands {
+                    for (flow, marker) in command.markers {
+                        let previous = match expected.get(&flow) {
+                            Some(v) => Some(v.clone()),
+                            None => self.latest(&flow)?,
+                        };
+                        let viewpoint = marker.validate()?;
+                        ensure!(
+                            viewpoint == previous.map_or_else(Viewpoint::zero, |v| v.next()),
+                            "Flow {flow:?} Viewpoint gap"
+                        );
+                        expected.insert(flow, viewpoint);
+                    }
+                }
+                let next = crate::turso::State::from_image(image)?;
+                ensure!(
+                    next.milestone()? == milestone.to_string(),
+                    "recovered Milestone mismatch"
+                );
+                for (flow, vp) in expected {
+                    ensure!(
+                        next.latest(&flow)? == Some(vp),
+                        "recovered Viewpoint mismatch"
+                    );
+                }
+                self.database = Some(next);
+                self.writer = None;
+                self.milestone = milestone;
+            }
+        }
+        self.head = Some(event::digest(bytes));
         Ok(())
     }
 }
@@ -150,9 +307,9 @@ async fn replay(bucket: &Bucket, state: &mut Basin, tail: BigUint) -> Result<()>
             "Timeline GET at {milestone} returned HTTP {}",
             response.status_code()
         );
-        let command = event::decode(response.as_slice())
+        state
+            .apply_entry(milestone.clone(), response.as_slice())
             .with_context(|| format!("invalid DifferentialEvent at Milestone {milestone}"))?;
-        state.apply(milestone, command)?;
     }
     Ok(())
 }

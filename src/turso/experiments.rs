@@ -841,6 +841,7 @@ fn measure() -> Result<()> {
             milestone: 1u8.into(),
             database: Some(State::from_image(initial.clone())?),
             stopped: false,
+            ..Default::default()
         };
         let mut state = State::from_image(initial.clone())?;
         let mut samples = Vec::new();

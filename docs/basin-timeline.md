@@ -9,7 +9,7 @@
 [physical-frame]: <glossary/physical-frame.md>
 [sha384]: <glossary/sha384.md>
 [timeline]: <glossary/timeline.md>
-[turso]: <glossary/turso.md>
+[turso-state]: <turso-state.md>
 [viewpoint]: <glossary/viewpoint.md>
 
 # Basin Timeline
@@ -26,8 +26,10 @@ keyed by *Flow*[^][flow] id.
 Each entry contains decimal `viewpoint`, hexadecimal *SHA-384*[^][sha384] in
 `sha384`, and binary `blob`. *Conditional creation*[^][conditional-write] of a
 *DifferentialEvent*[^][differential-event] at the next *Milestone*[^][milestone]
-arbitrates competing writers. Database deltas accompany the markers;
-*Turso*[^][turso] *physical frames*[^][physical-frame] materialize the recorded state.
+arbitrates competing writers. A vector can contain ordered commitflow commands
+followed by one `sts/0/databasin/ingestturso` command. Its
+*Turso deltas*[^][turso-state] carry the *physical frames*[^][physical-frame]
+that materialize the recorded state; all requests wait for durable publication.
 
 `PUT /api/v0/epilogue` adds a `flow` string to the
 *commit metadata*[^][epilogue-protocol] and validates against that

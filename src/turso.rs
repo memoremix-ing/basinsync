@@ -302,17 +302,31 @@ impl State {
         milestone: &str,
         markers: &BTreeMap<String, Marker>,
     ) -> Result<()> {
+        Self::transact_values(
+            native,
+            milestone,
+            markers
+                .iter()
+                .map(|(flow, marker)| (flow.as_str(), marker.viewpoint.as_str())),
+        )
+    }
+
+    fn transact_values<'a>(
+        native: &Native,
+        milestone: &str,
+        values: impl IntoIterator<Item = (&'a str, &'a str)>,
+    ) -> Result<()> {
         native.conn.set_portable_logical_changes_enabled(true);
         native.conn.execute("BEGIN CONCURRENT")?;
-        for (flow, marker) in markers {
+        for (flow, viewpoint) in values {
             let mut stmt = native.conn.prepare("INSERT INTO flows (flow, viewpoint) VALUES (?1, ?2) ON CONFLICT (flow) DO UPDATE SET viewpoint = excluded.viewpoint")?;
             stmt.bind_at(
                 NonZeroUsize::new(1).unwrap(),
-                Value::build_text(flow.clone()),
+                Value::build_text(flow.to_owned()),
             )?;
             stmt.bind_at(
                 NonZeroUsize::new(2).unwrap(),
-                Value::build_text(marker.viewpoint.clone()),
+                Value::build_text(viewpoint.to_owned()),
             )?;
             stmt.run_ignore_rows()?;
         }
@@ -792,3 +806,5 @@ mod benchmark;
 
 #[cfg(test)]
 mod experiments;
+
+pub mod wal;

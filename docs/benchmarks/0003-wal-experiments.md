@@ -19,8 +19,9 @@
 
 # 0003 WAL and publication experiments — 2026-10-24
 
-Extend the *baseline*[^][0003-commit-baseline] with test/benchmark prototypes;
-the HTTP server retains the *0003 procedure*[^][0003-turso-basin-state].
+Historical test/benchmark prototypes extending the
+*baseline*[^][0003-commit-baseline]. Persistent capture and bounded batching have
+since been promoted into the *0003 procedure*[^][0003-turso-basin-state].
 Success follows the corresponding command's durable S3 PUT.
 
 Capture *physical WAL*[^][wal] writes before checkpoint truncation. Validate
@@ -95,9 +96,8 @@ deletions, rollback, and ordered same-stream batches; reject corrupt/torn
 *frames*[^][physical-frame], gaps and incompatible versions. Delayed PUT,
 leadership loss, lost replies, disconnects and bounded speculation exercise
 acknowledgements. Every measured S3 run replays all stored objects and compares
-its final file outside timing. The WAL adapter currently targets synchronous
-memory I/O; format/snapshot identity and public durable-versus-speculative state
-need integration before replacing the server path.
+its final file outside timing. These prototypes used synchronous memory I/O. Their timings precede server
+integration of the final frame format, predecessor linkage, and durable status.
 
 Retain *environment and full results*[^][0003-wal-summary] and
 *raw samples (gzip JSON)*[^][0003-wal-samples].

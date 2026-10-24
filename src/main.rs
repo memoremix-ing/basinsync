@@ -20,19 +20,18 @@ use s3::{Bucket, Region, creds::Credentials};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha384};
 use std::{env, future::IntoFuture, net::SocketAddr, sync::Arc, time::Duration};
-use tokio::sync::{Mutex, watch};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc, oneshot, watch};
 
 const MAX_BODY: usize = 8 * 1024 * 1024;
 
 struct App {
-    bucket: Box<Bucket>,
-    state: Mutex<timeline::Basin>,
-    fatal: watch::Sender<bool>,
+    queue: mpsc::Sender<Message>,
+    admission: Arc<Semaphore>,
 }
 
 type Shared = Arc<App>;
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 struct ApiError {
     #[serde(serialize_with = "basinsync::json0::serialize_text")]
     error: &'static str,
@@ -40,12 +39,13 @@ struct ApiError {
     message: String,
 }
 
+#[derive(Clone)]
 enum Failure {
     Error(StatusCode, ApiError),
     Mismatch(ViewpointMismatch),
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 struct ViewpointMismatch {
     next: Position,
 }
@@ -62,14 +62,6 @@ impl Failure {
     }
     fn bad(message: impl ToString) -> Self {
         Self::new(StatusCode::BAD_REQUEST, "invalid_request", message)
-    }
-    fn internal(error: impl std::fmt::Display) -> Self {
-        tracing::error!(%error);
-        Self::new(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "internal_error",
-            "operation failed",
-        )
     }
 }
 impl IntoResponse for Failure {
@@ -136,7 +128,7 @@ impl Commit {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 struct Position {
     #[serde(serialize_with = "basinsync::json0::serialize_viewpoint")]
     viewpoint: Viewpoint,
@@ -161,79 +153,196 @@ async fn commit(
     form: Result<Multipart, MultipartRejection>,
 ) -> Result<impl IntoResponse, Failure> {
     let form = form.map_err(|error| Failure::new(error.status(), "invalid_multipart", error))?;
-    let request = Commit::read(form).await?;
-    // Detach the transaction from the HTTP request: a disconnected client must
-    // not cancel a durable PUT before we advance (or poison) the local cursor.
-    tokio::spawn(async move { app.commit(request).await })
+    let admission = app
+        .admission
+        .clone()
+        .acquire_owned()
         .await
-        .map_err(Failure::internal)?
+        .map_err(|_| stopped())?;
+    let request = Commit::read(form).await?;
+    let (reply, result) = oneshot::channel();
+    let queued = tracing::enabled!(tracing::Level::DEBUG)
+        .then(|| (request.flow.clone(), request.viewpoint.decimal()));
+    app.queue
+        .send(Message::Commit(QueuedCommit {
+            request,
+            reply,
+            admission,
+        }))
+        .await
+        .map_err(|_| stopped())?;
+    if let Some((flow, viewpoint)) = queued {
+        tracing::debug!(%flow,%viewpoint,"commit queued");
+    }
+    let position = result.await.map_err(|_| stopped())??;
+    Ok((StatusCode::CREATED, Json(position)))
 }
 
-impl App {
-    async fn commit(&self, request: Commit) -> Result<(StatusCode, Json<Position>), Failure> {
-        let mut state = self.state.lock().await;
-        if state.stopped {
-            return Err(Failure::new(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "stopped",
-                "server is stopping",
-            ));
-        }
-        timeline::refresh(&self.bucket, &mut state)
-            .await
-            .map_err(Failure::internal)?;
-        let expected = state.expected(&request.flow).map_err(Failure::internal)?;
-        if request.viewpoint != expected {
-            let next = Position {
-                viewpoint: expected,
-            };
-            return Err(Failure::Mismatch(ViewpointMismatch { next }));
-        }
-        let milestone = &state.milestone + 1u8;
-        let key = diffuse16::key(&milestone).map_err(Failure::bad)?;
-        let (candidate, command) = state
-            .prepare(std::collections::BTreeMap::from([(
-                request.flow.clone(),
-                request.marker,
-            )]))
-            .map_err(Failure::internal)?;
-        let bytes = event::encode(command).map_err(Failure::internal)?;
-        let result = self
-            .bucket
-            .put_object_with_headers(
-                &key,
-                &bytes,
-                Some(axum::http::HeaderMap::from_iter([(
-                    axum::http::header::IF_NONE_MATCH,
-                    axum::http::HeaderValue::from_static("*"),
-                )])),
-            )
-            .await;
-        match result {
-            Ok(response) if (200..300).contains(&response.status_code()) => {
-                state.milestone = milestone.clone();
-                state.database = Some(candidate);
-                tracing::info!(flow = %request.flow, milestone = %milestone, viewpoint = %request.viewpoint.decimal(), "put of success");
-                Ok((
-                    StatusCode::CREATED,
-                    Json(Position {
-                        viewpoint: request.viewpoint,
-                    }),
-                ))
+fn stopped() -> Failure {
+    Failure::new(
+        StatusCode::SERVICE_UNAVAILABLE,
+        "stopped",
+        "commit worker is stopping; outcome may be unknown",
+    )
+}
+struct QueuedCommit {
+    request: Commit,
+    admission: OwnedSemaphorePermit,
+    reply: oneshot::Sender<Result<Position, Failure>>,
+}
+impl QueuedCommit {
+    fn size(&self) -> usize {
+        self.request.flow.len()
+            + self.request.marker.viewpoint.len()
+            + self.request.marker.blob.len()
+            + self.request.marker.sha384.len()
+    }
+}
+enum Message {
+    Commit(QueuedCommit),
+    Status {
+        flow: String,
+        reply: oneshot::Sender<Result<EpilogueStatus, Failure>>,
+    },
+}
+impl Message {
+    fn reject(self) {
+        match self {
+            Self::Commit(c) => {
+                let _ = c.reply.send(Err(stopped()));
             }
-            other => {
-                // Even a timeout may mean S3 stored the marker. Never guess or
-                // retry in this process; restart replays the authoritative Timeline.
-                state.stopped = true;
-                self.fatal.send_replace(true);
-                tracing::error!(result = ?other, "conditional PUT failed; relinquishing leadership");
-                Err(Failure::new(
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    "leadership_lost",
-                    "conditional PUT failed; server is stopping; outcome may be unknown",
-                ))
+            Self::Status { reply, .. } => {
+                let _ = reply.send(Err(stopped()));
             }
         }
+    }
+}
+struct Worker {
+    bucket: Box<Bucket>,
+    state: timeline::Basin,
+    batch_max: usize,
+    batch_wait: Duration,
+}
+impl Worker {
+    async fn run(mut self, mut queue: mpsc::Receiver<Message>) -> Result<()> {
+        let mut pending = None;
+        let result: Result<()> = async {
+            loop {
+                let message = match pending.take() {
+                    Some(message) => Some(message),
+                    None => queue.recv().await,
+                };
+                let Some(message) = message else {
+                    return Ok(());
+                };
+                match message {
+                    Message::Status { flow, reply } => {
+                        timeline::refresh(&self.bucket, &mut self.state).await?;
+                        let latest = self
+                            .state
+                            .latest(&flow)?
+                            .map(|viewpoint| Position { viewpoint });
+                        let _ = reply.send(Ok(EpilogueStatus {
+                            latest,
+                            recent: None,
+                        }));
+                    }
+                    Message::Commit(first) => {
+                        let mut size = first.size();
+                        let mut batch = vec![first];
+                        let deadline = tokio::time::Instant::now() + self.batch_wait;
+                        while batch.len() < self.batch_max {
+                            let message = match queue.try_recv() {
+                                Ok(message) => Some(message),
+                                Err(mpsc::error::TryRecvError::Disconnected) => None,
+                                Err(mpsc::error::TryRecvError::Empty) => {
+                                    tokio::time::timeout_at(deadline, queue.recv())
+                                        .await
+                                        .unwrap_or(None)
+                                }
+                            };
+                            match message {
+                                Some(Message::Commit(c)) if size + c.size() <= MAX_BODY => {
+                                    size += c.size();
+                                    batch.push(c)
+                                }
+                                Some(message) => {
+                                    pending = Some(message);
+                                    break;
+                                }
+                                None => break,
+                            }
+                        }
+                        timeline::refresh(&self.bucket, &mut self.state).await?;
+                        let mut expected: std::collections::BTreeMap<String, Viewpoint> =
+                            std::collections::BTreeMap::new();
+                        let mut commands = Vec::new();
+                        let mut replies = Vec::new();
+                        for queued in batch {
+                            let Commit {
+                                flow,
+                                marker,
+                                viewpoint,
+                            } = queued.request;
+                            let next = match expected.get(&flow) {
+                                Some(next) => next.clone(),
+                                None => self.state.expected(&flow)?,
+                            };
+                            if viewpoint != next {
+                                let _ =
+                                    queued.reply.send(Err(Failure::Mismatch(ViewpointMismatch {
+                                        next: Position { viewpoint: next },
+                                    })));
+                                continue;
+                            }
+                            expected.insert(flow.clone(), viewpoint.next());
+                            commands.push(event::FlowCommand {
+                                markers: std::collections::BTreeMap::from([(flow, marker)]),
+                            });
+                            replies.push((queued.reply, viewpoint, queued.admission));
+                        }
+                        if commands.is_empty() {
+                            continue;
+                        }
+                        let result = match self.state.prepare_wal(commands) {
+                            Ok(prepared) => {
+                                let milestone = prepared.milestone().clone();
+                                self.state
+                                    .publish(&self.bucket, prepared)
+                                    .await
+                                    .map(|_| milestone)
+                            }
+                            Err(error) => Err(error),
+                        };
+                        match result {
+                            Ok(milestone) => {
+                                tracing::info!(%milestone,requests=replies.len(),"put of success");
+                                for (reply, viewpoint, _admission) in replies {
+                                    let _ = reply.send(Ok(Position { viewpoint }));
+                                }
+                            }
+                            Err(error) => {
+                                for (reply, _, _admission) in replies {
+                                    let _ = reply.send(Err(stopped()));
+                                }
+                                return Err(error);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .await;
+        if result.is_err() {
+            queue.close();
+            if let Some(message) = pending.take() {
+                message.reject();
+            }
+            while let Ok(message) = queue.try_recv() {
+                message.reject();
+            }
+        }
+        result
     }
 }
 
@@ -249,25 +358,15 @@ async fn epilogue_status(
     let Query(query) =
         query.map_err(|error| Failure::new(error.status(), "invalid_query", error))?;
     event::valid_flow(&query.flow).map_err(Failure::bad)?;
-    let mut state = app.state.lock().await;
-    if state.stopped {
-        return Err(Failure::new(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "stopped",
-            "server is stopping",
-        ));
-    }
-    timeline::refresh(&app.bucket, &mut state)
+    let (reply, result) = oneshot::channel();
+    app.queue
+        .send(Message::Status {
+            flow: query.flow,
+            reply,
+        })
         .await
-        .map_err(Failure::internal)?;
-    let latest = state
-        .latest(&query.flow)
-        .map_err(Failure::internal)?
-        .map(|viewpoint| Position { viewpoint });
-    Ok(Json(EpilogueStatus {
-        latest,
-        recent: None,
-    }))
+        .map_err(|_| stopped())?;
+    Ok(Json(result.await.map_err(|_| stopped())??))
 }
 
 fn required(name: &str) -> Result<String> {
@@ -307,10 +406,37 @@ async fn main() -> Result<()> {
     diffuse16::key(&next)?;
     let (fatal_tx, mut fatal_rx) = watch::channel(false);
     let mut shutdown_rx = fatal_rx.clone();
-    let app = Arc::new(App {
+    let batch_max: usize = env::var("BASINSYNC_BATCH_MAX")
+        .unwrap_or_else(|_| "32".into())
+        .parse()?;
+    let batch_wait: u64 = env::var("BASINSYNC_BATCH_WAIT_MS")
+        .unwrap_or_else(|_| "2".into())
+        .parse()?;
+    anyhow::ensure!(
+        (1..=256).contains(&batch_max) && batch_wait <= 1000,
+        "invalid batch limits"
+    );
+    let capacity = batch_max.max(32);
+    let (queue, receiver) = mpsc::channel(capacity);
+    let worker = Worker {
         bucket,
-        state: Mutex::new(state),
-        fatal: fatal_tx,
+        state,
+        batch_max,
+        batch_wait: Duration::from_millis(batch_wait),
+    };
+    let job = tokio::spawn(worker.run(receiver));
+    tokio::spawn(async move {
+        match job.await {
+            Ok(Ok(())) => {}
+            result => {
+                tracing::error!(?result, "commit worker stopped");
+                fatal_tx.send_replace(true);
+            }
+        }
+    });
+    let app = Arc::new(App {
+        queue,
+        admission: Arc::new(Semaphore::new(capacity)),
     });
     let api = Router::new()
         .route("/epilogue", put(commit))
@@ -347,7 +473,7 @@ async fn main() -> Result<()> {
         }
     }
     if *fatal_rx.borrow() {
-        bail!("leadership lost: conditional PUT failed");
+        bail!("commit worker stopped");
     }
     Ok(())
 }
