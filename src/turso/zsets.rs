@@ -3,6 +3,9 @@ use crate::event::{self, FlowCommand};
 use std::time::Instant;
 use turso_core::{Numeric, mvcc::database::RowVersion, types::ImmutableRecordRef};
 
+#[path = "shadow.rs"]
+mod shadow;
+
 #[derive(Clone, Debug, PartialEq)]
 enum Cell {
     Null,
@@ -52,7 +55,9 @@ fn tables(native: &Native) -> Result<Tables> {
         let row = rows.row().unwrap();
         let name: String = row.get(0)?;
         if name.starts_with("sqlite_")
-            || name.starts_with("turso_")
+            || name.starts_with("turso_sync_")
+            || name == "turso_cdc"
+            || name == "turso_cdc_version"
             || name.starts_with("__turso_internal_")
         {
             continue;
@@ -60,7 +65,8 @@ fn tables(native: &Native) -> Result<Tables> {
         let schema = native.conn.current_schema();
         let table = schema.get_btree_table(&name).unwrap();
         ensure!(
-            !table.has_virtual_columns
+            table.has_rowid
+                && !table.has_virtual_columns
                 && table
                     .logical_to_physical_map
                     .iter()

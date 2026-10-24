@@ -291,6 +291,7 @@ dependencies = [
  "flexbuffers",
  "num-bigint",
  "proptest",
+ "redb",
  "rust-s3",
  "serde",
  "serde_bytes",
@@ -2009,6 +2010,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5da7e78a036ce858e8d55b7e7dc8ba3a88b78350fd2155d3591bbd966b58589e"
 dependencies = [
  "rustversion",
+]
+
+[[package]]
+name = "redb"
+version = "4.4.0"
+dependencies = [
+ "libc",
 ]
 
 [[package]]

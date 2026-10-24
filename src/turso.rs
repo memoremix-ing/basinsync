@@ -538,8 +538,19 @@ impl Native {
     fn open_on(io: Arc<dyn IO>, image: &[u8], log: Option<&[u8]>, capture: bool) -> Result<Self> {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let path = format!("basinsync-{}.turso", NEXT.fetch_add(1, Ordering::Relaxed));
+        Self::open_at(io, path, image, log, capture)
+    }
+
+    fn open_at(
+        io: Arc<dyn IO>,
+        path: String,
+        image: &[u8],
+        log: Option<&[u8]>,
+        capture: bool,
+    ) -> Result<Self> {
         let file = io.open_file(&path, OpenFlags::default(), false)?;
         write_file(&*io, &*file, image)?;
+        drop(file);
         let log_file = io.open_file(&format!("{path}-log"), OpenFlags::default(), false)?;
         if let Some(log) = log {
             write_file(&*io, &*log_file, log)?;

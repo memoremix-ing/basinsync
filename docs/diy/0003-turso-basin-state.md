@@ -1,5 +1,6 @@
 [0002-basin-timeline-race]: <0002-basin-timeline-race.md>
 [0003-commit-baseline]: <../benchmarks/0003-commit-baseline.md>
+[0003-disk-shadow]: <../benchmarks/0003-disk-shadow.md>
 [0003-wal-experiments]: <../benchmarks/0003-wal-experiments.md>
 [0003-zset-experiments]: <../benchmarks/0003-zset-experiments.md>
 [basin]: <../glossary/basin.md>
@@ -92,5 +93,6 @@ batches, races, delayed writes, lost replies, and restart recovery. Run the
 *development checks*[^][development]. The earlier
 *baseline*[^][0003-commit-baseline] and *experiments*[^][0003-wal-experiments]
 record the procedure choices. *Weighted-row experiments*[^][0003-zset-experiments]
-explore an additional reactive-query feed. Database files remain in memory; snapshots and
+explore an additional reactive-query feed; *on-disk pipeline measurements*[^][0003-disk-shadow]
+compare a full shadow with a persistent row cache. Database files remain in memory; snapshots and
 copying into *Flow*[^][flow] *Epilogues*[^][epilogue] are deferred.

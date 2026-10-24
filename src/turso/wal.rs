@@ -15,7 +15,7 @@ struct Recorder {
     segments: Vec<Blob>,
 }
 struct WalIO {
-    inner: MemoryIO,
+    inner: Arc<dyn IO>,
     recorder: Arc<Mutex<Recorder>>,
 }
 impl Clock for WalIO {
@@ -37,6 +37,7 @@ impl IO for WalIO {
         if path.ends_with("-wal") {
             Ok(Arc::new(WalFile {
                 inner,
+                io: self.inner.clone(),
                 recorder: self.recorder.clone(),
             }))
         } else {
@@ -46,12 +47,19 @@ impl IO for WalIO {
     fn remove_file(&self, path: &str) -> turso_core::Result<()> {
         self.inner.remove_file(path)
     }
+    fn supports_shared_wal_coordination(&self) -> bool {
+        self.inner.supports_shared_wal_coordination()
+    }
+    fn step(&self) -> turso_core::Result<()> {
+        self.inner.step()
+    }
     fn file_id(&self, path: &str) -> turso_core::Result<FileId> {
         self.inner.file_id(path)
     }
 }
 struct WalFile {
     inner: Arc<dyn File>,
+    io: Arc<dyn IO>,
     recorder: Arc<Mutex<Recorder>>,
 }
 impl File for WalFile {
@@ -71,10 +79,7 @@ impl File for WalFile {
         c: Completion,
     ) -> turso_core::Result<Completion> {
         let completed = self.inner.pwrite(pos, buffer.clone(), c)?;
-        assert!(
-            completed.finished(),
-            "WAL recorder requires synchronous MemoryIO"
-        );
+        self.io.wait_for_completion(completed.clone())?;
         let mut recorder = self.recorder.lock().unwrap();
         let start = pos as usize;
         let size = recorder.current.len().max(start + buffer.len());
@@ -90,7 +95,7 @@ impl File for WalFile {
     }
     fn truncate(&self, len: u64, c: Completion) -> turso_core::Result<Completion> {
         let completed = self.inner.truncate(len, c)?;
-        assert!(completed.finished());
+        self.io.wait_for_completion(completed.clone())?;
         let mut recorder = self.recorder.lock().unwrap();
         if len == 0 && !recorder.current.is_empty() {
             let bytes = std::mem::take(&mut recorder.current);
@@ -255,7 +260,7 @@ impl Writer {
     pub fn open(image: &[u8]) -> Result<Self> {
         let recorder = Arc::new(Mutex::new(Recorder::default()));
         let io = Arc::new(WalIO {
-            inner: MemoryIO::new(),
+            inner: Arc::new(MemoryIO::new()),
             recorder: recorder.clone(),
         });
         let native = Native::open_on(io, image, None, true)?;
@@ -319,6 +324,18 @@ impl Writer {
             &milestone.to_string(),
             values.into_iter(),
         )?;
+        self.capture(base, parent, milestone)
+    }
+    fn capture(
+        &mut self,
+        base: &BigUint,
+        parent: Option<&str>,
+        milestone: BigUint,
+    ) -> Result<Delta> {
+        ensure!(
+            &self.cursor == base && milestone == base + 1u8,
+            "capture prefix mismatch"
+        );
         let native = &self.state.native;
         let bytes = read_file(&*native.io, &*native.storage.get_logical_log_file())?;
         let frames = std::mem::take(&mut *native.storage.frames.lock().unwrap());
