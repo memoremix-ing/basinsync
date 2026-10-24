@@ -54,6 +54,7 @@ Extend commitflow's payload, alongside its existing *CommitMarkers*[^][commit-ma
 
 ```ts
 deltas: { turso: { [id: string]: {
+  version: string;
   logical: {
     base: Uint8Array | null;
     header: Uint8Array;
@@ -67,7 +68,10 @@ deltas: { turso: { [id: string]: {
 } } }
 ```
 
-Use id `default.turso`. `base` carries the initialized database only in the first
+Use id `default.turso` and `version`
+`"0.9.0-pre.1+032f5bb2c7e74107f7ef9b66d576312379000a88"`, identifying the
+*Turso*[^][turso] release and revision. Reject incompatible versions before
+ingestion. `base` carries the initialized database only in the first
 *DifferentialEvent*[^][differential-event]; subsequent entries use `null`.
 `header` is the 56-byte native log header; `frames` excludes that header.
 Pages are numbered from one, sorted, and contain exactly 16,384 bytes; `size`

@@ -20,6 +20,7 @@ use turso_core::{
 };
 
 pub const ID: &str = "default.turso";
+pub const VERSION: &str = "0.9.0-pre.1+032f5bb2c7e74107f7ef9b66d576312379000a88";
 pub const PAGE_SIZE: usize = 16384;
 pub const SCHEMA: &str = "CREATE TABLE basin (id INTEGER PRIMARY KEY CHECK (id = 1), milestone TEXT NOT NULL); CREATE TABLE flows (flow TEXT PRIMARY KEY NOT NULL, viewpoint TEXT NOT NULL); INSERT INTO basin VALUES (1, '0');";
 
@@ -49,6 +50,7 @@ pub struct PhysicalFrames {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Delta {
+    pub version: String,
     pub logical: LogicalFrames,
     pub physical: PhysicalFrames,
 }
@@ -326,7 +328,11 @@ impl State {
         native.checkpoint()?;
         let image = native.image()?;
         let physical = PhysicalFrames::between(&self.image, &image);
-        let delta = Delta { logical, physical };
+        let delta = Delta {
+            version: VERSION.into(),
+            logical,
+            physical,
+        };
         let replayed = delta.ingest_logical(&self.image)?;
         ensure!(
             replayed.image == image,
@@ -345,7 +351,17 @@ impl State {
 }
 
 impl Delta {
+    pub fn validate_version(&self) -> Result<()> {
+        ensure!(
+            self.version == VERSION,
+            "unsupported Turso delta version {:?}; expected {VERSION}",
+            self.version
+        );
+        Ok(())
+    }
+
     pub fn ingest_logical(&self, before: &[u8]) -> Result<State> {
+        self.validate_version()?;
         ensure!(
             hash(before) == self.physical.before,
             "logical delta base mismatch"
@@ -543,6 +559,7 @@ mod tests {
         let bytes = flexbuffers::to_vec(delta)?;
         let decoded = Delta::deserialize(flexbuffers::Reader::get_root(bytes.as_slice())?)?;
         let delta = &decoded;
+        assert_eq!(delta.version, VERSION);
         let image = delta.physical.ingest(&base.image)?;
         let logical = delta.ingest_logical(&base.image)?;
         assert_eq!(logical.image, image, "logical and physical images differ");
@@ -693,6 +710,15 @@ mod tests {
         assert!(bad.ingest(&state.image).is_err());
         assert!(delta.physical.ingest(&[]).is_err());
         assert!(delta.ingest_logical(&[]).is_err());
+        let mut bad = delta.clone();
+        bad.version = "incompatible".into();
+        assert!(
+            bad.ingest_logical(&state.image)
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("unsupported Turso delta version")
+        );
         let mut bad = delta.clone();
         bad.physical.after = "00".repeat(48);
         assert!(bad.ingest_logical(&state.image).is_err());

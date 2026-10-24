@@ -215,6 +215,7 @@ try {
     while(read<=total){
       const m=read++;const payload=await get(b,BigInt(m));
       const delta = deltasAt(payload).turso["default.turso"];
+      assert.equal(delta.version, "0.9.0-pre.1+032f5bb2c7e74107f7ef9b66d576312379000a88");
       assert(delta.logical.header instanceof Uint8Array && delta.logical.header.length === 56);
       assert.equal(delta.logical.frames.length, 1);
       assert(delta.logical.frames[0] instanceof Uint8Array);
@@ -290,10 +291,12 @@ try {
   await status(await commit(restored.url,flowA,a,1n),201);
   await stop(restored.process);
   const invalid: (()=>Promise<string>)[] = [
-    ...["physical-byte", "base-hash", "missing-page", "missing-delta", "wrong-state", "logical-byte"].map(fault=>async()=>{
+    ...["physical-byte", "base-hash", "missing-page", "missing-delta", "wrong-state", "logical-byte", "wrong-version", "missing-version"].map(fault=>async()=>{
       const event = toObject(validEvent) as any;
       const body = event[0][3];
       const delta = body.deltas.turso["default.turso"];
+      if (fault === "wrong-version") delta.version = "incompatible";
+      if (fault === "missing-version") delete delta.version;
       if (fault === "physical-byte") delta.physical.pages[0].data[0] ^= 1;
       if (fault === "base-hash") delta.physical.before = "00".repeat(48);
       if (fault === "missing-page") delta.physical.pages.pop();

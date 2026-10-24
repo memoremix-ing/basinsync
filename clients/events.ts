@@ -6,6 +6,7 @@ const namespace = "sync.memoremix.com";
 const command = "sts/0/databasin/commitflow";
 
 export type TursoDelta = {
+  version: string;
   logical: { base: Uint8Array | null; header: Uint8Array; frames: Uint8Array[] };
   physical: { before: string; after: string; size: number; pages: {number: number; data: Uint8Array}[] };
 };

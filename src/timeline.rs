@@ -71,6 +71,7 @@ impl Basin {
             .turso
             .get(crate::turso::ID)
             .context("missing default.turso delta")?;
+        delta.validate_version()?;
         let base = match (&self.database, &delta.logical.base) {
             (None, Some(base)) => {
                 let genesis = crate::turso::State::from_image(base.0.clone())?;
@@ -205,6 +206,22 @@ mod tests {
         );
         assert!(state.database.is_none());
         let (_, command) = state.prepare(BTreeMap::from([("a".into(), marker("0"))]))?;
+        let mut incompatible = command.clone();
+        incompatible
+            .deltas
+            .turso
+            .get_mut(crate::turso::ID)
+            .unwrap()
+            .version = "incompatible".into();
+        assert!(
+            state
+                .apply(1u8.into(), incompatible)
+                .unwrap_err()
+                .to_string()
+                .contains("unsupported Turso delta version")
+        );
+        assert!(state.database.is_none());
+        assert_eq!(state.milestone, 0u8.into());
         let mut bad = command.clone();
         bad.deltas
             .turso
