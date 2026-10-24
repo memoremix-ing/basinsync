@@ -4,7 +4,7 @@ use turso_core::{
     io::{FileId, FileSyncType},
 };
 
-pub(super) struct Store {
+pub(in crate::turso::wal::zsets::shadow) struct Store {
     path: String,
     state: Mutex<History>,
 }
@@ -18,7 +18,10 @@ struct History {
     highwater: u64,
 }
 impl Store {
-    pub(super) fn open(path: &str, history: &str) -> Result<Arc<Self>> {
+    pub(in crate::turso::wal::zsets::shadow) fn open(
+        path: &str,
+        history: &str,
+    ) -> Result<Arc<Self>> {
         Ok(Arc::new(Self {
             path: path.into(),
             state: Mutex::new(History {
@@ -37,7 +40,7 @@ impl Store {
             }),
         }))
     }
-    pub(super) fn pin(self: &Arc<Self>) -> Result<Arc<View>> {
+    pub(in crate::turso::wal::zsets::shadow) fn pin(self: &Arc<Self>) -> Result<Arc<View>> {
         let mut s = self.state.lock().unwrap();
         let generation = s.generation;
         let size = s.base.metadata()?.len();
@@ -48,14 +51,14 @@ impl Store {
             size,
         }))
     }
-    pub(super) fn seal(&self) {
+    pub(in crate::turso::wal::zsets::shadow) fn seal(&self) {
         self.state.lock().unwrap().generation += 1;
     }
-    pub(super) fn retained(&self) -> (usize, u64) {
+    pub(in crate::turso::wal::zsets::shadow) fn retained(&self) -> (usize, u64) {
         let s = self.state.lock().unwrap();
         (s.versions.len(), s.highwater)
     }
-    pub(super) fn io(self: &Arc<Self>) -> Arc<dyn IO> {
+    pub(in crate::turso::wal::zsets::shadow) fn io(self: &Arc<Self>) -> Arc<dyn IO> {
         Arc::new(CowIO {
             inner: Arc::new(PlatformIO::new().unwrap()),
             store: self.clone(),
@@ -87,7 +90,7 @@ impl Store {
         Ok(())
     }
 }
-pub(super) struct View {
+pub(in crate::turso::wal::zsets::shadow) struct View {
     store: Arc<Store>,
     generation: u64,
     size: u64,
@@ -114,7 +117,9 @@ impl Drop for View {
     }
 }
 impl View {
-    pub(super) fn connect(self: &Arc<Self>) -> Result<Arc<Connection>> {
+    pub(in crate::turso::wal::zsets::shadow) fn connect(
+        self: &Arc<Self>,
+    ) -> Result<Arc<Connection>> {
         let path = format!("{}.snapshot-{}", self.store.path, self.generation);
         let io: Arc<dyn IO> = Arc::new(ViewIO {
             view: self.clone(),

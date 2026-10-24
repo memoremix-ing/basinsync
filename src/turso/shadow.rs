@@ -44,8 +44,10 @@ fn open_disk(path: &str, image: &[u8]) -> Result<Native> {
     Ok(native)
 }
 fn disk_writer(path: &str, image: &[u8]) -> Result<Writer> {
+    disk_writer_using(path, image, Arc::new(PlatformIO::new()?))
+}
+fn disk_writer_using(path: &str, image: &[u8], base: Arc<dyn IO>) -> Result<Writer> {
     let recorder = Arc::new(Mutex::new(Recorder::default()));
-    let base: Arc<dyn IO> = Arc::new(PlatformIO::new()?);
     let io = Arc::new(WalIO {
         inner: base,
         recorder: recorder.clone(),
@@ -368,6 +370,11 @@ enum Capture {
     None,
     Shadow(Box<Shadow>),
     Redb(Box<RedbCache>),
+    #[cfg(unix)]
+    Cow {
+        store: Arc<snapshots::cow::Store>,
+        schema: Tables,
+    },
 }
 impl Capture {
     fn apply(&mut self, delta: &Delta) -> Result<Option<Feed>> {
@@ -375,7 +382,31 @@ impl Capture {
             Self::None => Ok(None),
             Self::Shadow(shadow) => shadow.apply(delta).map(Some),
             Self::Redb(cache) => cache.apply(delta).map(Some),
+            #[cfg(unix)]
+            Self::Cow { .. } => anyhow::bail!("COW capture requires pinned views"),
         }
+    }
+    #[cfg(unix)]
+    fn apply_views(
+        &mut self,
+        delta: &Delta,
+        views: Option<&(Arc<snapshots::cow::View>, Arc<snapshots::cow::View>)>,
+    ) -> Result<Option<Feed>> {
+        if let Self::Cow { schema, .. } = self {
+            let (before, after) = views.ok_or_else(|| anyhow::anyhow!("missing COW views"))?;
+            let before = before.connect()?;
+            let after = after.connect()?;
+            ensure!(
+                snapshots::cursor(&before)? == delta.physical.base
+                    && snapshots::cursor(&after)? == delta.physical.milestone,
+                "COW prefix mismatch"
+            );
+            let keys = changes(&delta.logical)?.into_keys().collect();
+            let mut feed = read_conn_rows(&before, schema, &keys, -1)?;
+            add(&mut feed, read_conn_rows(&after, schema, &keys, 1)?);
+            return Ok(Some(feed));
+        }
+        self.apply(delta)
     }
     fn finish(&mut self) -> Result<()> {
         match self {
@@ -595,6 +626,8 @@ struct Draft {
     commands: Vec<FlowCommand>,
     delta: Delta,
     feed: Option<Feed>,
+    #[cfg(unix)]
+    views: Option<(Arc<snapshots::cow::View>, Arc<snapshots::cow::View>)>,
     group: usize,
     started: Instant,
     admission_us: f64,
@@ -667,6 +700,11 @@ fn run_pipeline(
     let (source, mut prepared) = tokio::sync::mpsc::channel::<Draft>(1);
     let (output, mut completed) = tokio::sync::mpsc::channel::<Draft>(1);
     let origin = Instant::now();
+    #[cfg(unix)]
+    let cow = match &capture {
+        Capture::Cow { store, .. } => Some(store.clone()),
+        _ => None,
+    };
     let producer = {
         let admission = admission.clone();
         let stopped = stopped.clone();
@@ -674,6 +712,12 @@ fn run_pipeline(
         let peak = peak.clone();
         let handle = handle.clone();
         std::thread::spawn(move || -> Result<(f64, f64)> {
+            #[cfg(unix)]
+            let mut writer = match &cow {
+                Some(store) => disk_writer_using(&primary_path, &[], store.io())?,
+                None => disk_writer(&primary_path, &[])?,
+            };
+            #[cfg(not(unix))]
             let mut writer = disk_writer(&primary_path, &[])?;
             let blob: Vec<_> = (0..4096).map(|n| (n % 251) as u8).collect();
             let mut elapsed = 0.0;
@@ -685,7 +729,17 @@ fn run_pipeline(
                 let started = Instant::now();
                 let commands = strided_input(group * batch, batch, flows, &blob);
                 let base = writer.cursor.clone();
+                #[cfg(unix)]
+                let before = cow.as_ref().map(|store| store.pin()).transpose()?;
                 let delta = writer.prepare(&base, Some("unlinked"), &commands)?;
+                #[cfg(unix)]
+                let views = match (&cow, before) {
+                    (Some(store), Some(before)) => {
+                        store.seal();
+                        Some((before, store.pin()?))
+                    }
+                    _ => None,
+                };
                 let primary_us = started.elapsed().as_secs_f64() * 1e6;
                 progress.fetch_add(1, Ordering::Release);
                 if group >= warmup {
@@ -698,6 +752,8 @@ fn run_pipeline(
                         commands,
                         delta,
                         feed: None,
+                        #[cfg(unix)]
+                        views,
                         group,
                         started,
                         admission_us,
@@ -722,7 +778,14 @@ fn run_pipeline(
                 if !matches!(capture, Capture::None) && !shadow_delay.is_zero() {
                     std::thread::sleep(shadow_delay);
                 }
-                draft.feed = capture.apply(&draft.delta)?;
+                #[cfg(unix)]
+                {
+                    draft.feed = capture.apply_views(&draft.delta, draft.views.take().as_ref())?;
+                }
+                #[cfg(not(unix))]
+                {
+                    draft.feed = capture.apply(&draft.delta)?;
+                }
                 if draft.feed.is_some() {
                     draft.shadow_us = start.elapsed().as_secs_f64() * 1e6;
                 }
@@ -808,9 +871,19 @@ fn run_pipeline(
     })
 }
 
-fn make_capture(kind: &str, dir: &Directory, seed_path: &str) -> Result<Capture> {
+fn make_capture(
+    kind: &str,
+    dir: &Directory,
+    seed_path: &str,
+    primary_path: &str,
+) -> Result<Capture> {
     match kind {
         "none" => Ok(Capture::None),
+        #[cfg(unix)]
+        "cow" => Ok(Capture::Cow {
+            store: snapshots::cow::Store::open(primary_path, &dir.path("history.pages"))?,
+            schema: tables(&open_disk(seed_path, &[])?)?,
+        }),
         "shadow" | "shadow-normal" | "shadow-off" | "shadow-off-periodic" => {
             let path = dir.path("shadow.turso");
             fs::copy(seed_path, &path)?;
@@ -997,11 +1070,14 @@ fn pipeline_overlap_is_bounded_and_publication_gates_completion() -> Result<()> 
         "shadow-off",
         "shadow-off-periodic",
         "redb-none",
-    ] {
+    ]
+    .into_iter()
+    .chain(cfg!(unix).then_some("cow"))
+    {
         let work = Directory::new()?;
         let primary = work.path("primary");
         fs::copy(&seed_path, &primary)?;
-        let capture = make_capture(kind, &work, &seed_path)?;
+        let capture = make_capture(kind, &work, &seed_path, &primary)?;
         let progress = Arc::new(AtomicU64::new(0));
         let observe = progress.clone();
         let (entered, waiting) = std::sync::mpsc::channel();
@@ -1077,11 +1153,14 @@ fn publication_failure_discards_speculation_and_keeps_recoverable_prefix() -> Re
         "shadow-off",
         "shadow-off-periodic",
         "redb-none",
-    ] {
+    ]
+    .into_iter()
+    .chain(cfg!(unix).then_some("cow"))
+    {
         let dir = Directory::new()?;
         let primary = dir.path("primary");
         fs::copy(&seed_path, &primary)?;
-        let capture = make_capture(kind, &dir, &seed_path)?;
+        let capture = make_capture(kind, &dir, &seed_path, &primary)?;
         let mut stored = Vec::new();
         let result = run_pipeline(
             primary,
@@ -1177,7 +1256,10 @@ fn measure_disk() -> Result<()> {
     let initial_bytes = fs::metadata(&primary)?.len();
     let seed = fs::read(env::var("DISK_SEED_EVENT")?)?;
     let setup = Instant::now();
-    let capture = make_capture(&kind, &dir, &env::var("DISK_SEED")?)?;
+    let capture = make_capture(&kind, &dir, &env::var("DISK_SEED")?, &primary)?;
+    let put_delay_ms: u64 = env::var("DISK_PUT_DELAY_MS")
+        .unwrap_or_else(|_| "0".into())
+        .parse()?;
     let setup_us = setup.elapsed().as_secs_f64() * 1e6;
     let before = fs::read_dir(&dir.0)?
         .map(|p| p.and_then(|p| p.metadata()).map(|m| m.len()))
@@ -1237,6 +1319,9 @@ fn measure_disk() -> Result<()> {
         Duration::ZERO,
         Arc::new(AtomicU64::new(0)),
         |milestone, bytes| {
+            if put_delay_ms > 0 {
+                std::thread::sleep(Duration::from_millis(put_delay_ms));
+            }
             if let Some(bucket) = &bucket {
                 runtime.block_on(async {
                     let r = bucket
@@ -1286,7 +1371,7 @@ fn measure_disk() -> Result<()> {
     fs::write(
         env::var("DISK_OUTPUT")?,
         serde_json::to_vec(
-            &serde_json::json!({"capture":kind,"mode":mode,"flows":flows,"batch":batch,"window":window,"groups":groups,"warmup":warmup,"initial_bytes":initial_bytes,"setup_us":setup_us,"setup_disk_bytes":before,"final_files":sizes,"primary_seconds":result.primary_seconds,"primary_finished_us":result.primary_finished_us,"shadow_finished_us":result.shadow_finished_us,"total_seconds":result.total_seconds,"requests_per_second":((groups-warmup)*batch)as f64/result.total_seconds,"admitted_peak":result.admitted_peak,"samples":result.samples}),
+            &serde_json::json!({"capture":kind,"mode":mode,"flows":flows,"batch":batch,"window":window,"groups":groups,"warmup":warmup,"put_delay_ms":put_delay_ms,"initial_bytes":initial_bytes,"setup_us":setup_us,"setup_disk_bytes":before,"final_files":sizes,"primary_seconds":result.primary_seconds,"primary_finished_us":result.primary_finished_us,"shadow_finished_us":result.shadow_finished_us,"total_seconds":result.total_seconds,"requests_per_second":((groups-warmup)*batch)as f64/result.total_seconds,"admitted_peak":result.admitted_peak,"samples":result.samples}),
         )?,
     )?;
     Ok(())

@@ -4,9 +4,9 @@ use std::os::unix::fs::FileExt;
 #[path = "views_benchmark.rs"]
 mod benchmark;
 #[path = "cow.rs"]
-mod cow;
+pub(super) mod cow;
 
-fn cursor(conn: &Arc<Connection>) -> Result<String> {
+pub(super) fn cursor(conn: &Arc<Connection>) -> Result<String> {
     let mut query = conn.prepare("SELECT milestone FROM basin WHERE id=1")?;
     ensure!(matches!(query.step()?, StepResult::Row), "missing cursor");
     let value = query.row().unwrap().get::<String>(0)?;

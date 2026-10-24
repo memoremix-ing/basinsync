@@ -1,6 +1,8 @@
 [0002-basin-timeline-race]: <0002-basin-timeline-race.md>
 [0003-commit-baseline]: <../benchmarks/0003-commit-baseline.md>
 [0003-disk-shadow]: <../benchmarks/0003-disk-shadow.md>
+[0003-s3-latency]: <../benchmarks/0003-s3-latency.md>
+[0003-snapshot-readers]: <../benchmarks/0003-snapshot-readers.md>
 [0003-wal-experiments]: <../benchmarks/0003-wal-experiments.md>
 [0003-zset-experiments]: <../benchmarks/0003-zset-experiments.md>
 [basin]: <../glossary/basin.md>
@@ -20,9 +22,11 @@
 [turso]: <../glossary/turso.md>
 [turso-state]: <../turso-state.md>
 [viewpoint]: <../glossary/viewpoint.md>
+[virtual-file-system]: <../glossary/virtual-file-system.md>
 [wal]: <../glossary/wal.md>
+[z-set]: <../glossary/z-set.md>
 
-# 0003 — Turso Basin state
+# 0003 — Turso Basin VFS
 
 Materialize the *Basin*[^][basin]'s *Timeline*[^][timeline] in *Turso*[^][turso]
 with 16 KiB pages, *MVCC*[^][mvcc], and portable logical changes. Store the applied
@@ -49,6 +53,14 @@ Use crate features `fs` and `conn_raw_api` and call
 `log_tx`'s serialization callback for *logical frames*[^][logical-frame]. Disable
 automatic checkpointing; intercept *physical WAL*[^][wal] writes before each
 explicit checkpoint truncates them.
+
+Add a file-backed copy-on-write *VFS*[^][virtual-file-system]. Pin a checkpointed
+generation before the next transaction; retain overwritten pages on disk and
+seal the next generation after its checkpoint. Independent SQL readers query
+the pinned views while the primary advances, without rebuilding a shadow.
+Release page history when readers finish. Use these views to derive prior/next
+rows for the *Z-set*[^][z-set] experiment; the
+*snapshot-reader measurements*[^][0003-snapshot-readers] record the procedure.
 
 Retain a private database in one worker. Gather bounded requests, validate their
 *Viewpoints*[^][viewpoint] in order, and materialize final row values in one
@@ -94,5 +106,11 @@ batches, races, delayed writes, lost replies, and restart recovery. Run the
 *baseline*[^][0003-commit-baseline] and *experiments*[^][0003-wal-experiments]
 record the procedure choices. *Weighted-row experiments*[^][0003-zset-experiments]
 explore an additional reactive-query feed; *on-disk pipeline measurements*[^][0003-disk-shadow]
-compare a full shadow with a persistent row cache. Database files remain in memory; snapshots and
-copying into *Flow*[^][flow] *Epilogues*[^][epilogue] are deferred.
+compare a full shadow with a persistent row cache.
+
+The HTTP worker currently batches serially and keeps its database in memory.
+The on-disk *VFS*[^][virtual-file-system] and bounded preparation/publication
+pipeline are executable prototypes for this milestone; runtime integration and
+a persistent snapshot catalog remain. Compare serial and bounded preparation
+with *added S3 latency*[^][0003-s3-latency]. Copying into *Flow*[^][flow]
+*Epilogues*[^][epilogue] is deferred.

@@ -1,6 +1,6 @@
 [0001-shallow-epilogue-commits]: <diy/0001-shallow-epilogue-commits.md>
 [0002-basin-timeline-race]: <diy/0002-basin-timeline-race.md>
-[0003-turso-basin-state]: <diy/0003-turso-basin-state.md>
+[0003-turso-basin-vfs]: <diy/0003-turso-basin-vfs.md>
 
 # basinsync
 
@@ -14,4 +14,4 @@ reference and glossary entries. Begin with
 
 Continue with *0002 — Basin Timeline race*[^][0002-basin-timeline-race].
 
-Then materialize *0003 — Turso Basin state*[^][0003-turso-basin-state].
+Then materialize *0003 — Turso Basin VFS*[^][0003-turso-basin-vfs].

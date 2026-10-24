@@ -6,6 +6,6 @@ a first-writer-wins Epilogue, a server, and TypeScript stress clients.
 
 [Run and verify](docs/development.md) · [Protocol and invariant](docs/epilogue-protocol.md)
 
-The current milestone is [0003 — Turso Basin state](docs/diy/0003-turso-basin-state.md):
-Persistent 16 KiB MVCC state, WAL frame capture, and bounded command batches
-acknowledged after durable Timeline publication.
+The current milestone is [0003 — Turso Basin VFS](docs/diy/0003-turso-basin-vfs.md):
+Turso state, WAL frame capture, durable command batches, and copy-on-write VFS
+experiments. The tutorial distinguishes the running server from its prototypes.

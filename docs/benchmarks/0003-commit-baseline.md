@@ -1,6 +1,6 @@
 [0003-commit-samples]: <data/0003-commit-samples.gz>
 [0003-commit-summary]: <data/0003-commit-summary.json>
-[0003-turso-basin-state]: <../diy/0003-turso-basin-state.md>
+[0003-turso-basin-vfs]: <../diy/0003-turso-basin-vfs.md>
 [durable-storage]: <../glossary/durable-storage.md>
 [flow]: <../glossary/flow.md>
 [logical-frame]: <../glossary/logical-frame.md>
@@ -11,7 +11,7 @@
 
 # 0003 commit baseline — 2026-10-23
 
-Measure the *0003 procedure*[^][0003-turso-basin-state] directly, excluding HTTP
+Measure the *0003 procedure*[^][0003-turso-basin-vfs] directly, excluding HTTP
 form parsing, cursor lookup, leadership contention, and
 *Timeline*[^][timeline] refresh reads.
 

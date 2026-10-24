@@ -1,5 +1,6 @@
 [0003-commit-baseline]: <0003-commit-baseline.md>
-[0003-turso-basin-state]: <../diy/0003-turso-basin-state.md>
+[0003-s3-latency]: <0003-s3-latency.md>
+[0003-turso-basin-vfs]: <../diy/0003-turso-basin-vfs.md>
 [0003-wal-samples]: <data/0003-wal-samples.gz>
 [0003-wal-summary]: <data/0003-wal-summary.json>
 [commit-marker]: <../glossary/commit-marker.md>
@@ -21,7 +22,7 @@
 
 Historical test/benchmark prototypes extending the
 *baseline*[^][0003-commit-baseline]. Persistent capture and bounded batching have
-since been promoted into the *0003 procedure*[^][0003-turso-basin-state].
+since been promoted into the *0003 procedure*[^][0003-turso-basin-vfs].
 Success follows the corresponding command's durable S3 PUT.
 
 Capture *physical WAL*[^][wal] writes before checkpoint truncation. Validate
@@ -79,10 +80,13 @@ arbitrates each object independently.
 | One stream, 8 | 328 / 24.1 | 340 / 46.6 |
 | One stream, 32 | 1,355 / 24.0 | 1,430 / 44.0 |
 
-Batching dominates throughput gains. Pipelining helps the expensive current path,
-but adds little after removing CPU work and raises acknowledgement latency.
+Batching dominates throughput gains in these local-endpoint measurements.
+Pipelining helps the expensive current path and adds less after removing CPU
+work. Its larger admission window also counts more queued work in the
+acknowledgement samples; this is not a latency comparison at fixed offered load.
 Prioritize WAL capture, removing redundant replay/image scans, and batching;
 keep preparation bounded. Batch collection delays are not included here.
+The *added-latency experiment*[^][0003-s3-latency] tests longer S3 waits.
 
 Three rotated rounds per case; 4 KiB blobs, 16 KiB pages, 64/8,192 seeded rows;
 512 CPU/recovery events or 256 S3 requests per run, plus 64 warmups. Optimized
