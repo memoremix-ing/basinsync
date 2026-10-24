@@ -12,8 +12,9 @@
 
 # 0003 S3 latency — 2026-10-24
 
-The *0003 HTTP server*[^][0003-turso-basin-vfs] batches serially: it waits for
-publication before preparing the next batch. This experiment connects the
+At measurement time, the HTTP server batched serially, waiting for publication
+before preparing the next batch. The *0003 server*[^][0003-turso-basin-vfs] now
+uses two batches. This experiment connects the
 *copy-on-write VFS*[^][virtual-file-system] from the
 *snapshot-reader prototype*[^][0003-snapshot-readers] to three bounded stages:
 
@@ -75,8 +76,9 @@ Small differences on this shared host remain exploratory.
 
 This isolates PUT waiting, excluding HTTP, refresh GETs, bandwidth limits and
 latency jitter. It does not measure deployed server throughput. Keep batching
-and use two admitted batches as the next pipeline candidate; test variable
-preparation and network tails before choosing a deeper window. Runtime adoption
-and a durable snapshot catalog remain separate work. Retain the
+and use two admitted batches, now adopted in the server; test variable
+preparation and network tails before choosing a deeper window. The on-disk
+*VFS*[^][virtual-file-system] and its durable snapshot catalog remain separate
+runtime work. Retain the
 *environment and summary*[^][0003-s3-latency-summary] and
 *raw samples*[^][0003-s3-latency-samples].

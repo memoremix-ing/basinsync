@@ -1,4 +1,5 @@
 [basin]: <glossary/basin.md>
+[causal-consistency]: <glossary/causal-consistency.md>
 [conditional-write]: <glossary/conditional-write.md>
 [differential-event]: <glossary/differential-event.md>
 [diffuse16]: <glossary/diffuse16.md>
@@ -30,6 +31,11 @@ arbitrates competing writers. A vector can contain ordered commitflow commands
 followed by one `sts/0/databasin/ingestturso` command. Its
 *Turso deltas*[^][turso-state] carry the *physical frames*[^][physical-frame]
 that materialize the recorded state; all requests wait for durable publication.
+
+Regardless of in-flight limits, durable publication must follow
+*Milestone*[^][milestone] order to preserve *causal consistency*[^][causal-consistency].
+Complete one *conditional PUT*[^][conditional-write] before starting the next;
+acknowledge a batch only after it and all predecessors are durable.
 
 `PUT /api/v0/epilogue` adds a `flow` string to the
 *commit metadata*[^][epilogue-protocol] and validates against that

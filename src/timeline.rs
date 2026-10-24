@@ -123,6 +123,43 @@ pub struct Prepared {
     parent: Option<String>,
     digest: String,
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Prefix {
+    milestone: BigUint,
+    digest: Option<String>,
+}
+impl Prefix {
+    pub fn milestone(&self) -> &BigUint {
+        &self.milestone
+    }
+}
+
+pub struct Stager {
+    state: Basin,
+}
+impl Stager {
+    pub fn prefix(&self) -> Prefix {
+        self.state.prefix()
+    }
+    pub fn expected(&self, flow: &str) -> Result<Viewpoint> {
+        self.state.expected(flow)
+    }
+    pub fn prepare(&mut self, commands: Vec<event::FlowCommand>) -> Result<Prepared> {
+        let prepared = self.state.prepare_wal(commands)?;
+        self.state.milestone = prepared.milestone.clone();
+        self.state.head = Some(prepared.digest.clone());
+        Ok(prepared)
+    }
+    pub fn into_settled(self, published: &Prefix) -> Result<Basin> {
+        ensure!(
+            self.prefix() == *published,
+            "unpublished preparation remains"
+        );
+        Ok(self.state)
+    }
+}
+
 impl Prepared {
     pub fn bytes(&self) -> &[u8] {
         &self.bytes
@@ -130,8 +167,42 @@ impl Prepared {
     pub fn milestone(&self) -> &BigUint {
         &self.milestone
     }
+    pub async fn publish(self, bucket: &Bucket, prefix: &Prefix) -> Result<Prefix> {
+        ensure!(
+            self.milestone == &prefix.milestone + 1u8 && self.parent == prefix.digest,
+            "publication prefix mismatch"
+        );
+        let response = bucket
+            .put_object_with_headers(
+                diffuse16::key(&self.milestone)?,
+                &self.bytes,
+                Some(axum::http::HeaderMap::from_iter([(
+                    axum::http::header::IF_NONE_MATCH,
+                    axum::http::HeaderValue::from_static("*"),
+                )])),
+            )
+            .await?;
+        ensure!(
+            (200..300).contains(&response.status_code()),
+            "conditional PUT returned HTTP {}",
+            response.status_code()
+        );
+        Ok(Prefix {
+            milestone: self.milestone,
+            digest: Some(self.digest),
+        })
+    }
 }
 impl Basin {
+    pub fn prefix(&self) -> Prefix {
+        Prefix {
+            milestone: self.milestone.clone(),
+            digest: self.head.clone(),
+        }
+    }
+    pub fn into_stager(self) -> Stager {
+        Stager { state: self }
+    }
     fn freeze_writer(&mut self) -> Result<()> {
         if let Some(writer) = &self.writer {
             ensure!(
@@ -178,27 +249,9 @@ impl Basin {
         })
     }
     pub async fn publish(&mut self, bucket: &Bucket, prepared: Prepared) -> Result<()> {
-        ensure!(
-            prepared.milestone == &self.milestone + 1u8 && prepared.parent == self.head,
-            "publication prefix mismatch"
-        );
-        let response = bucket
-            .put_object_with_headers(
-                diffuse16::key(&prepared.milestone)?,
-                &prepared.bytes,
-                Some(axum::http::HeaderMap::from_iter([(
-                    axum::http::header::IF_NONE_MATCH,
-                    axum::http::HeaderValue::from_static("*"),
-                )])),
-            )
-            .await?;
-        ensure!(
-            (200..300).contains(&response.status_code()),
-            "conditional PUT returned HTTP {}",
-            response.status_code()
-        );
-        self.milestone = prepared.milestone;
-        self.head = Some(prepared.digest);
+        let published = prepared.publish(bucket, &self.prefix()).await?;
+        self.milestone = published.milestone;
+        self.head = published.digest;
         Ok(())
     }
     pub fn apply_entry(&mut self, milestone: BigUint, bytes: &[u8]) -> Result<()> {
@@ -348,6 +401,29 @@ mod tests {
             sha384: format!("{:x}", Sha384::digest([])),
             blob: vec![],
         }
+    }
+
+    #[test]
+    fn staged_batches_link_before_publication_and_settle_only_at_the_same_prefix() -> Result<()> {
+        let committed = Basin::default().prefix();
+        let mut stager = Basin::default().into_stager();
+        let first = stager.prepare(vec![event::FlowCommand {
+            markers: BTreeMap::from([("flow".into(), marker("0"))]),
+        }])?;
+        assert_eq!(stager.expected("flow")?, Viewpoint::parse("1")?);
+        let second = stager.prepare(vec![event::FlowCommand {
+            markers: BTreeMap::from([("flow".into(), marker("1"))]),
+        }])?;
+        assert_eq!(second.parent, Some(event::digest(first.bytes())));
+        assert_eq!(second.milestone(), &BigUint::from(2u8));
+        let mut recovered = Basin::default();
+        recovered.apply_entry(1u8.into(), first.bytes())?;
+        assert_ne!(stager.prefix(), recovered.prefix());
+        recovered.apply_entry(2u8.into(), second.bytes())?;
+        let settled = stager.into_settled(&recovered.prefix())?;
+        assert_eq!(settled.latest("flow")?, Some(Viewpoint::parse("1")?));
+        assert!(settled.into_stager().into_settled(&committed).is_err());
+        Ok(())
     }
 
     #[test]

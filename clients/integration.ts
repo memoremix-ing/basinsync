@@ -74,10 +74,10 @@ async function server(bucket: string, s3Endpoint = endpoint, options:Record<stri
   });
   return {process:p,url,log:processLogs.get(p)!};
 }
-function relay(after: (request: Request, response: Response) => Promise<Response> | Response,before?: (request:Request)=>Promise<void>) {
+function relay(after: (request: Request, response: Response) => Promise<Response> | Response,before?: (request:Request)=>Promise<void | Response>) {
   const service = Bun.serve({hostname:"127.0.0.1",port:0,async fetch(request) {
     const url = new URL(request.url);
-    await before?.(request);
+    const early=await before?.(request);if(early)return early;
     const response = await fetch(`${endpoint}${url.pathname}${url.search}`,{
       method:request.method,headers:request.headers,
       body:request.method==="PUT" ? await request.arrayBuffer() : undefined,
@@ -94,6 +94,13 @@ async function queued(log:string,flow:string,viewpoint:number){
     const text=readFileSync(log,"utf8").replace(/\u001b\[[0-9;]*m/g,"");
     if(text.split("\n").some(line=>line.includes("commit queued") && line.includes(`flow=${flow}`) && line.includes(`viewpoint=${viewpoint}`)))return;
     assert(Date.now()<deadline,`request never queued: ${flow}/${viewpoint}; ${log}`);await Bun.sleep(2);
+  }
+}
+async function batchLogged(log:string,milestone:number,event="batch prepared"){
+  const deadline=Date.now()+15000;
+  for(;;){
+    if(readFileSync(log,"utf8").replace(/\u001b\[[0-9;]*m/g,"").split("\n").some(line=>line.includes(event)&&line.includes(`milestone=${milestone}`)))return;
+    assert(Date.now()<deadline,`batch ${milestone} never reached ${event}; ${log}`);await Bun.sleep(2);
   }
 }
 const bytes = (s: string) => new TextEncoder().encode(s);
@@ -343,6 +350,78 @@ try {
     }
     await proxy.service.stop(true);
   }
+  // Preparation advances one batch ahead; failed publication discards it.
+  for(const fault of ["none","before","after"]){
+    const pipelineBucket=await bucket();const gate=Promise.withResolvers<void>(),entered=Promise.withResolvers<void>();
+    let puts=0,active=0,peak=0,completed=0;
+    const proxy=relay(async(request,response)=>{
+      if(request.method==="PUT"){
+        active--;if(fault==="after"){assert.equal(response.status,200);await response.arrayBuffer();return new Response("durable reply lost",{status:503});}
+      }
+      return response;
+    },async request=>{if(request.method==="PUT"){
+      puts++;active++;peak=Math.max(peak,active);
+      if(puts===1){entered.resolve();await gate.promise;}
+      if(fault==="before"){active--;return new Response("not stored",{status:503});}
+    }});
+    const app=await server(pipelineBucket,proxy.url,{BASINSYNC_BATCH_MAX:"1",BASINSYNC_BATCH_WAIT_MS:"0",RUST_LOG:"basinsync=debug"});
+    const flow=`pipeline-${fault}`;
+    const requests=[commit(app.url,flow,a,0n).then(r=>{completed++;return r})];
+    await timeout(entered.promise);
+    requests.push(commit(app.url,flow,a,1n).then(r=>{completed++;return r}));await batchLogged(app.log,2);
+    requests.push(commit(app.url,flow,a,2n).then(r=>{completed++;return r}));await queued(app.log,flow,2);
+    let statusDone=false;const latest=fetch(`${app.url}/api/v0/epilogue/status?flow=${flow}`).then(value=>{statusDone=true;return value;});
+    await Bun.sleep(30);
+    assert.equal(puts,1);assert.equal(completed,0);assert.equal(statusDone,false);
+    const prepared=readFileSync(app.log,"utf8").split("\n").filter(line=>line.includes("batch prepared"));
+    assert.equal(prepared.length,2,"only two batches may prepare ahead of the publication gate");
+    await assert.rejects(()=>get(pipelineBucket,2n));
+    gate.resolve();
+    const results=await Promise.all(requests);
+    for(const result of results)await status(result,fault==="none"?201:503);
+    assert.equal(peak,1,"only one conditional publication may be active");
+    if(fault==="none"){
+      assert.deepEqual(parse(await (await latest).text()),{latest:{viewpoint:2n},recent:null});assert.equal(puts,3);
+      for(let n=1;n<=3;n++)assert.equal(markerAt(await get(pipelineBucket,BigInt(n)),flow).viewpoint,String(n-1));
+      await stop(app.process);
+    }else{
+      await status(await latest,503);assert.equal(puts,1);assert.equal(await timeout(app.process.exited),1);
+      const restored=await server(pipelineBucket);
+      assert.deepEqual(await epilogueStatus(restored.url,flow),{latest:fault==="after"?{viewpoint:0n}:null,recent:null});
+      await status(await commit(restored.url,flow,a,fault==="after"?1n:0n),201);await stop(restored.process);
+    }
+    await proxy.service.stop(true);
+  }
+  for(const fail of [false,true]){
+    const mismatchBucket=await bucket();const second=Promise.withResolvers<void>(),entered=Promise.withResolvers<void>();
+    let puts=0;
+    const proxy=relay(async(request,response)=>{
+      if(request.method==="PUT"&&puts===2&&fail){await response.arrayBuffer();return new Response("second reply lost",{status:503});}
+      return response;
+    },async request=>{if(request.method==="PUT"&&++puts===2){entered.resolve();await second.promise;}});
+    const app=await server(mismatchBucket,proxy.url,{BASINSYNC_BATCH_MAX:"1",BASINSYNC_BATCH_WAIT_MS:"0",RUST_LOG:"basinsync=debug"});
+    await status(await commit(app.url,"deferred-mismatch",a,0n),201);
+    const next=commit(app.url,"deferred-mismatch",a,1n);await timeout(entered.promise);
+    let conflictDone=false;const conflict=commit(app.url,"deferred-mismatch",a,0n).then(r=>{conflictDone=true;return r});
+    await batchLogged(app.log,2,"batch rejected");
+    let statusDone=false;const latest=fetch(`${app.url}/api/v0/epilogue/status?flow=deferred-mismatch`).then(r=>{statusDone=true;return r});
+    await Bun.sleep(30);assert.equal(conflictDone,false);assert.equal(statusDone,false);
+    second.resolve();await status(await next,fail?503:201);
+    if(fail){await status(await conflict,503);await status(await latest,503);assert.equal(await timeout(app.process.exited),1);}
+    else{await mismatch(await conflict,2n);assert.deepEqual(parse(await (await latest).text()),{latest:{viewpoint:1n},recent:null});await stop(app.process);}
+    assert.equal(puts,2,"mismatch-only work must not create an event");await proxy.service.stop(true);
+  }
+  {
+    const full=await bucket();const gate=Promise.withResolvers<void>(),entered=Promise.withResolvers<void>();let puts=0;
+    const proxy=relay((_r,response)=>response,async r=>{if(r.method==="PUT"&&++puts===1){entered.resolve();await gate.promise;}});
+    const app=await server(full,proxy.url,{BASINSYNC_BATCH_WAIT_MS:"1000",RUST_LOG:"basinsync=debug"});
+    const first=Array.from({length:32},(_,n)=>commit(app.url,`full-${n}`,a,0n));await timeout(entered.promise);
+    const next=Array.from({length:32},(_,n)=>commit(app.url,`full-${n+32}`,a,0n));await batchLogged(app.log,2);
+    assert.equal(puts,1);gate.resolve();for(const result of await Promise.all([...first,...next]))await status(result,201);
+    assert.equal(entriesAt(await get(full,1n)).length,32);assert.equal(entriesAt(await get(full,2n)).length,32);
+    await stop(app.process);await proxy.service.stop(true);
+  }
+  console.log("put of success: two-batch real-route overlap, one ordered PUT, full-batch admission, durable status/mismatch barriers, and failed-publication recovery");
   // Byte bounds flush a batch before accepting another large request.
   {
     const limited=await bucket();const app=await server(limited,endpoint,{BASINSYNC_BATCH_MAX:"32",BASINSYNC_BATCH_WAIT_MS:"1000",RUST_LOG:"basinsync=debug"});
@@ -356,7 +435,7 @@ try {
   // Slow form bodies consume admission slots, never the worker's status queue.
   {
     const idle=await bucket(),app=await server(idle);const port=Number(new URL(app.url).port);
-    const sockets=await Promise.all(Array.from({length:32},()=>new Promise<ReturnType<typeof createConnection>>((yes,no)=>{
+    const sockets=await Promise.all(Array.from({length:64},()=>new Promise<ReturnType<typeof createConnection>>((yes,no)=>{
       const socket=createConnection({host:"127.0.0.1",port},()=>{socket.write(`PUT /api/v0/epilogue HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nContent-Type: multipart/form-data; boundary=x\r\nContent-Length: 1024\r\n\r\n`);yes(socket)});socket.once("error",no);
     })));
     try{await Bun.sleep(30);assert.deepEqual(await timeout(epilogueStatus(app.url,"idle"),3000),{latest:null,recent:null})}finally{for(const socket of sockets)socket.destroy()}

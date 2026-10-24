@@ -23,6 +23,9 @@ use std::{env, future::IntoFuture, net::SocketAddr, sync::Arc, time::Duration};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc, oneshot, watch};
 
 const MAX_BODY: usize = 8 * 1024 * 1024;
+const PIPELINE_BATCHES: usize = 2;
+
+mod server_pipeline;
 
 struct App {
     queue: mpsc::Sender<Message>,
@@ -223,128 +226,6 @@ struct Worker {
     batch_max: usize,
     batch_wait: Duration,
 }
-impl Worker {
-    async fn run(mut self, mut queue: mpsc::Receiver<Message>) -> Result<()> {
-        let mut pending = None;
-        let result: Result<()> = async {
-            loop {
-                let message = match pending.take() {
-                    Some(message) => Some(message),
-                    None => queue.recv().await,
-                };
-                let Some(message) = message else {
-                    return Ok(());
-                };
-                match message {
-                    Message::Status { flow, reply } => {
-                        timeline::refresh(&self.bucket, &mut self.state).await?;
-                        let latest = self
-                            .state
-                            .latest(&flow)?
-                            .map(|viewpoint| Position { viewpoint });
-                        let _ = reply.send(Ok(EpilogueStatus {
-                            latest,
-                            recent: None,
-                        }));
-                    }
-                    Message::Commit(first) => {
-                        let mut size = first.size();
-                        let mut batch = vec![first];
-                        let deadline = tokio::time::Instant::now() + self.batch_wait;
-                        while batch.len() < self.batch_max {
-                            let message = match queue.try_recv() {
-                                Ok(message) => Some(message),
-                                Err(mpsc::error::TryRecvError::Disconnected) => None,
-                                Err(mpsc::error::TryRecvError::Empty) => {
-                                    tokio::time::timeout_at(deadline, queue.recv())
-                                        .await
-                                        .unwrap_or(None)
-                                }
-                            };
-                            match message {
-                                Some(Message::Commit(c)) if size + c.size() <= MAX_BODY => {
-                                    size += c.size();
-                                    batch.push(c)
-                                }
-                                Some(message) => {
-                                    pending = Some(message);
-                                    break;
-                                }
-                                None => break,
-                            }
-                        }
-                        timeline::refresh(&self.bucket, &mut self.state).await?;
-                        let mut expected: std::collections::BTreeMap<String, Viewpoint> =
-                            std::collections::BTreeMap::new();
-                        let mut commands = Vec::new();
-                        let mut replies = Vec::new();
-                        for queued in batch {
-                            let Commit {
-                                flow,
-                                marker,
-                                viewpoint,
-                            } = queued.request;
-                            let next = match expected.get(&flow) {
-                                Some(next) => next.clone(),
-                                None => self.state.expected(&flow)?,
-                            };
-                            if viewpoint != next {
-                                let _ =
-                                    queued.reply.send(Err(Failure::Mismatch(ViewpointMismatch {
-                                        next: Position { viewpoint: next },
-                                    })));
-                                continue;
-                            }
-                            expected.insert(flow.clone(), viewpoint.next());
-                            commands.push(event::FlowCommand {
-                                markers: std::collections::BTreeMap::from([(flow, marker)]),
-                            });
-                            replies.push((queued.reply, viewpoint, queued.admission));
-                        }
-                        if commands.is_empty() {
-                            continue;
-                        }
-                        let result = match self.state.prepare_wal(commands) {
-                            Ok(prepared) => {
-                                let milestone = prepared.milestone().clone();
-                                self.state
-                                    .publish(&self.bucket, prepared)
-                                    .await
-                                    .map(|_| milestone)
-                            }
-                            Err(error) => Err(error),
-                        };
-                        match result {
-                            Ok(milestone) => {
-                                tracing::info!(%milestone,requests=replies.len(),"put of success");
-                                for (reply, viewpoint, _admission) in replies {
-                                    let _ = reply.send(Ok(Position { viewpoint }));
-                                }
-                            }
-                            Err(error) => {
-                                for (reply, _, _admission) in replies {
-                                    let _ = reply.send(Err(stopped()));
-                                }
-                                return Err(error);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        .await;
-        if result.is_err() {
-            queue.close();
-            if let Some(message) = pending.take() {
-                message.reject();
-            }
-            while let Ok(message) = queue.try_recv() {
-                message.reject();
-            }
-        }
-        result
-    }
-}
 
 #[derive(Deserialize)]
 struct FlowQuery {
@@ -416,7 +297,7 @@ async fn main() -> Result<()> {
         (1..=256).contains(&batch_max) && batch_wait <= 1000,
         "invalid batch limits"
     );
-    let capacity = batch_max.max(32);
+    let capacity = (batch_max * PIPELINE_BATCHES).max(32);
     let (queue, receiver) = mpsc::channel(capacity);
     let worker = Worker {
         bucket,
