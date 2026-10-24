@@ -59,6 +59,10 @@ pub struct Delta {
 struct CapturedStorage {
     inner: Arc<dyn DurableStorage>,
     frames: Mutex<Vec<Blob>>,
+    #[cfg(test)]
+    capture_versions: std::sync::atomic::AtomicBool,
+    #[cfg(test)]
+    versions: Mutex<Vec<turso_core::mvcc::database::RowVersion>>,
 }
 impl turso_core::mvcc::persistent_storage::DurableStorage for CapturedStorage {
     fn serialize_row_version(
@@ -68,7 +72,12 @@ impl turso_core::mvcc::persistent_storage::DurableStorage for CapturedStorage {
         portable_extension: Option<&[u8]>,
     ) -> turso_core::Result<()> {
         self.inner
-            .serialize_row_version(log_record, row_version, portable_extension)
+            .serialize_row_version(log_record, row_version, portable_extension)?;
+        #[cfg(test)]
+        if self.capture_versions.load(Ordering::Relaxed) && row_version.row.id.row_id.is_int_key() {
+            self.versions.lock().unwrap().push(row_version.clone());
+        }
+        Ok(())
     }
 
     fn serialize_database_header(
@@ -316,10 +325,11 @@ impl State {
         milestone: &str,
         values: impl IntoIterator<Item = (&'a str, &'a str)>,
     ) -> Result<()> {
-        native.conn.set_portable_logical_changes_enabled(true);
-        native.conn.execute("BEGIN CONCURRENT")?;
+        let conn = &native.conn;
+        conn.set_portable_logical_changes_enabled(true);
+        conn.execute("BEGIN CONCURRENT")?;
         for (flow, viewpoint) in values {
-            let mut stmt = native.conn.prepare("INSERT INTO flows (flow, viewpoint) VALUES (?1, ?2) ON CONFLICT (flow) DO UPDATE SET viewpoint = excluded.viewpoint")?;
+            let mut stmt = conn.prepare("INSERT INTO flows (flow, viewpoint) VALUES (?1, ?2) ON CONFLICT (flow) DO UPDATE SET viewpoint = excluded.viewpoint")?;
             stmt.bind_at(
                 NonZeroUsize::new(1).unwrap(),
                 Value::build_text(flow.to_owned()),
@@ -330,16 +340,14 @@ impl State {
             )?;
             stmt.run_ignore_rows()?;
         }
-        let mut stmt = native
-            .conn
-            .prepare("UPDATE basin SET milestone = ?1 WHERE id = 1")?;
+        let mut stmt = conn.prepare("UPDATE basin SET milestone = ?1 WHERE id = 1")?;
         stmt.bind_at(
             NonZeroUsize::new(1).unwrap(),
             Value::build_text(milestone.to_owned()),
         )?;
         stmt.run_ignore_rows()?;
         drop(stmt);
-        native.conn.execute("COMMIT")?;
+        conn.execute("COMMIT")?;
         Ok(())
     }
 
@@ -539,6 +547,10 @@ impl Native {
         let storage = Arc::new(CapturedStorage {
             inner: Arc::new(Storage::new(log_file, io.clone(), None)),
             frames: Mutex::default(),
+            #[cfg(test)]
+            capture_versions: std::sync::atomic::AtomicBool::new(false),
+            #[cfg(test)]
+            versions: Mutex::default(),
         });
         storage.set_checkpoint_threshold(-1);
         let db = Database::open(

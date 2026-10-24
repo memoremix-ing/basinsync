@@ -1,6 +1,7 @@
 [0002-basin-timeline-race]: <0002-basin-timeline-race.md>
 [0003-commit-baseline]: <../benchmarks/0003-commit-baseline.md>
 [0003-wal-experiments]: <../benchmarks/0003-wal-experiments.md>
+[0003-zset-experiments]: <../benchmarks/0003-zset-experiments.md>
 [basin]: <../glossary/basin.md>
 [commit-marker]: <../glossary/commit-marker.md>
 [conditional-write]: <../glossary/conditional-write.md>
@@ -90,5 +91,6 @@ in tests: randomized histories, large counters, page growth, rollback, ordered
 batches, races, delayed writes, lost replies, and restart recovery. Run the
 *development checks*[^][development]. The earlier
 *baseline*[^][0003-commit-baseline] and *experiments*[^][0003-wal-experiments]
-record the procedure choices. Database files remain in memory; snapshots and
+record the procedure choices. *Weighted-row experiments*[^][0003-zset-experiments]
+explore an additional reactive-query feed. Database files remain in memory; snapshots and
 copying into *Flow*[^][flow] *Epilogues*[^][epilogue] are deferred.

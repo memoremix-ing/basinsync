@@ -5,6 +5,10 @@ use turso_core::{
     io::{FileId, FileSyncType},
 };
 
+#[cfg(test)]
+#[path = "zsets.rs"]
+mod zsets;
+
 #[derive(Default)]
 struct Recorder {
     current: Vec<u8>,
@@ -320,7 +324,10 @@ impl Writer {
         let frames = std::mem::take(&mut *native.storage.frames.lock().unwrap());
         ensure!(
             frames.len() == 1 && bytes.len() > LOG_HDR_SIZE && frames[0].0 == bytes[LOG_HDR_SIZE..],
-            "captured logical transaction mismatch"
+            "captured logical transaction mismatch: {} frames, {} payload bytes, {} log bytes",
+            frames.len(),
+            frames.iter().map(|f| f.0.len()).sum::<usize>(),
+            bytes.len()
         );
         let bootstrap = self.bootstrap.take();
         let base_sha384 = bootstrap.as_deref().map(hash);
