@@ -182,7 +182,7 @@ impl App {
         timeline::refresh(&self.bucket, &mut state)
             .await
             .map_err(Failure::internal)?;
-        let expected = state.expected(&request.flow);
+        let expected = state.expected(&request.flow).map_err(Failure::internal)?;
         if request.viewpoint != expected {
             let next = Position {
                 viewpoint: expected,
@@ -191,8 +191,13 @@ impl App {
         }
         let milestone = &state.milestone + 1u8;
         let key = diffuse16::key(&milestone).map_err(Failure::bad)?;
-        let bytes =
-            event::encode(request.flow.clone(), request.marker).map_err(Failure::internal)?;
+        let (candidate, command) = state
+            .prepare(std::collections::BTreeMap::from([(
+                request.flow.clone(),
+                request.marker,
+            )]))
+            .map_err(Failure::internal)?;
+        let bytes = event::encode(command).map_err(Failure::internal)?;
         let result = self
             .bucket
             .put_object_with_headers(
@@ -207,9 +212,7 @@ impl App {
         match result {
             Ok(response) if (200..300).contains(&response.status_code()) => {
                 state.milestone = milestone.clone();
-                state
-                    .flows
-                    .insert(request.flow.clone(), request.viewpoint.clone());
+                state.database = Some(candidate);
                 tracing::info!(flow = %request.flow, milestone = %milestone, viewpoint = %request.viewpoint.decimal(), "put of success");
                 Ok((
                     StatusCode::CREATED,
@@ -257,9 +260,10 @@ async fn epilogue_status(
     timeline::refresh(&app.bucket, &mut state)
         .await
         .map_err(Failure::internal)?;
-    let latest = state.flows.get(&query.flow).map(|viewpoint| Position {
-        viewpoint: viewpoint.clone(),
-    });
+    let latest = state
+        .latest(&query.flow)
+        .map_err(Failure::internal)?
+        .map(|viewpoint| Position { viewpoint });
     Ok(Json(EpilogueStatus {
         latest,
         recent: None,

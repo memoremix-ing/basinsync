@@ -7,31 +7,99 @@ use std::{collections::BTreeMap, future::Future};
 #[derive(Default)]
 pub struct Basin {
     pub milestone: BigUint,
-    pub flows: BTreeMap<String, Viewpoint>,
+    pub database: Option<crate::turso::State>,
     pub stopped: bool,
 }
 
 impl Basin {
-    pub fn expected(&self, flow: &str) -> Viewpoint {
-        self.flows
-            .get(flow)
-            .map_or_else(Viewpoint::zero, Viewpoint::next)
+    pub fn latest(&self, flow: &str) -> Result<Option<Viewpoint>> {
+        self.database
+            .as_ref()
+            .map_or(Ok(None), |db| db.latest(flow))
+    }
+
+    pub fn expected(&self, flow: &str) -> Result<Viewpoint> {
+        Ok(self
+            .latest(flow)?
+            .map_or_else(Viewpoint::zero, |v| v.next()))
+    }
+
+    fn validate(&self, markers: &BTreeMap<String, event::Marker>) -> Result<()> {
+        ensure!(!markers.is_empty(), "empty marker batch");
+        for (flow, marker) in markers {
+            event::valid_flow(flow)?;
+            ensure!(
+                marker.validate()? == self.expected(flow)?,
+                "Flow {flow:?} Viewpoint gap"
+            );
+        }
+        Ok(())
+    }
+
+    pub fn prepare(
+        &self,
+        markers: BTreeMap<String, event::Marker>,
+    ) -> Result<(crate::turso::State, event::CommitFlow)> {
+        self.validate(&markers)?;
+        let genesis;
+        let base = if let Some(database) = &self.database {
+            database
+        } else {
+            genesis = crate::turso::State::genesis()?;
+            &genesis
+        };
+        let milestone = (&self.milestone + 1u8).to_string();
+        let (candidate, delta) = base.stage(&milestone, &markers, self.database.is_none())?;
+        let command = event::CommitFlow {
+            markers,
+            deltas: event::Deltas {
+                turso: BTreeMap::from([(crate::turso::ID.into(), delta)]),
+            },
+        };
+        Ok((candidate, command))
     }
 
     pub fn apply(&mut self, milestone: BigUint, command: event::CommitFlow) -> Result<()> {
         ensure!(milestone == &self.milestone + 1u8, "Timeline Milestone gap");
-        let mut updates = Vec::new();
-        for (flow, marker) in command.markers {
-            let viewpoint = marker.validate()?;
-            ensure!(
-                viewpoint == self.expected(&flow),
-                "Flow {flow:?} Viewpoint gap"
-            );
-            updates.push((flow, viewpoint));
+        self.validate(&command.markers)?;
+        ensure!(
+            command.deltas.turso.len() == 1,
+            "expected one Turso database"
+        );
+        let delta = command
+            .deltas
+            .turso
+            .get(crate::turso::ID)
+            .context("missing default.turso delta")?;
+        let base = match (&self.database, &delta.logical.base) {
+            (None, Some(base)) => {
+                let genesis = crate::turso::State::from_image(base.0.clone())?;
+                ensure!(
+                    genesis.milestone()? == "0" && genesis.flows()?.is_empty(),
+                    "invalid initial database state"
+                );
+                &base.0
+            }
+            (Some(database), None) => &database.image,
+            _ => anyhow::bail!("unexpected genesis image"),
+        };
+        delta.logical.validated_bytes()?;
+        let image = delta.physical.ingest(base)?;
+        let candidate = crate::turso::State::from_image(image)?;
+        let mut flows = self
+            .database
+            .as_ref()
+            .map(|db| db.flows())
+            .transpose()?
+            .unwrap_or_default();
+        for (flow, marker) in &command.markers {
+            flows.insert(flow.clone(), marker.validate()?);
         }
-        for (flow, viewpoint) in updates {
-            self.flows.insert(flow, viewpoint);
-        }
+        ensure!(
+            candidate.flows()? == flows && candidate.milestone()? == milestone.to_string(),
+            "frame state disagrees with command"
+        );
+        self.database = Some(candidate);
         self.milestone = milestone;
         Ok(())
     }
@@ -125,26 +193,33 @@ mod tests {
     }
 
     #[test]
-    fn replay_applies_commands_atomically_and_preserves_big_counters() {
+    fn replay_applies_frames_atomically_and_preserves_big_counters() -> Result<()> {
         let mut state = Basin::default();
-        let bad = event::CommitFlow {
-            markers: BTreeMap::from([("a".into(), marker("0")), ("b".into(), marker("1"))]),
-        };
+        assert!(
+            state
+                .prepare(BTreeMap::from([
+                    ("a".into(), marker("0")),
+                    ("b".into(), marker("1"))
+                ]))
+                .is_err()
+        );
+        assert!(state.database.is_none());
+        let (_, command) = state.prepare(BTreeMap::from([("a".into(), marker("0"))]))?;
+        let mut bad = command.clone();
+        bad.deltas
+            .turso
+            .get_mut(crate::turso::ID)
+            .unwrap()
+            .physical
+            .pages[0]
+            .data
+            .0[0] ^= 1;
         assert!(state.apply(1u8.into(), bad).is_err());
-        assert!(state.flows.is_empty());
-        assert_eq!(state.milestone, 0u8.into());
-        let huge = (BigUint::from(1u8) << 128usize) + 1u8;
-        state.milestone = huge.clone();
-        state
-            .flows
-            .insert("a".into(), Viewpoint::parse(&huge.to_string()).unwrap());
-        let next = (&huge + 1u8).to_string();
-        let command = event::CommitFlow {
-            markers: BTreeMap::from([("a".into(), marker(&next))]),
-        };
-        state.apply(&huge + 1u8, command).unwrap();
-        assert_eq!(state.flows["a"].decimal(), next);
-        assert_eq!(state.milestone, &huge + 1u8);
+        assert!(state.database.is_none());
+        state.apply(1u8.into(), command)?;
+        assert_eq!(state.latest("a")?.unwrap().decimal(), "0");
+        assert_eq!(state.milestone, 1u8.into());
+        Ok(())
     }
 
     #[tokio::test]

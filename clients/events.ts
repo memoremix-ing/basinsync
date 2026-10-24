@@ -5,13 +5,19 @@ export type Marker = { viewpoint: string; sha384: string; blob: Uint8Array };
 const namespace = "sync.memoremix.com";
 const command = "sts/0/databasin/commitflow";
 
-export function encodeEvent(markers: Record<string, Marker>): Uint8Array {
+export type TursoDelta = {
+  logical: { base: Uint8Array | null; header: Uint8Array; frames: Uint8Array[] };
+  physical: { before: string; after: string; size: number; pages: {number: number; data: Uint8Array}[] };
+};
+export type Deltas = { turso: Record<string, TursoDelta> };
+
+export function encodeEvent(markers: Record<string, Marker>, deltas?: Deltas): Uint8Array {
   const owned: Record<string, Marker> = Object.create(null);
   for (const [flow, marker] of Object.entries(markers)) {
     // The JS builder uses the whole ArrayBuffer of a view; give it an exact copy.
     owned[flow] = { ...marker, blob: new Uint8Array(marker.blob) };
   }
-  return encode([[Symbol.species, namespace, command, { markers: owned }]]);
+  return encode([[Symbol.species, namespace, command, { markers: owned, ...(deltas ? { deltas } : {}) }]]);
 }
 
 function get(map: Reference, key: string): Reference {
@@ -33,4 +39,8 @@ export function markerAt(bytes: Uint8Array, flow: string): Marker {
   const blob = get(marker, "blob").blobValue();
   assert(viewpoint !== null && sha384 !== null && blob !== null);
   return { viewpoint, sha384, blob: new Uint8Array(blob) };
+}
+
+export function deltasAt(bytes: Uint8Array): Deltas {
+  return toReference(new Uint8Array(bytes).buffer).get(0).get(3).get("deltas").toObject() as Deltas;
 }

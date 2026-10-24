@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 pub const NAMESPACE: &str = "sync.memoremix.com";
 pub const COMMIT_FLOW: &str = "sts/0/databasin/commitflow";
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Marker {
     pub viewpoint: String,
@@ -30,10 +30,17 @@ impl Marker {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CommitFlow {
+    pub deltas: Deltas,
     pub markers: BTreeMap<String, Marker>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Deltas {
+    pub turso: BTreeMap<String, crate::turso::Delta>,
 }
 
 pub type Batch = Vec<(Vec<u8>, String, String, CommitFlow)>;
@@ -46,16 +53,12 @@ pub fn valid_flow(flow: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn encode(flow: String, marker: Marker) -> Result<Vec<u8>> {
-    valid_flow(&flow)?;
-    marker.validate()?;
+pub fn encode(command: CommitFlow) -> Result<Vec<u8>> {
     let batch: Batch = vec![(
         Extension::WellKnownSymbol("species".into()).payload()?,
         NAMESPACE.into(),
         COMMIT_FLOW.into(),
-        CommitFlow {
-            markers: BTreeMap::from([(flow, marker)]),
-        },
+        command,
     )];
     flexbuffers::to_vec(batch).context("encode DifferentialEvent")
 }
@@ -80,6 +83,10 @@ pub fn decode(bytes: &[u8]) -> Result<CommitFlow> {
         "unknown Basin command"
     );
     let payload = CommitFlow::deserialize(tuple.index(3)?)?;
+    ensure!(
+        payload.deltas.turso.len() == 1 && payload.deltas.turso.contains_key(crate::turso::ID),
+        "expected default.turso delta"
+    );
     ensure!(!payload.markers.is_empty(), "empty marker batch");
     for (flow, marker) in &payload.markers {
         valid_flow(flow)?;
@@ -99,7 +106,11 @@ mod tests {
             sha384: format!("{:x}", Sha384::digest(&blob)),
             blob: blob.clone(),
         };
-        let encoded = encode("雪/flow".into(), marker).unwrap();
+        let state = crate::timeline::Basin::default();
+        let (_, command) = state
+            .prepare(BTreeMap::from([("雪/flow".into(), marker)]))
+            .unwrap();
+        let encoded = encode(command).unwrap();
         let payload = decode(&encoded).unwrap();
         assert_eq!(payload.markers["雪/flow"].blob, blob);
         assert!(decode(&flexbuffers::to_vec(Vec::<u8>::new()).unwrap()).is_err());
@@ -108,6 +119,9 @@ mod tests {
             NAMESPACE,
             "other",
             CommitFlow {
+                deltas: Deltas {
+                    turso: BTreeMap::new(),
+                },
                 markers: BTreeMap::new(),
             },
         )];

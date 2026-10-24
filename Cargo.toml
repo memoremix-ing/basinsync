@@ -6,6 +6,7 @@ rust-version = "1.92"
 
 [dependencies]
 anyhow = "1"
+turso_core = { path = "../../../jcmoore/turso.git/sts-0/core", default-features = false, features = ["fs", "conn_raw_api"] }
 base64 = "0.22"
 flexbuffers = "25.12.19"
 serde_bytes = "0.11"

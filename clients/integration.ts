@@ -5,11 +5,11 @@ import { resolve } from "node:path";
 import { spawn } from "bun";
 import { CreateBucketCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client, paginateListObjectsV2 } from "@aws-sdk/client-s3";
 import { encode as flexEncode } from "flatbuffers/js/flexbuffers.js";
-import { encode as extensionEncode } from "./flexbuffer";
+import { toObject, encode as extensionEncode } from "./flexbuffer";
 import { commit, form, epilogueStatus, sha384, sha384Bytes, type ApiError, type Position, type ViewpointMismatch } from "./client";
 import { parse, stringify } from "./json0";
 import { key, fromKey } from "./diffuse16";
-import { encodeEvent, markerAt, type Marker } from "./events";
+import { encodeEvent, markerAt, deltasAt, type Marker } from "./events";
 import { stress } from "./stress";
 
 const root = resolve(import.meta.dir, "..");
@@ -43,7 +43,7 @@ async function stop(p: ReturnType<typeof spawn>) {
   try { await timeout(p.exited,6000); } catch { p.kill("SIGKILL"); await p.exited; }
 }
 async function ready(p: ReturnType<typeof spawn>, probe: () => Promise<unknown>) {
-  const until = Date.now()+15000;
+  const until = Date.now()+60000;
   while(Date.now()<until) {
     assert.equal(p.exitCode,null,`process exited; logs: ${artifacts}`);
     try { await probe(); return; } catch { await Bun.sleep(20); }
@@ -214,6 +214,13 @@ try {
   await Promise.all(Array.from({length:16},async()=>{
     while(read<=total){
       const m=read++;const payload=await get(b,BigInt(m));
+      const delta = deltasAt(payload).turso["default.turso"];
+      assert(delta.logical.header instanceof Uint8Array && delta.logical.header.length === 56);
+      assert.equal(delta.logical.frames.length, 1);
+      assert(delta.logical.frames[0] instanceof Uint8Array);
+      assert.equal(delta.logical.base === null, m !== 1);
+      assert(delta.physical.pages.length > 0);
+      for (const page of delta.physical.pages) assert(page.data instanceof Uint8Array && page.data.length === 16384);
       const matches:{flow:string;marker:Marker}[]=[];
       for(const flow of receipts.keys()) {try{matches.push({flow,marker:markerAt(payload,flow)})}catch{}}
       assert.equal(matches.length,1,`one marker in event ${m}`);
@@ -266,10 +273,16 @@ try {
   }
   console.log("put of success: real conditional Timeline races choose one winner; losers respond and exit");
 
-  // A JavaScript-produced multi-Flow command must replay in Rust, including a
-  // Flow above 64-bit Viewpoint precision that is rejected as a gap.
+  // Capture real Turso frames, then re-encode their event independently in JS.
   const fixture=await bucket();
-  await seed(fixture,1n,encodeEvent({[flowA]:marker(a),[flowB]:marker(new Uint8Array())}));
+  const markers = {[flowA]:marker(a),[flowB]:marker(new Uint8Array())};
+  const captured = spawn([`${root}/target/debug/examples/frame-fixture`], {cwd:root, stdin:"pipe", stdout:"pipe", stderr:"inherit"});
+  captured.stdin.write(JSON.stringify(markers, (_key, value) => value instanceof Uint8Array ? Array.from(value) : value));
+  captured.stdin.end();
+  const capturedBytes = new Uint8Array(await new Response(captured.stdout).arrayBuffer());
+  assert.equal(await captured.exited, 0);
+  const validEvent = encodeEvent(markers, deltasAt(capturedBytes));
+  await seed(fixture,1n,validEvent);
   const restored=await server(fixture);
   assert.deepEqual(await epilogueStatus(restored.url,flowA),{latest:{viewpoint:0n},recent:null});
   assert.deepEqual(await epilogueStatus(restored.url,flowB),{latest:{viewpoint:0n},recent:null});
@@ -277,10 +290,22 @@ try {
   await status(await commit(restored.url,flowA,a,1n),201);
   await stop(restored.process);
   const invalid: (()=>Promise<string>)[] = [
+    ...["physical-byte", "base-hash", "missing-page", "missing-delta", "wrong-state", "logical-byte"].map(fault=>async()=>{
+      const event = toObject(validEvent) as any;
+      const body = event[0][3];
+      const delta = body.deltas.turso["default.turso"];
+      if (fault === "physical-byte") delta.physical.pages[0].data[0] ^= 1;
+      if (fault === "base-hash") delta.physical.before = "00".repeat(48);
+      if (fault === "missing-page") delta.physical.pages.pop();
+      if (fault === "missing-delta") delete body.deltas;
+      if (fault === "wrong-state") body.markers[flowA].viewpoint = "1";
+      if (fault === "logical-byte") delta.logical.frames[0][0] ^= 1;
+      const b = await bucket(); await seed(b, 1n, extensionEncode(event)); return b;
+    }),
     async()=>{const b=await bucket();await s3.send(new PutObjectCommand({Bucket:b,Key:"timeline/0",Body:a}));return b},
-    async()=>{const b=await bucket();await seed(b,2n,encodeEvent({f:marker(a)}));return b},
-    async()=>{const b=await bucket();await seed(b,1n,encodeEvent({f:{...marker(a),sha384:"00".repeat(48)}}));return b},
-    async()=>{const b=await bucket();await seed(b,1n,encodeEvent({f:marker(a,"18446744073709551616")}));return b},
+    async()=>{const b=await bucket();await seed(b,2n,encodeEvent({f:marker(a)}, deltasAt(capturedBytes)));return b},
+    async()=>{const b=await bucket();await seed(b,1n,encodeEvent({f:{...marker(a),sha384:"00".repeat(48)}}, deltasAt(capturedBytes)));return b},
+    async()=>{const b=await bucket();await seed(b,1n,encodeEvent({f:marker(a,"18446744073709551616")}, deltasAt(capturedBytes)));return b},
     async()=>{const b=await bucket();await seed(b,1n,flexEncode([["wrong","command",{}]]));return b},
     ...["#species", Symbol.for("species"), Symbol.iterator, new TextEncoder().encode("#species"),
       Array.from(new TextEncoder().encode("#species")),
