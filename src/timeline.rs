@@ -122,6 +122,7 @@ pub struct Prepared {
     milestone: BigUint,
     parent: Option<String>,
     digest: String,
+    view: Option<std::sync::Arc<crate::turso::cow::View>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -133,6 +134,15 @@ impl Prefix {
     pub fn milestone(&self) -> &BigUint {
         &self.milestone
     }
+    pub fn digest(&self) -> Option<&str> {
+        self.digest.as_deref()
+    }
+}
+
+#[derive(Clone)]
+pub struct Snapshot {
+    pub(crate) prefix: Prefix,
+    pub(crate) view: std::sync::Arc<crate::turso::cow::View>,
 }
 
 pub struct Stager {
@@ -161,6 +171,15 @@ impl Stager {
 }
 
 impl Prepared {
+    pub fn snapshot(&self) -> Option<Snapshot> {
+        self.view.as_ref().map(|view| Snapshot {
+            prefix: Prefix {
+                milestone: self.milestone.clone(),
+                digest: Some(self.digest.clone()),
+            },
+            view: view.clone(),
+        })
+    }
     pub fn bytes(&self) -> &[u8] {
         &self.bytes
     }
@@ -168,6 +187,7 @@ impl Prepared {
         &self.milestone
     }
     pub async fn publish(self, bucket: &Bucket, prefix: &Prefix) -> Result<Prefix> {
+        check_write_base(bucket, prefix).await?;
         ensure!(
             self.milestone == &prefix.milestone + 1u8 && self.parent == prefix.digest,
             "publication prefix mismatch"
@@ -200,6 +220,39 @@ impl Basin {
             digest: self.head.clone(),
         }
     }
+    pub fn enable_vfs(&mut self) -> Result<()> {
+        if self.writer.is_none() {
+            let genesis;
+            let image = if let Some(state) = &self.database {
+                &state.image
+            } else {
+                genesis = crate::turso::State::genesis()?;
+                &genesis.image
+            };
+            self.writer = Some(crate::turso::wal::Writer::open_disk(image)?);
+            self.database = None;
+        }
+        Ok(())
+    }
+    pub fn snapshot(&mut self) -> Result<Option<Snapshot>> {
+        if self.milestone == 0u8.into() {
+            return Ok(None);
+        }
+        self.enable_vfs()?;
+        ensure!(
+            self.writer.as_ref().unwrap().cursor() == &self.milestone,
+            "cannot snapshot unpublished database state"
+        );
+        Ok(self
+            .writer
+            .as_ref()
+            .unwrap()
+            .snapshot()?
+            .map(|view| Snapshot {
+                prefix: self.prefix(),
+                view,
+            }))
+    }
     pub fn into_stager(self) -> Stager {
         Stager { state: self }
     }
@@ -209,8 +262,11 @@ impl Basin {
                 writer.cursor() == &self.milestone,
                 "unpublished database state"
             );
-            let state = crate::turso::State::from_image(writer.image()?)?;
-            self.database = Some(state);
+            self.database = if self.milestone == 0u8.into() {
+                None
+            } else {
+                Some(crate::turso::State::from_image(writer.image()?)?)
+            };
             self.writer = None;
         }
         Ok(())
@@ -222,18 +278,7 @@ impl Basin {
             self.milestone == 0u8.into() || self.head.is_some(),
             "missing predecessor event digest"
         );
-        if self.writer.is_none() {
-            let genesis;
-            let image = if let Some(state) = &self.database {
-                &state.image
-            } else {
-                genesis = crate::turso::State::genesis()?;
-                &genesis.image
-            };
-            let writer = crate::turso::wal::Writer::open(image)?;
-            self.writer = Some(writer);
-            self.database = None;
-        }
+        self.enable_vfs()?;
         let delta = self.writer.as_mut().unwrap().prepare(
             &self.milestone,
             self.head.as_deref(),
@@ -246,6 +291,7 @@ impl Basin {
             milestone,
             parent: self.head.clone(),
             digest,
+            view: self.writer.as_ref().unwrap().snapshot()?,
         })
     }
     pub async fn publish(&mut self, bucket: &Bucket, prepared: Prepared) -> Result<()> {
@@ -367,25 +413,61 @@ async fn replay(bucket: &Bucket, state: &mut Basin, tail: BigUint) -> Result<()>
     Ok(())
 }
 
-pub async fn recover(bucket: &Bucket) -> Result<Basin> {
-    let (page, status) = bucket
-        .list_page(diffuse16::PREFIX.into(), None, None, None, Some(1))
-        .await?;
-    ensure!(status == 200, "Timeline LIST returned HTTP {status}");
-    let mut state = Basin::default();
-    if let Some(object) = page.contents.first() {
-        let seed = diffuse16::from_key(&object.key)?;
-        ensure!(exists(bucket, &seed).await?, "listed seed is missing");
-        let tail = last_existing(seed, |m| async move { exists(bucket, &m).await }).await?;
-        replay(bucket, &mut state, tail).await?;
+/// Before a conditional publication, read the latest recovery anchor and ensure
+/// the locally ingested prefix covers it and has no unseen successor.
+pub async fn check_write_base(bucket: &Bucket, prefix: &Prefix) -> Result<()> {
+    if let Some(checkpoint) = crate::epilogue::latest_checkpoint(bucket).await? {
+        ensure!(
+            checkpoint.milestone <= prefix.milestone,
+            "Basin backup advanced beyond writer"
+        );
+        if checkpoint.milestone == prefix.milestone {
+            ensure!(
+                Some(checkpoint.digest.as_str()) == prefix.digest(),
+                "backup prefix mismatch"
+            );
+        }
     }
+    ensure!(
+        !exists(bucket, &(&prefix.milestone + 1u8)).await?,
+        "Timeline advanced beyond writer"
+    );
+    Ok(())
+}
+
+pub async fn recover(bucket: &Bucket) -> Result<Basin> {
+    let mut state = Basin::default();
+    refresh(bucket, &mut state).await?;
     Ok(state)
 }
 
 pub async fn refresh(bucket: &Bucket, state: &mut Basin) -> Result<()> {
-    let first = &state.milestone + 1u8;
-    if exists(bucket, &first).await? {
-        let tail = last_existing(first, |m| async move { exists(bucket, &m).await }).await?;
+    if let Some(checkpoint) = crate::epilogue::latest_checkpoint(bucket).await? {
+        if checkpoint.milestone > state.milestone {
+            *state = checkpoint.load(bucket).await?;
+        } else if checkpoint.milestone == state.milestone {
+            ensure!(
+                Some(checkpoint.digest.as_str()) == state.head.as_deref(),
+                "backup prefix mismatch"
+            );
+        }
+    }
+    // A Basin Epilogue supplies the seed directly; no Timeline listing is needed.
+    // Genesis has no anchor yet, so discover a seed with one minimum-sized LIST.
+    let seed = if state.milestone == 0u8.into() {
+        let (page, status) = bucket
+            .list_page(diffuse16::PREFIX.into(), None, None, None, Some(1))
+            .await?;
+        ensure!(status == 200, "Timeline LIST returned HTTP {status}");
+        page.contents
+            .first()
+            .map(|o| diffuse16::from_key(&o.key))
+            .transpose()?
+    } else {
+        Some(state.milestone.clone())
+    };
+    if let Some(seed) = seed {
+        let tail = last_existing(seed, |m| async move { exists(bucket, &m).await }).await?;
         replay(bucket, state, tail).await?;
     }
     Ok(())
@@ -401,6 +483,74 @@ mod tests {
             sha384: format!("{:x}", Sha384::digest([])),
             blob: vec![],
         }
+    }
+
+    #[test]
+    fn snapshots_reject_unpublished_preparation() -> Result<()> {
+        let mut basin = Basin::default();
+        let first = basin.prepare_wal(vec![event::FlowCommand {
+            markers: BTreeMap::from([("flow".into(), marker("0"))]),
+        }])?;
+        basin.milestone = first.milestone.clone();
+        basin.head = Some(first.digest.clone());
+        assert!(basin.snapshot()?.is_some());
+        let _unpublished = basin.prepare_wal(vec![event::FlowCommand {
+            markers: BTreeMap::from([("flow".into(), marker("1"))]),
+        }])?;
+        assert!(basin.snapshot().is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn pinned_backup_prefixes_recover_the_same_physical_state_as_genesis_replay() -> Result<()> {
+        let mut producer = Basin::default().into_stager();
+        let mut full = Basin::default();
+        let mut entries = Vec::new();
+        let mut checkpoints = Vec::new();
+        for n in 0..48u32 {
+            let commands = (0..24)
+                .map(|i| event::FlowCommand {
+                    markers: BTreeMap::from([(
+                        format!("flow-{i}-{}", "雪".repeat(70)),
+                        marker(&n.to_string()),
+                    )]),
+                })
+                .collect();
+            let prepared = producer.prepare(commands)?;
+            full.apply_entry((n + 1).into(), prepared.bytes())?;
+            let snapshot = prepared.snapshot().unwrap();
+            if [0, 4, 16, 32, 47].contains(&n) {
+                checkpoints.push(snapshot.clone());
+            }
+            assert_eq!(
+                snapshot.view.image()?,
+                full.database.as_ref().unwrap().image
+            );
+            entries.push(prepared.bytes().to_vec());
+        }
+        // Pins outlive many more checkpoints, with page growth and repeated updates.
+        for snapshot in checkpoints {
+            let image = snapshot.view.image()?;
+            let (file, digest) = snapshot.view.export()?;
+            assert_eq!(std::fs::read(file.path())?, image);
+            assert_eq!(digest, event::digest(&image));
+            let mut recovered = Basin {
+                milestone: snapshot.prefix.milestone.clone(),
+                head: snapshot.prefix.digest.clone(),
+                database: Some(crate::turso::State::from_image(image)?),
+                ..Default::default()
+            };
+            let start: usize = recovered.milestone.to_string().parse()?;
+            for (i, bytes) in entries.iter().enumerate().skip(start) {
+                recovered.apply_entry((i + 1).into(), bytes)?;
+            }
+            assert_eq!(recovered.prefix(), full.prefix());
+            assert_eq!(
+                recovered.database.as_ref().unwrap().image,
+                full.database.as_ref().unwrap().image
+            );
+        }
+        Ok(())
     }
 
     #[test]

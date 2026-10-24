@@ -1,5 +1,7 @@
 [basin]: <glossary/basin.md>
+[basin-backup]: <basin-backup.md>
 [causal-consistency]: <glossary/causal-consistency.md>
+[commit-marker]: <glossary/commit-marker.md>
 [conditional-write]: <glossary/conditional-write.md>
 [differential-event]: <glossary/differential-event.md>
 [diffuse16]: <glossary/diffuse16.md>
@@ -17,8 +19,12 @@
 
 The *Basin*[^][basin]'s shared *Timeline*[^][timeline] records state changes at
 `timeline/Diffuse16(milestone)`. *Milestones*[^][milestone] start at one and increase
-without gaps. *Diffuse16*[^][diffuse16] key order does not reveal the latest:
-list a seed *Milestone*[^][milestone], then search exponentially upward from it.
+without gaps. Before writing, read the latest *Basin*[^][basin] *recovery anchor*[^][basin-backup]
+and ingest every subsequent *DifferentialEvent*[^][differential-event]. Its
+recorded *Milestone*[^][milestone] seeds exponential search for the tail.
+Without a *CommitMarker*[^][commit-marker], list a seed in the
+*Timeline*[^][timeline] keyspace and replay from the beginning.
+*Diffuse16*[^][diffuse16] key order does not reveal the latest.
 An empty *Timeline*[^][timeline] expects *Milestone*[^][milestone] one.
 
 Commitflow tuples begin with `Symbol.species`, using the

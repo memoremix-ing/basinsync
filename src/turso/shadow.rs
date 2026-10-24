@@ -74,6 +74,7 @@ fn disk_writer_using(path: &str, image: &[u8], base: Arc<dyn IO>) -> Result<Writ
         recorder,
         cursor,
         bootstrap,
+        store: None,
     })
 }
 

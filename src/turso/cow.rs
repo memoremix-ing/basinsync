@@ -1,29 +1,36 @@
 use super::*;
+#[cfg(unix)]
+use std::os::unix::fs::FileExt;
+use std::{fs, io::Write};
+use turso_core::io::PlatformIO;
 use turso_core::{
     Clock, MonotonicInstant, WallClockInstant,
     io::{FileId, FileSyncType},
 };
 
-pub(in crate::turso::wal::zsets::shadow) struct Store {
+pub(crate) struct Store {
     path: String,
     state: Mutex<History>,
+    _directory: Option<tempfile::TempDir>,
+}
+struct Pin {
+    count: usize,
+    size: u64,
 }
 struct History {
     base: fs::File,
     history: fs::File,
     generation: u64,
     versions: BTreeMap<(u64, u64), u64>,
-    pins: BTreeMap<u64, usize>,
+    pins: BTreeMap<u64, Pin>,
     free: Vec<u64>,
     highwater: u64,
 }
 impl Store {
-    pub(in crate::turso::wal::zsets::shadow) fn open(
-        path: &str,
-        history: &str,
-    ) -> Result<Arc<Self>> {
+    pub(crate) fn open(path: &str, history: &str) -> Result<Arc<Self>> {
         Ok(Arc::new(Self {
             path: path.into(),
+            _directory: None,
             state: Mutex::new(History {
                 base: fs::OpenOptions::new().read(true).write(true).open(path)?,
                 history: fs::OpenOptions::new()
@@ -40,25 +47,52 @@ impl Store {
             }),
         }))
     }
-    pub(in crate::turso::wal::zsets::shadow) fn pin(self: &Arc<Self>) -> Result<Arc<View>> {
+    pub(crate) fn temporary(image: &[u8]) -> Result<Arc<Self>> {
+        let root = std::env::var_os("BASINSYNC_DATA_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from(".local/state"));
+        fs::create_dir_all(&root)?;
+        let directory = tempfile::Builder::new()
+            .prefix("basinsync-")
+            .tempdir_in(root)?;
+        let path = directory.path().join("default.turso");
+        fs::write(&path, image)?;
+        let mut store = Self::open(
+            path.to_str()
+                .ok_or_else(|| anyhow::anyhow!("non-UTF8 database path"))?,
+            directory.path().join("history.pages").to_str().unwrap(),
+        )?;
+        Arc::get_mut(&mut store).unwrap()._directory = Some(directory);
+        Ok(store)
+    }
+    pub(crate) fn path(&self) -> &str {
+        &self.path
+    }
+    pub(crate) fn pin(self: &Arc<Self>) -> Result<Arc<View>> {
         let mut s = self.state.lock().unwrap();
         let generation = s.generation;
         let size = s.base.metadata()?.len();
-        *s.pins.entry(generation).or_default() += 1;
+        let pin = s.pins.entry(generation).or_insert(Pin { count: 0, size });
+        ensure!(
+            pin.size == size,
+            "pinning a generation before sealing its checkpoint"
+        );
+        pin.count += 1;
         Ok(Arc::new(View {
             store: self.clone(),
             generation,
             size,
         }))
     }
-    pub(in crate::turso::wal::zsets::shadow) fn seal(&self) {
+    pub(crate) fn seal(&self) {
         self.state.lock().unwrap().generation += 1;
     }
-    pub(in crate::turso::wal::zsets::shadow) fn retained(&self) -> (usize, u64) {
+    #[cfg(test)]
+    pub(crate) fn retained(&self) -> (usize, u64) {
         let s = self.state.lock().unwrap();
         (s.versions.len(), s.highwater)
     }
-    pub(in crate::turso::wal::zsets::shadow) fn io(self: &Arc<Self>) -> Arc<dyn IO> {
+    pub(crate) fn io(self: &Arc<Self>) -> Arc<dyn IO> {
         Arc::new(CowIO {
             inner: Arc::new(PlatformIO::new().unwrap()),
             store: self.clone(),
@@ -72,6 +106,19 @@ impl Store {
         for page in start / PAGE_SIZE as u64..(start + len).div_ceil(PAGE_SIZE as u64) {
             let key = (page, s.generation);
             if page * PAGE_SIZE as u64 >= size || s.versions.contains_key(&key) {
+                continue;
+            }
+            let previous = s
+                .versions
+                .range((page, 0)..=(page, s.generation))
+                .next_back()
+                .map(|((_, g), _)| *g);
+            let lower = previous.map_or(std::ops::Bound::Unbounded, std::ops::Bound::Excluded);
+            let needs_page = s
+                .pins
+                .range((lower, std::ops::Bound::Included(s.generation)))
+                .any(|(_, pin)| pin.size > page * PAGE_SIZE as u64);
+            if !needs_page {
                 continue;
             }
             let mut bytes = vec![0; PAGE_SIZE];
@@ -90,7 +137,7 @@ impl Store {
         Ok(())
     }
 }
-pub(in crate::turso::wal::zsets::shadow) struct View {
+pub struct View {
     store: Arc<Store>,
     generation: u64,
     size: u64,
@@ -99,16 +146,27 @@ impl Drop for View {
     fn drop(&mut self) {
         let mut s = self.store.state.lock().unwrap();
         let pins = s.pins.get_mut(&self.generation).unwrap();
-        *pins -= 1;
-        if *pins == 0 {
+        pins.count -= 1;
+        if pins.count == 0 {
             s.pins.remove(&self.generation);
         }
-        let oldest = s.pins.first_key_value().map(|(&g, _)| g);
+        // Keep only versions selected by a live pin. An old, slow upload must
+        // not retain every intervening generation of frequently rewritten pages.
+        let mut previous = None;
         let obsolete: Vec<_> = s
             .versions
             .keys()
-            .filter(|(_, g)| oldest.is_none_or(|oldest| *g < oldest))
-            .copied()
+            .filter_map(|&(page, generation)| {
+                let lower = match previous {
+                    Some((p, g)) if p == page => std::ops::Bound::Excluded(g),
+                    _ => std::ops::Bound::Unbounded,
+                };
+                previous = Some((page, generation));
+                s.pins
+                    .range((lower, std::ops::Bound::Included(generation)))
+                    .all(|(_, pin)| pin.size <= page * PAGE_SIZE as u64)
+                    .then_some((page, generation))
+            })
             .collect();
         for key in obsolete {
             let offset = s.versions.remove(&key).unwrap();
@@ -117,9 +175,35 @@ impl Drop for View {
     }
 }
 impl View {
-    pub(in crate::turso::wal::zsets::shadow) fn connect(
-        self: &Arc<Self>,
-    ) -> Result<Arc<Connection>> {
+    /// Read a stable checkpointed generation; the primary may continue writing.
+    pub fn image(self: &Arc<Self>) -> Result<Vec<u8>> {
+        let mut bytes = Vec::with_capacity(self.size as usize);
+        self.copy_to(&mut bytes)?;
+        Ok(bytes)
+    }
+
+    fn copy_to(self: &Arc<Self>, out: &mut impl Write) -> Result<String> {
+        let mut digest = Sha384::new();
+        let file = ViewFile(self.clone());
+        let mut at = 0;
+        while at < self.size {
+            let count = (self.size - at).min(64 * 1024) as usize;
+            let buffer = Arc::new(Buffer::new_temporary(count));
+            drop(file.pread(at, Completion::new_read(buffer.clone(), |_| None))?);
+            out.write_all(buffer.as_slice())?;
+            digest.update(buffer.as_slice());
+            at += count as u64;
+        }
+        Ok(format!("{:x}", digest.finalize()))
+    }
+    /// Spool one consistent image with bounded read/lock sizes and memory.
+    pub fn export(self: &Arc<Self>) -> Result<(tempfile::NamedTempFile, String)> {
+        let mut file = tempfile::NamedTempFile::new()?;
+        let digest = self.copy_to(&mut file)?;
+        Ok((file, digest))
+    }
+    #[cfg(test)]
+    pub(crate) fn connect(self: &Arc<Self>) -> Result<Arc<Connection>> {
         let path = format!("{}.snapshot-{}", self.store.path, self.generation);
         let io: Arc<dyn IO> = Arc::new(ViewIO {
             view: self.clone(),
@@ -215,11 +299,13 @@ impl File for CowFile {
         Ok(done)
     }
 }
+#[cfg(test)]
 struct ViewIO {
     view: Arc<View>,
     path: String,
     sidecars: Arc<MemoryIO>,
 }
+#[cfg(test)]
 impl Clock for ViewIO {
     fn current_time_monotonic(&self) -> MonotonicInstant {
         self.sidecars.current_time_monotonic()
@@ -228,6 +314,7 @@ impl Clock for ViewIO {
         self.sidecars.current_time_wall_clock()
     }
 }
+#[cfg(test)]
 impl IO for ViewIO {
     fn open_file(
         &self,
@@ -298,92 +385,99 @@ fn error(e: std::io::Error) -> turso_core::LimboError {
     turso_core::LimboError::InternalError(e.to_string())
 }
 
-#[test]
-fn cow_views_survive_primary_checkpoints_without_rebuild() -> Result<()> {
-    let dir = Directory::new()?;
-    let path = dir.path("primary.turso");
-    fs::write(&path, seed(8, false)?)?;
-    let store = Store::open(&path, &dir.path("history.pages"))?;
-    let db = Database::open(store.io(), &path, OpenOptions::new(Arc::new(SqliteDialect)))?;
-    let primary = db.connect(ConnectOpts::new())?;
-    primary.pragma_update("mvcc_checkpoint_threshold", -1)?;
-    primary.execute("CREATE TABLE items(id INTEGER PRIMARY KEY,b BLOB); CREATE INDEX items_b ON items(b); INSERT INTO items VALUES(1,zeroblob(70000)),(2,NULL)")?;
-    primary.checkpoint(CheckpointMode::Truncate {
-        upper_bound_inclusive: None,
-    })?;
-    store.seal();
-    let before = store.pin()?;
-    let reader = before.connect()?;
-    assert_eq!(cursor(&reader)?, "1");
-    primary.execute("UPDATE basin SET milestone='2' WHERE id=1; UPDATE items SET b=x'ff' WHERE id=1; DELETE FROM items WHERE id=2")?;
-    primary.checkpoint(CheckpointMode::Truncate {
-        upper_bound_inclusive: None,
-    })?;
-    store.seal();
-    let after = store.pin()?;
-    let next = after.connect()?;
-    assert_eq!(cursor(&reader)?, "1");
-    assert_eq!(cursor(&next)?, "2");
-    primary.execute(
-        "UPDATE basin SET milestone='3' WHERE id=1; INSERT INTO items VALUES(3,zeroblob(160000))",
-    )?;
-    primary.checkpoint(CheckpointMode::Truncate {
-        upper_bound_inclusive: None,
-    })?;
-    store.seal();
-    assert_eq!(cursor(&reader)?, "1");
-    assert_eq!(cursor(&next)?, "2");
-    assert_eq!(cursor(&store.pin()?.connect()?)?, "3");
-    let lengths = |conn: &Arc<Connection>| -> Result<Vec<(i64, Option<i64>)>> {
-        let mut q = conn.prepare("SELECT id,length(b) FROM items ORDER BY id")?;
-        let mut result = Vec::new();
-        while matches!(q.step()?, StepResult::Row) {
-            let r = q.row().unwrap();
-            let length = if matches!(r.get::<&Value>(1)?, Value::Null) {
-                None
-            } else {
-                Some(r.get::<i64>(1)?)
-            };
-            result.push((r.get(0)?, length));
-        }
-        Ok(result)
-    };
-    assert_eq!(lengths(&reader)?, vec![(1, Some(70000)), (2, None)]);
-    assert_eq!(lengths(&next)?, vec![(1, Some(1))]);
-    assert_eq!(
-        lengths(&store.pin()?.connect()?)?,
-        vec![(1, Some(1)), (3, Some(160000))]
-    );
-    Ok(())
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[test]
-fn cow_preserves_partial_writes_growth_truncation_and_reuses_history() -> Result<()> {
-    let dir = Directory::new()?;
-    let path = dir.path("raw.pages");
-    let original = vec![7; PAGE_SIZE * 3];
-    fs::write(&path, &original)?;
-    let store = Store::open(&path, &dir.path("history"))?;
-    let io = store.io();
-    let file = io.open_file(&path, OpenFlags::default(), false)?;
-    for _ in 0..50 {
-        let old = store.pin()?;
-        let b = Arc::new(Buffer::new_temporary(PAGE_SIZE + 100));
-        b.as_mut_slice().fill(9);
-        io.wait_for_completion(file.pwrite(
-            (PAGE_SIZE - 50) as u64,
-            b,
-            Completion::new_write(|_| {}),
-        )?)?;
+    #[test]
+    fn slow_snapshot_retains_only_pages_selected_by_live_views() -> Result<()> {
+        let original = vec![7; PAGE_SIZE * 8];
+        let store = Store::temporary(&original)?;
+        let io = store.io();
+        let file = io.open_file(store.path(), OpenFlags::default(), false)?;
+        let oldest = store.pin()?;
+        for value in 0..200u16 {
+            let recent = store.pin()?;
+            let bytes = vec![(value % 251) as u8; PAGE_SIZE];
+            write_file(&*io, &*file, &bytes)?;
+            store.seal();
+            drop(recent);
+            assert_eq!(store.retained().0, 1);
+        }
+        assert_eq!(oldest.image()?, original);
+        assert!(store.retained().1 <= (PAGE_SIZE * 2) as u64);
+        drop(oldest);
+        assert_eq!(store.retained().0, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn export_remains_consistent_while_primary_overwrites_and_truncates() -> Result<()> {
+        let original: Vec<u8> = (0..PAGE_SIZE * 32).map(|n| (n % 251) as u8).collect();
+        let store = Store::temporary(&original)?;
+        let view = store.pin()?;
+        let io = store.io();
+        let file = io.open_file(store.path(), OpenFlags::default(), false)?;
+        let (entered, wait) = std::sync::mpsc::sync_channel(0);
+        let (resume, gate) = std::sync::mpsc::sync_channel(0);
+        struct SlowOutput {
+            bytes: Vec<u8>,
+            entered: Option<std::sync::mpsc::SyncSender<()>>,
+            gate: std::sync::mpsc::Receiver<()>,
+        }
+        impl Write for SlowOutput {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                self.bytes.extend_from_slice(bytes);
+                if let Some(entered) = self.entered.take() {
+                    entered.send(()).unwrap();
+                    self.gate.recv().unwrap();
+                }
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let copy = std::thread::spawn(move || -> Result<_> {
+            let mut out = SlowOutput {
+                bytes: vec![],
+                entered: Some(entered),
+                gate,
+            };
+            let digest = view.copy_to(&mut out)?;
+            Ok((out.bytes, digest))
+        });
+        wait.recv()?;
+        write_file(&*io, &*file, &vec![9; original.len() * 2])?;
         io.wait_for_completion(file.truncate(10, Completion::new_write(|_| {}))?)?;
         store.seal();
-        let bytes = read_file(&*io, &ViewFile(old.clone()))?;
+        resume.send(())?;
+        let (bytes, digest) = copy.join().unwrap()?;
         assert_eq!(bytes, original);
-        write_file(&*io, &*file, &original)?;
-        store.seal();
-        drop(old);
+        assert_eq!(digest, hash(&original));
         assert_eq!(store.retained().0, 0);
+        Ok(())
     }
-    assert!(store.retained().1 <= PAGE_SIZE as u64 * 6);
-    Ok(())
+}
+
+// The History mutex serializes these fallback file-position operations.
+#[cfg(not(unix))]
+trait FileExt {
+    fn read_exact_at(&self, bytes: &mut [u8], pos: u64) -> std::io::Result<()>;
+    fn write_all_at(&self, bytes: &[u8], pos: u64) -> std::io::Result<()>;
+}
+#[cfg(not(unix))]
+impl FileExt for fs::File {
+    fn read_exact_at(&self, bytes: &mut [u8], pos: u64) -> std::io::Result<()> {
+        use std::io::{Read, Seek, SeekFrom};
+        let mut file = self;
+        file.seek(SeekFrom::Start(pos))?;
+        file.read_exact(bytes)
+    }
+    fn write_all_at(&self, bytes: &[u8], pos: u64) -> std::io::Result<()> {
+        use std::io::{Seek, SeekFrom};
+        let mut file = self;
+        file.seek(SeekFrom::Start(pos))?;
+        file.write_all(bytes)
+    }
 }

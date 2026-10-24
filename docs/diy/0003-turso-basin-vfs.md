@@ -116,7 +116,7 @@ record the procedure choices. *Weighted-row experiments*[^][0003-zset-experiment
 explore an additional reactive-query feed; *on-disk pipeline measurements*[^][0003-disk-shadow]
 compare a full shadow with a persistent row cache.
 
-The server uses the two-batch pipeline with its database in memory. The on-disk
+At this milestone, the server uses the two-batch pipeline with its database in memory. The on-disk
 *VFS*[^][virtual-file-system] remains a prototype; runtime integration and a
 persistent snapshot catalog are pending. Compare serial and bounded preparation
 with *added S3 latency*[^][0003-s3-latency]. Copying into *Flow*[^][flow]

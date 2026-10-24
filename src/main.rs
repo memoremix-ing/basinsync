@@ -110,6 +110,7 @@ impl Commit {
         } = serde_json::from_slice(&metadata.ok_or_else(|| Failure::bad("missing metadata"))?)
             .map_err(Failure::bad)?;
         event::valid_flow(&flow).map_err(Failure::bad)?;
+        basinsync::epilogue::flow_key(&flow, &viewpoint).map_err(Failure::bad)?;
         let blob = blob.ok_or_else(|| Failure::bad("missing blob"))?;
         let digest = Sha384::digest(&blob);
         if sha384.as_slice() != &digest[..] {
@@ -225,6 +226,7 @@ struct Worker {
     state: timeline::Basin,
     batch_max: usize,
     batch_wait: Duration,
+    backup_interval: Duration,
 }
 
 #[derive(Deserialize)]
@@ -239,6 +241,7 @@ async fn epilogue_status(
     let Query(query) =
         query.map_err(|error| Failure::new(error.status(), "invalid_query", error))?;
     event::valid_flow(&query.flow).map_err(Failure::bad)?;
+    basinsync::epilogue::flow_key(&query.flow, &Viewpoint::zero()).map_err(Failure::bad)?;
     let (reply, result) = oneshot::channel();
     app.queue
         .send(Message::Status {
@@ -304,6 +307,11 @@ async fn main() -> Result<()> {
         state,
         batch_max,
         batch_wait: Duration::from_millis(batch_wait),
+        backup_interval: Duration::from_millis(
+            env::var("BASINSYNC_BACKUP_INTERVAL_MS")
+                .unwrap_or_else(|_| "1000".into())
+                .parse()?,
+        ),
     };
     let job = tokio::spawn(worker.run(receiver));
     tokio::spawn(async move {

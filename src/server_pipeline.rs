@@ -27,13 +27,17 @@ impl Batch {
 enum Publication {
     Batch(Batch),
     Barrier(oneshot::Sender<Result<timeline::Prefix>>),
-    Refresh(timeline::Prefix, oneshot::Sender<Result<timeline::Prefix>>),
+    Refresh(
+        timeline::Prefix,
+        Option<timeline::Snapshot>,
+        oneshot::Sender<Result<timeline::Prefix>>,
+    ),
 }
 impl Publication {
     fn reject(self) {
         match self {
             Self::Batch(batch) => batch.finish(false),
-            Self::Barrier(reply) | Self::Refresh(_, reply) => {
+            Self::Barrier(reply) | Self::Refresh(_, _, reply) => {
                 let _ = reply.send(Err(anyhow::anyhow!("publication stopped")));
             }
         }
@@ -63,6 +67,7 @@ async fn publish(
     published: watch::Sender<timeline::Prefix>,
     stop: Stop,
     mut halted: watch::Receiver<bool>,
+    backups: Option<watch::Sender<Option<timeline::Snapshot>>>,
 ) -> Result<()> {
     let mut prefix = published.borrow().clone();
     let result = async {
@@ -79,6 +84,7 @@ async fn publish(
             }
             match message {
                 Publication::Batch(mut batch) => {
+                    let snapshot = batch.prepared.as_ref().and_then(|p| p.snapshot());
                     let next = match batch.prepared.take() {
                         Some(prepared) => match prepared.publish(&bucket, &prefix).await {
                             Ok(next) => next,
@@ -93,6 +99,9 @@ async fn publish(
                     let advanced = next != prefix;
                     prefix = next;
                     published.send_replace(prefix.clone());
+                    if let (Some(backups), Some(snapshot)) = (&backups, snapshot) {
+                        backups.send_replace(Some(snapshot));
+                    }
                     if advanced {
                         tracing::info!(milestone=%prefix.milestone(), requests=batch.replies.iter().filter(|r|r.result.is_ok()).count(), "put of success");
                     }
@@ -101,10 +110,13 @@ async fn publish(
                 Publication::Barrier(reply) => {
                     let _ = reply.send(Ok(prefix.clone()));
                 }
-                Publication::Refresh(next, reply) => {
+                Publication::Refresh(next, snapshot, reply) => {
                     anyhow::ensure!(next.milestone() >= prefix.milestone() && (next.milestone() != prefix.milestone() || next == prefix), "refreshed prefix disagrees with publication");
                     prefix = next;
                     published.send_replace(prefix.clone());
+                    if let (Some(backups), Some(snapshot)) = (&backups, snapshot) {
+                        backups.send_replace(Some(snapshot));
+                    }
                     let _ = reply.send(Ok(prefix.clone()));
                 }
             }
@@ -154,8 +166,9 @@ impl Preparation {
             .into_settled(&prefix)?;
         timeline::refresh(&self.bucket, &mut basin).await?;
         let (reply, complete) = oneshot::channel();
+        let snapshot = basin.snapshot()?;
         self.output
-            .send(Publication::Refresh(basin.prefix(), reply))
+            .send(Publication::Refresh(basin.prefix(), snapshot, reply))
             .await
             .map_err(|_| anyhow::anyhow!("publication stopped"))?;
         anyhow::ensure!(
@@ -177,13 +190,22 @@ impl Preparation {
             };
             match message {
                 Message::Status { flow, reply } => {
+                    let recent = match basinsync::epilogue::latest_key(
+                        &self.bucket,
+                        &basinsync::epilogue::flow_prefix(&flow),
+                    )
+                    .await?
+                    {
+                        Some((key, viewpoint)) => Some(RecentMarker {
+                            viewpoint,
+                            url: self.bucket.presign_get(key, 300, None).await?,
+                        }),
+                        None => None,
+                    };
                     let basin = self.refreshed().await?;
                     let latest = basin.latest(&flow)?.map(|viewpoint| Position { viewpoint });
                     self.stager = Some(basin.into_stager());
-                    let _ = reply.send(Ok(EpilogueStatus {
-                        latest,
-                        recent: None,
-                    }));
+                    let _ = reply.send(Ok(EpilogueStatus { latest, recent }));
                 }
                 Message::Commit(first) => {
                     let permit = self
@@ -299,7 +321,19 @@ fn prepare(
 }
 
 impl Worker {
-    pub(super) async fn run(self, mut queue: mpsc::Receiver<Message>) -> Result<()> {
+    pub(super) async fn run(mut self, mut queue: mpsc::Receiver<Message>) -> Result<()> {
+        self.state.enable_vfs()?;
+        let backups = if self.backup_interval.is_zero() {
+            None
+        } else {
+            let (targets, receiver) = watch::channel(self.state.snapshot()?);
+            tokio::spawn(basinsync::backup::run(
+                self.bucket.clone(),
+                receiver,
+                self.backup_interval,
+            ));
+            Some(targets)
+        };
         let (output, receiver) = mpsc::channel(PIPELINE_BATCHES - 1);
         let (published, published_rx) = watch::channel(self.state.prefix());
         let (signal, halted) = watch::channel(false);
@@ -314,6 +348,7 @@ impl Worker {
             published,
             stop.clone(),
             halted.clone(),
+            backups,
         ));
         let mut preparation = Preparation {
             bucket: self.bucket,

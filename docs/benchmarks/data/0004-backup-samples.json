@@ -1,0 +1,263 @@
+{
+  "date": "2026-10-24",
+  "environment": {
+    "machine": "Apple M2, 24 GiB RAM",
+    "os": "macOS",
+    "rust": "1.92.0",
+    "profile": "release",
+    "bun": "1.4.4",
+    "endpoint": "go-faster/fs v0.15.0 on the same SSD",
+    "primary": {
+      "page_size": 16384,
+      "journal": "MVCC",
+      "synchronous": "FULL",
+      "cache_kib": 2048,
+      "storage": "file-backed copy-on-write VFS"
+    },
+    "workload": {
+      "seed_flows": 1024,
+      "seed_id_padding_bytes": 400,
+      "measured_flows": 4,
+      "requests_per_flow": 128,
+      "blob_bytes": 1024,
+      "batch_max": 32,
+      "batch_wait_ms": 2,
+      "pipeline_batches": 2,
+      "flow_copy_concurrency": 8
+    },
+    "timing": "Client response body received; seed, backup warm-up, and final backup/copy drain excluded. Three rotated rounds per cohort."
+  },
+  "cohorts": [
+    {
+      "rounds": 3,
+      "perFlow": 128,
+      "flows": 4,
+      "seedFlows": 1024,
+      "configurations": [
+        {
+          "name": "off",
+          "interval": 0,
+          "delay": 0
+        },
+        {
+          "name": "backup",
+          "interval": 20,
+          "delay": 0
+        },
+        {
+          "name": "backup+100ms",
+          "interval": 20,
+          "delay": 100
+        }
+      ],
+      "samples": [
+        {
+          "round": 0,
+          "mode": "off",
+          "requests": 512,
+          "seconds": 4.2673774589999995,
+          "rps": 119.98001229541576,
+          "p50": 32.972999999999956,
+          "p95": 40.231416999999965,
+          "backups": 0
+        },
+        {
+          "round": 0,
+          "mode": "backup",
+          "requests": 512,
+          "seconds": 5.761987625,
+          "rps": 88.85822624445501,
+          "p50": 42.44495800000004,
+          "p95": 67.0757909999993,
+          "backups": 36
+        },
+        {
+          "round": 0,
+          "mode": "backup+100ms",
+          "requests": 512,
+          "seconds": 5.560542624999998,
+          "rps": 92.07734469979,
+          "p50": 37.97741699999824,
+          "p95": 69.68079200000284,
+          "backups": 15
+        },
+        {
+          "round": 1,
+          "mode": "backup",
+          "requests": 512,
+          "seconds": 5.575811207999996,
+          "rps": 91.82520370585696,
+          "p50": 40.70025000000169,
+          "p95": 64.33445800000482,
+          "backups": 36
+        },
+        {
+          "round": 1,
+          "mode": "backup+100ms",
+          "requests": 512,
+          "seconds": 5.400798291999999,
+          "rps": 94.80080023695876,
+          "p50": 35.714915999997174,
+          "p95": 66.43216699999903,
+          "backups": 16
+        },
+        {
+          "round": 1,
+          "mode": "off",
+          "requests": 512,
+          "seconds": 4.482186125,
+          "rps": 114.22997299113722,
+          "p50": 35.31579200000124,
+          "p95": 38.24158400000306,
+          "backups": 0
+        },
+        {
+          "round": 2,
+          "mode": "backup+100ms",
+          "requests": 512,
+          "seconds": 5.550087667,
+          "rps": 92.25079507199071,
+          "p50": 37.88291699999536,
+          "p95": 71.216499999995,
+          "backups": 16
+        },
+        {
+          "round": 2,
+          "mode": "off",
+          "requests": 512,
+          "seconds": 3.661200165999995,
+          "rps": 139.8448532682604,
+          "p50": 28.15691599999991,
+          "p95": 32.3023749999993,
+          "backups": 0
+        },
+        {
+          "round": 2,
+          "mode": "backup",
+          "requests": 512,
+          "seconds": 5.563235958999998,
+          "rps": 92.03276721917669,
+          "p50": 41.616582999995444,
+          "p95": 62.93845799998962,
+          "backups": 36
+        }
+      ],
+      "summary": [
+        {
+          "mode": "off",
+          "rps": 119.98001229541576,
+          "p50": 32.972999999999956,
+          "p95": 38.24158400000306
+        },
+        {
+          "mode": "backup",
+          "rps": 91.82520370585696,
+          "p50": 41.616582999995444,
+          "p95": 64.33445800000482
+        },
+        {
+          "mode": "backup+100ms",
+          "rps": 92.25079507199071,
+          "p50": 37.88291699999536,
+          "p95": 69.68079200000284
+        }
+      ],
+      "name": "frequent"
+    },
+    {
+      "rounds": 3,
+      "perFlow": 128,
+      "flows": 4,
+      "seedFlows": 1024,
+      "configurations": [
+        {
+          "name": "off",
+          "interval": 0,
+          "delay": 0
+        },
+        {
+          "name": "default",
+          "interval": 1000,
+          "delay": 0
+        }
+      ],
+      "samples": [
+        {
+          "round": 0,
+          "mode": "off",
+          "requests": 512,
+          "seconds": 4.285841209,
+          "rps": 119.46312871434243,
+          "p50": 33.97412499999996,
+          "p95": 38.042333000000326,
+          "backups": 0
+        },
+        {
+          "round": 0,
+          "mode": "default",
+          "requests": 512,
+          "seconds": 5.072521832999999,
+          "rps": 100.93598743510822,
+          "p50": 32.586833999999726,
+          "p95": 70.28745799999888,
+          "backups": 2
+        },
+        {
+          "round": 1,
+          "mode": "default",
+          "requests": 512,
+          "seconds": 5.407781458999998,
+          "rps": 94.67838223157017,
+          "p50": 34.944917000000714,
+          "p95": 71.822750000003,
+          "backups": 2
+        },
+        {
+          "round": 1,
+          "mode": "off",
+          "requests": 512,
+          "seconds": 4.358942542,
+          "rps": 117.45968088973262,
+          "p50": 34.15266700000211,
+          "p95": 38.707000000002154,
+          "backups": 0
+        },
+        {
+          "round": 2,
+          "mode": "off",
+          "requests": 512,
+          "seconds": 4.272240083000004,
+          "rps": 119.84345215928715,
+          "p50": 33.452040999996825,
+          "p95": 37.77150000000256,
+          "backups": 0
+        },
+        {
+          "round": 2,
+          "mode": "default",
+          "requests": 512,
+          "seconds": 4.834323415999999,
+          "rps": 105.9093395169737,
+          "p50": 30.940209000000323,
+          "p95": 69.36579100000381,
+          "backups": 2
+        }
+      ],
+      "summary": [
+        {
+          "mode": "off",
+          "rps": 119.46312871434243,
+          "p50": 33.97412499999996,
+          "p95": 38.042333000000326
+        },
+        {
+          "mode": "default",
+          "rps": 100.93598743510822,
+          "p50": 32.586833999999726,
+          "p95": 70.28745799999888
+        }
+      ],
+      "name": "default"
+    }
+  ]
+}

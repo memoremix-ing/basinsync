@@ -1,4 +1,6 @@
+pub mod backup;
 pub mod diffuse16;
+pub mod epilogue;
 pub mod event;
 pub mod flexbuffer;
 pub mod json0;

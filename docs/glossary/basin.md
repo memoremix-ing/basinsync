@@ -1,7 +1,8 @@
 [flow]: <flow.md>
+[reservoir]: <reservoir.md>
 [timeline]: <timeline.md>
 
 # Basin
 
-The container for multiple *Flows*[^][flow], with a shared
+A *Reservoir*[^][reservoir] containing multiple *Flows*[^][flow], with a shared
 *Timeline*[^][timeline] recording their state changes.

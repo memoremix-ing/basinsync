@@ -255,6 +255,7 @@ pub struct Writer {
     recorder: Arc<Mutex<Recorder>>,
     cursor: BigUint,
     bootstrap: Option<Vec<u8>>,
+    store: Option<Arc<super::cow::Store>>,
 }
 impl Writer {
     pub fn open(image: &[u8]) -> Result<Self> {
@@ -280,7 +281,36 @@ impl Writer {
             recorder,
             cursor,
             bootstrap,
+            store: None,
         })
+    }
+    pub fn open_disk(image: &[u8]) -> Result<Self> {
+        let store = super::cow::Store::temporary(image)?;
+        let recorder = Arc::new(Mutex::new(Recorder::default()));
+        let io = Arc::new(WalIO {
+            inner: store.io(),
+            recorder: recorder.clone(),
+        });
+        let native = Native::open_at(io, store.path().into(), image, None, true)?;
+        native.conn.pragma_update("cache_size", -2048)?;
+        native.conn.pragma_update("synchronous", "FULL")?;
+        let state = State {
+            native,
+            image: vec![],
+        };
+        let cursor: BigUint = state.milestone()?.parse()?;
+        let bootstrap = (cursor == 0u8.into()).then(|| image.to_vec());
+        *recorder.lock().unwrap() = Recorder::default();
+        Ok(Self {
+            state,
+            recorder,
+            cursor,
+            bootstrap,
+            store: Some(store),
+        })
+    }
+    pub fn snapshot(&self) -> Result<Option<Arc<super::cow::View>>> {
+        self.store.as_ref().map(|s| s.pin()).transpose()
     }
     pub fn latest(&self, flow: &str) -> Result<Option<Viewpoint>> {
         self.state.latest(flow)
@@ -355,6 +385,9 @@ impl Writer {
         };
         logical.validated_bytes()?;
         native.checkpoint()?;
+        if let Some(store) = &self.store {
+            store.seal();
+        }
         let mut recorder = self.recorder.lock().unwrap();
         if !recorder.current.is_empty() {
             let current = std::mem::take(&mut recorder.current);

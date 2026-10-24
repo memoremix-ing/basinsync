@@ -1,8 +1,8 @@
 [basin]: <basin.md>
-[epilogue]: <epilogue.md>
+[reservoir]: <reservoir.md>
 [viewpoint]: <viewpoint.md>
 
 # Flow
 
-A string-identified container for one *Epilogue*[^][epilogue] within a
-*Basin*[^][basin]. Each has its own sequence beginning at *viewpoint*[^][viewpoint] zero.
+A string-identified *Reservoir*[^][reservoir] within a *Basin*[^][basin]. Its
+*Viewpoints*[^][viewpoint] begin at zero independently of other *Flows*.

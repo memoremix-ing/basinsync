@@ -19,6 +19,8 @@ use turso_core::{
     },
 };
 
+pub mod cow;
+
 pub const ID: &str = "default.turso";
 pub const VERSION: &str = "0.9.0-pre.1+032f5bb2c7e74107f7ef9b66d576312379000a88";
 pub const PAGE_SIZE: usize = 16384;

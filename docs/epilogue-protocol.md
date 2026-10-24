@@ -1,13 +1,16 @@
+[basin-backup]: <basin-backup.md>
 [commit-marker]: <glossary/commit-marker.md>
 [epilogue]: <glossary/epilogue.md>
 [json0]: <glossary/json0.md>
 [lexidecimal]: <glossary/lexidecimal.md>
+[reservoir]: <glossary/reservoir.md>
 [sha384]: <glossary/sha384.md>
 [viewpoint]: <glossary/viewpoint.md>
 
 # Epilogue protocol
 
-*CommitMarkers*[^][commit-marker] use `epilogue/Lexidecimal(~viewpoint)` keys.
+*CommitMarkers*[^][commit-marker] use `epilogue/Lexidecimal(~viewpoint)` keys
+within each *Reservoir*[^][reservoir] namespace; see the *key layout*[^][basin-backup].
 *Viewpoints*[^][viewpoint] increase from zero; their
 *encoded keys*[^][lexidecimal] decrease lexicographically.
 
