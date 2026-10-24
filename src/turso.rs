@@ -340,6 +340,16 @@ impl State {
         first: bool,
         observed: &mut impl FnMut(&str),
     ) -> Result<(Self, Delta)> {
+        self.capture_policy(native, first, true, observed)
+    }
+
+    fn capture_policy(
+        &self,
+        native: Native,
+        first: bool,
+        verify: bool,
+        observed: &mut impl FnMut(&str),
+    ) -> Result<(Self, Delta)> {
         let log = read_file(&*native.io, &*native.storage.get_logical_log_file())?;
         let frames = std::mem::take(&mut *native.storage.frames.lock().unwrap());
         ensure!(
@@ -368,11 +378,13 @@ impl State {
             logical,
             physical,
         };
-        let replayed = delta.ingest_logical(&self.image)?;
-        ensure!(
-            replayed.image == image,
-            "logical replay differs from captured physical state"
-        );
+        if verify {
+            let replayed = delta.ingest_logical(&self.image)?;
+            ensure!(
+                replayed.image == image,
+                "logical replay differs from captured physical state"
+            );
+        }
         observed("logical_replay_verify");
         Ok((Self { native, image }, delta))
     }
@@ -498,9 +510,12 @@ impl Native {
     }
 
     fn open_with_capture(image: &[u8], log: Option<&[u8]>, capture: bool) -> Result<Self> {
+        Self::open_on(Arc::new(MemoryIO::new()), image, log, capture)
+    }
+
+    fn open_on(io: Arc<dyn IO>, image: &[u8], log: Option<&[u8]>, capture: bool) -> Result<Self> {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let path = format!("basinsync-{}.turso", NEXT.fetch_add(1, Ordering::Relaxed));
-        let io: Arc<dyn IO> = Arc::new(MemoryIO::new());
         let file = io.open_file(&path, OpenFlags::default(), false)?;
         write_file(&*io, &*file, image)?;
         let log_file = io.open_file(&format!("{path}-log"), OpenFlags::default(), false)?;
@@ -774,3 +789,6 @@ mod tests {
 
 #[cfg(test)]
 mod benchmark;
+
+#[cfg(test)]
+mod experiments;

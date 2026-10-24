@@ -1,5 +1,6 @@
 [0002-basin-timeline-race]: <0002-basin-timeline-race.md>
 [0003-commit-baseline]: <../benchmarks/0003-commit-baseline.md>
+[0003-wal-experiments]: <../benchmarks/0003-wal-experiments.md>
 [basin]: <../glossary/basin.md>
 [commit-marker]: <../glossary/commit-marker.md>
 [development]: <../development.md>
@@ -107,3 +108,5 @@ Portable logical metadata does not guarantee the same bytes across engine
 versions. Existing entries without deltas require migration before this stage.
 
 Record the *three-variant commit baseline*[^][0003-commit-baseline] before tuning.
+
+Compare *WAL capture and publication experiments*[^][0003-wal-experiments].
