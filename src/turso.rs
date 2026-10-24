@@ -280,7 +280,28 @@ impl State {
         markers: &BTreeMap<String, Marker>,
         first: bool,
     ) -> Result<(Self, Delta)> {
+        self.stage_observed(milestone, markers, first, &mut |_| {})
+    }
+
+    fn stage_observed(
+        &self,
+        milestone: &str,
+        markers: &BTreeMap<String, Marker>,
+        first: bool,
+        observed: &mut impl FnMut(&str),
+    ) -> Result<(Self, Delta)> {
         let native = Native::open(&self.image, None)?;
+        observed("open_copy");
+        Self::transact(&native, milestone, markers)?;
+        observed("transaction");
+        self.capture_observed(native, first, observed)
+    }
+
+    fn transact(
+        native: &Native,
+        milestone: &str,
+        markers: &BTreeMap<String, Marker>,
+    ) -> Result<()> {
         native.conn.set_portable_logical_changes_enabled(true);
         native.conn.execute("BEGIN CONCURRENT")?;
         for (flow, marker) in markers {
@@ -305,10 +326,20 @@ impl State {
         stmt.run_ignore_rows()?;
         drop(stmt);
         native.conn.execute("COMMIT")?;
-        self.capture(native, first)
+        Ok(())
     }
 
+    #[cfg(test)]
     fn capture(&self, native: Native, first: bool) -> Result<(Self, Delta)> {
+        self.capture_observed(native, first, &mut |_| {})
+    }
+
+    fn capture_observed(
+        &self,
+        native: Native,
+        first: bool,
+        observed: &mut impl FnMut(&str),
+    ) -> Result<(Self, Delta)> {
         let log = read_file(&*native.io, &*native.storage.get_logical_log_file())?;
         let frames = std::mem::take(&mut *native.storage.frames.lock().unwrap());
         ensure!(
@@ -325,9 +356,13 @@ impl State {
             frames,
         };
         validate_log(&native.io, native.storage.get_logical_log_file(), log.len())?;
+        observed("logical_capture");
         native.checkpoint()?;
+        observed("checkpoint");
         let image = native.image()?;
+        observed("image_read");
         let physical = PhysicalFrames::between(&self.image, &image);
+        observed("page_diff_hash");
         let delta = Delta {
             version: VERSION.into(),
             logical,
@@ -338,6 +373,7 @@ impl State {
             replayed.image == image,
             "logical replay differs from captured physical state"
         );
+        observed("logical_replay_verify");
         Ok((Self { native, image }, delta))
     }
 
@@ -458,6 +494,10 @@ struct Native {
 }
 impl Native {
     fn open(image: &[u8], log: Option<&[u8]>) -> Result<Self> {
+        Self::open_with_capture(image, log, true)
+    }
+
+    fn open_with_capture(image: &[u8], log: Option<&[u8]>, capture: bool) -> Result<Self> {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let path = format!("basinsync-{}.turso", NEXT.fetch_add(1, Ordering::Relaxed));
         let io: Arc<dyn IO> = Arc::new(MemoryIO::new());
@@ -475,8 +515,11 @@ impl Native {
         let db = Database::open(
             io.clone(),
             &path,
-            OpenOptions::new(Arc::new(SqliteDialect))
-                .durable_storage(storage.clone() as Arc<dyn DurableStorage>),
+            OpenOptions::new(Arc::new(SqliteDialect)).durable_storage(if capture {
+                storage.clone() as Arc<dyn DurableStorage>
+            } else {
+                storage.inner.clone()
+            }),
         )?;
         let conn = db.connect(ConnectOpts::new())?;
         Ok(Self {
@@ -728,3 +771,6 @@ mod tests {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod benchmark;

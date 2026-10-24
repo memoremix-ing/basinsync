@@ -1,4 +1,5 @@
 [0002-basin-timeline-race]: <0002-basin-timeline-race.md>
+[0003-commit-baseline]: <../benchmarks/0003-commit-baseline.md>
 [basin]: <../glossary/basin.md>
 [commit-marker]: <../glossary/commit-marker.md>
 [development]: <../development.md>
@@ -104,3 +105,5 @@ space. Native logs and byte-identical replay depend on engine compatibility:
 the tests use *Turso*[^][turso] revision `032f5bb2c7e74107f7ef9b66d576312379000a88`.
 Portable logical metadata does not guarantee the same bytes across engine
 versions. Existing entries without deltas require migration before this stage.
+
+Record the *three-variant commit baseline*[^][0003-commit-baseline] before tuning.
