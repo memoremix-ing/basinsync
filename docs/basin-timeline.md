@@ -44,7 +44,7 @@ Complete one *conditional PUT*[^][conditional-write] before starting the next;
 acknowledge a batch only after it and all predecessors are durable.
 
 `PUT /api/v0/epilogue` adds a `flow` string to the
-*commit metadata*[^][epilogue-protocol] and validates against that
+*commit details*[^][epilogue-protocol] and validates against that
 *Flow*[^][flow]'s expected *Viewpoint*[^][viewpoint].
 `GET /api/v0/epilogue/status?flow=<id>` returns the *common status response*[^][epilogue-protocol].
 The `flow` query parameter is an ordinary URL-encoded string.

@@ -14,8 +14,8 @@ within each *Reservoir*[^][reservoir] namespace; see the *key layout*[^][basin-b
 *Viewpoints*[^][viewpoint] increase from zero; their
 *encoded keys*[^][lexidecimal] decrease lexicographically.
 
-`PUT /api/v0/epilogue` accepts multipart `metadata` (*JSON0*[^][json0]) and
-`blob` (raw bytes). Metadata contains `viewpoint: bigint` and
+`PUT /api/v0/epilogue` accepts multipart `details` (*JSON0*[^][json0]) and
+`blob` (raw bytes). `details` contains `viewpoint: bigint` and
 `sha384: Uint8Array`. Require the expected
 *viewpoint*[^][viewpoint] and matching *digest*[^][sha384] before accepting a
 commit. Rejection must not advance the sequence.

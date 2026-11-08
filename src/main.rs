@@ -10,10 +10,10 @@ use axum::{
     routing::{get, put},
 };
 use basinsync::{
+    details::CommitDetails,
     diffuse16,
     event::{self, Marker},
     lexidecimal::Viewpoint,
-    metadata::CommitMetadata,
     timeline,
 };
 use s3::{Bucket, Region, creds::Credentials};
@@ -84,7 +84,7 @@ struct Commit {
 
 impl Commit {
     async fn read(mut form: Multipart) -> Result<Self, Failure> {
-        let (mut metadata, mut blob) = (None, None);
+        let (mut details, mut blob) = (None, None);
         while let Some(field) = form
             .next_field()
             .await
@@ -92,7 +92,7 @@ impl Commit {
         {
             let name = field.name().unwrap_or("").to_owned();
             let slot = match name.as_str() {
-                "metadata" if metadata.is_none() => &mut metadata,
+                "details" if details.is_none() => &mut details,
                 "blob" if blob.is_none() => &mut blob,
                 _ => return Err(Failure::bad("unknown, unnamed, or duplicate field")),
             };
@@ -103,11 +103,11 @@ impl Commit {
                     .map_err(|e| Failure::new(e.status(), "invalid_multipart", e))?,
             );
         }
-        let CommitMetadata {
+        let CommitDetails {
             flow,
             viewpoint,
             sha384,
-        } = serde_json::from_slice(&metadata.ok_or_else(|| Failure::bad("missing metadata"))?)
+        } = serde_json::from_slice(&details.ok_or_else(|| Failure::bad("missing details"))?)
             .map_err(Failure::bad)?;
         event::valid_flow(&flow).map_err(Failure::bad)?;
         basinsync::epilogue::flow_key(&flow, &viewpoint).map_err(Failure::bad)?;

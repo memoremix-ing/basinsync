@@ -173,35 +173,35 @@ try {
   assert(sha384(a).startsWith("00"));
   assert.deepEqual(await epilogueStatus(writer.url,flowA),{latest:null,recent:null});
   await mismatch(await commit(writer.url,flowA,a,1n),0n);
-  for (const kind of ["missing-metadata","duplicate-metadata","missing-flow","nul-flow","long-flow","missing-blob","duplicate-blob","unknown-part","legacy-part","unknown-metadata","decimal","number","negative","missing-viewpoint","missing-digest","hex-digest","array-digest","wrong-digest","short-digest","long-digest","malformed-json","duplicate-property","unescaped-flow","invalid-base64"]) {
+  for (const kind of ["missing-details","duplicate-details","missing-flow","nul-flow","long-flow","missing-blob","duplicate-blob","unknown-part","legacy-part","unknown-details","decimal","number","negative","missing-viewpoint","missing-digest","hex-digest","array-digest","wrong-digest","short-digest","long-digest","malformed-json","duplicate-property","unescaped-flow","invalid-base64"]) {
     const data = form(flowA,a,0n);
-    const metadata: Record<string,unknown> = {flow:flowA,viewpoint:0n,sha384:sha384Bytes(a)};
-    if(kind==="missing-flow")delete metadata.flow;
-    if(kind==="nul-flow")metadata.flow="x\0y";
-    if(kind==="long-flow")metadata.flow="x".repeat(600);
-    if(kind==="unknown-metadata")metadata.surprise=true;
-    if(kind==="decimal")metadata.viewpoint="0";
-    if(kind==="number")metadata.viewpoint=0;
-    if(kind==="negative")metadata.viewpoint=-1n;
-    if(kind==="missing-viewpoint")delete metadata.viewpoint;
-    if(kind==="missing-digest")delete metadata.sha384;
-    if(kind==="hex-digest")metadata.sha384=sha384(a);
-    if(kind==="array-digest")metadata.sha384=Array.from(sha384Bytes(a));
-    if(kind==="wrong-digest")metadata.sha384=new Uint8Array(48).fill(255);
-    if(kind==="short-digest")metadata.sha384=sha384Bytes(a).slice(1);
-    if(kind==="long-digest")metadata.sha384=new Uint8Array([...sha384Bytes(a),0]);
-    data.set("metadata",stringify(metadata));
-    if(kind==="missing-metadata")data.delete("metadata");
-    if(kind==="duplicate-metadata")data.append("metadata",data.get("metadata") as string);
+    const details: Record<string,unknown> = {flow:flowA,viewpoint:0n,sha384:sha384Bytes(a)};
+    if(kind==="missing-flow")delete details.flow;
+    if(kind==="nul-flow")details.flow="x\0y";
+    if(kind==="long-flow")details.flow="x".repeat(600);
+    if(kind==="unknown-details")details.surprise=true;
+    if(kind==="decimal")details.viewpoint="0";
+    if(kind==="number")details.viewpoint=0;
+    if(kind==="negative")details.viewpoint=-1n;
+    if(kind==="missing-viewpoint")delete details.viewpoint;
+    if(kind==="missing-digest")delete details.sha384;
+    if(kind==="hex-digest")details.sha384=sha384(a);
+    if(kind==="array-digest")details.sha384=Array.from(sha384Bytes(a));
+    if(kind==="wrong-digest")details.sha384=new Uint8Array(48).fill(255);
+    if(kind==="short-digest")details.sha384=sha384Bytes(a).slice(1);
+    if(kind==="long-digest")details.sha384=new Uint8Array([...sha384Bytes(a),0]);
+    data.set("details",stringify(details));
+    if(kind==="missing-details")data.delete("details");
+    if(kind==="duplicate-details")data.append("details",data.get("details") as string);
     if(kind==="missing-blob")data.delete("blob");
     if(kind==="duplicate-blob")data.append("blob",new Blob([a]));
     if(kind==="unknown-part")data.append("surprise","value");
     if(kind==="legacy-part")data.append("flow",flowA);
-    if(kind==="malformed-json")data.set("metadata","{");
-    const wire = JSON.parse(stringify(metadata));
-    if(kind==="duplicate-property")data.set("metadata",`{"flow":"f",${stringify(metadata).slice(1)}`);
-    if(kind==="unescaped-flow") {wire.flow="0x1";data.set("metadata",JSON.stringify(wire))}
-    if(kind==="invalid-base64") {wire.sha384="0*?";data.set("metadata",JSON.stringify(wire))}
+    if(kind==="malformed-json")data.set("details","{");
+    const wire = JSON.parse(stringify(details));
+    if(kind==="duplicate-property")data.set("details",`{"flow":"f",${stringify(details).slice(1)}`);
+    if(kind==="unescaped-flow") {wire.flow="0x1";data.set("details",JSON.stringify(wire))}
+    if(kind==="invalid-base64") {wire.sha384="0*?";data.set("details",JSON.stringify(wire))}
     const expected = ["wrong-digest","short-digest","long-digest"].includes(kind)?422:400;
     await status(await fetch(`${writer.url}/api/v0/epilogue`,{method:"PUT",body:data}),expected);
   }
@@ -210,7 +210,7 @@ try {
   alternate.set("blob",new Blob([a]));
   const wire = JSON.parse(stringify({flow:flowA,viewpoint:1n,sha384:sha384Bytes(a)}));
   wire.sha384=`0%${Buffer.from(sha384Bytes(a)).toString("base64")}`;
-  alternate.set("metadata",JSON.stringify(wire));
+  alternate.set("details",JSON.stringify(wire));
   await mismatch(await fetch(`${writer.url}/api/v0/epilogue`,{method:"PUT",body:alternate}),0n);
   await status(await fetch(`${writer.url}/epilogue`,{method:"PUT",body:form(flowA,a,0n)}),404);
   await status(await fetch(`${writer.url}/epilogue/status?flow=unversioned`),404);

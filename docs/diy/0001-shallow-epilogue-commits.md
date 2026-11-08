@@ -14,7 +14,7 @@ Start with an *Epilogue*[^][epilogue] of opaque blobs.
 1. Build a Rust server that recovers its next *viewpoint*[^][viewpoint] from the
    bucket's lowest *Epilogue*[^][epilogue] key, starting at zero when empty.
 2. Accept `PUT /api/v0/epilogue`: a raw `blob` part and *JSON0*[^][json0]
-   `metadata` containing a bigint *viewpoint*[^][viewpoint] and byte-array
+   `details` containing a bigint *viewpoint*[^][viewpoint] and byte-array
    *SHA-384*[^][sha384]. Reject a wrong *viewpoint*[^][viewpoint] or
    *digest*[^][sha384]; otherwise *conditionally create*[^][conditional-write]
    its *marker*[^][commit-marker]. Advance after success; return an error and
