@@ -1,15 +1,23 @@
-[0005-envbuf-log-formatting]: <0005-envbuf-log-formatting.md>
 [basin]: <../glossary/basin.md>
 [basin-timeline]: <../basin-timeline.md>
 [commit-marker]: <../glossary/commit-marker.md>
 [development]: <../development.md>
 [differential-event]: <../glossary/differential-event.md>
 [diffuse16]: <../glossary/diffuse16.md>
+[downstream]: <../glossary/downstream.md>
+[envbuf]: <../glossary/envbuf.md>
 [epilogue]: <../glossary/epilogue.md>
+[epilogue-protocol]: <../epilogue-protocol.md>
 [flexbuffers]: <../glossary/flexbuffers.md>
 [flow]: <../glossary/flow.md>
+[jet]: <../glossary/jet.md>
+[lexidecimal]: <../glossary/lexidecimal.md>
 [milestone]: <../glossary/milestone.md>
+[range-get]: <../glossary/range-get.md>
+[range-manifest]: <../glossary/range-manifest.md>
+[sha384]: <../glossary/sha384.md>
 [timeline]: <../glossary/timeline.md>
+[upstream]: <../glossary/upstream.md>
 [viewpoint]: <../glossary/viewpoint.md>
 
 # 0002 — Basin Timeline race
@@ -26,26 +34,49 @@ and refresh.
    next *DifferentialEvent*[^][differential-event], then update that *Flow*[^][flow].
    Return an error and terminate after append failure.
 4. Refresh from subsequent *Timeline*[^][timeline] entries. In
-   `GET /api/v0/epilogue/status?flow=<id>`, `latest` reflects committed
-   *viewpoints*[^][viewpoint] while `recent` remains `null` until copying is
-   implemented. Test multiple
-   *Flows*[^][flow], concurrent servers, exact blob contents, and restart replay.
+   `GET /api/v0/epilogue/status?flow=<id>`, `latest` identifies the committed
+   *marker*[^][commit-marker] and provides its *GET capability*[^][epilogue-protocol].
+   Probe the next *Milestone*[^][milestone] before refreshing; absence confirms
+   the materialized state is current.
 
-Each *DifferentialEvent*[^][differential-event] is a unary
-*FlexBuffers*[^][flexbuffers] batch containing one commitflow command:
+Start each *DifferentialEvent*[^][differential-event] with one
+*EnvBuf*[^][envbuf]-wrapped *FlexBuffers*[^][flexbuffers]
+*commitflow tuple*[^][basin-timeline]:
 
 ```ts
-Array<[typeof Symbol.species, "sync.memoremix.com", "sts/0/databasin/commitflow", {
+[Symbol.species, "sync.memoremix.com", "sts/0/databasin/commitflow", {
   markers: { [flow: string]: {
     viewpoint: string; sha384: string; blob: Uint8Array
   } }
-}]>
+}]
 ```
+
+Use format `101` and eight-byte alignment. Compose append-only chunks, locating
+each *marker*[^][commit-marker]'s raw `blob` bytes in its finalized chunk.
+Append a final *range manifest*[^][range-manifest] indexing preceding
+*envelopes*[^][envbuf]; locate the manifest through its final footer.
+Later appended commands must preserve earlier blob offsets.
+
+Track each *Flow*[^][flow] and *downstream*[^][downstream]
+*Viewpoint*[^][viewpoint]'s *upstream*[^][upstream] *Milestone*[^][milestone],
+absolute blob offset, content length, and hexadecimal *SHA-384*[^][sha384].
+Encode both positions as positive *Lexidecimal*[^][lexidecimal] text for indexing;
+derive object keys from *Milestones*[^][milestone] using *Diffuse16*[^][diffuse16].
+The terminology also fits a later *Jet*[^][jet], which arranges
+*DifferentialEvents*[^][differential-event] in *Flow*[^][flow]
+*Timeline*[^][timeline] *Milestones*[^][milestone].
+
+Return `latest`'s length and a signed *Range GET*[^][range-get] for its bytes in
+the *Basin*[^][basin] *Timeline*[^][timeline]. Every successful GET must expose
+only that *marker*[^][commit-marker]; reject omitted or changed Range headers.
+For length zero, omit the URL and headers and use empty bytes without fetching.
 
 Use the *command and route contract*[^][basin-timeline] and
 *development checks*[^][development]. A separate thread will later copy
 *CommitMarkers*[^][commit-marker] from the *Timeline*[^][timeline] into
 *Flow*[^][flow] *Epilogues*[^][epilogue] and create recovery snapshots.
 
-Here `latest` contains only its *Viewpoint*[^][viewpoint]; retrieval capabilities
-are introduced in *0005*[^][0005-envbuf-log-formatting].
+Test multiple *Flows*[^][flow], concurrent servers, exact blob contents, restart
+replay, forward/backward framing, padding and width boundaries, manifests, and
+blob slices. Fetch signed ranges and reject omitted, expanded, or changed
+headers, including when other sensitive payloads share the object.

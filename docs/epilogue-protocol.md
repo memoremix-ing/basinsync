@@ -28,12 +28,11 @@ A *viewpoint*[^][viewpoint] mismatch returns HTTP 409:
 {"next":{"viewpoint":"0x1"}}
 ```
 
-`GET /api/v0/epilogue/status` reports the latest committed *viewpoint*[^][viewpoint]
-and the most recent *CommitMarker*[^][commit-marker] stored in the
-*Epilogue*[^][epilogue]:
+`GET /api/v0/epilogue/status` reports the latest committed
+*CommitMarker*[^][commit-marker]:
 
 ```json
-{"latest":{"viewpoint":"0x1","length":10,"url":"<presigned GET>","headers":{"Range":"bytes=128-137"}},"recent":{"viewpoint":"0x0","url":"<presigned GET>"}}
+{"latest":{"viewpoint":"0x1","length":10,"url":"<presigned GET>","headers":{"Range":"bytes=128-137"}}}
 ```
 
 For `latest`, send the returned `headers` with its URL. A
@@ -42,4 +41,4 @@ For `latest`, send the returned `headers` with its URL. A
 *marker*[^][commit-marker] supplies the URL, `headers` is `{}`. For zero length,
 omit `url` and `headers` and use empty bytes without fetching.
 
-Either position is `null` when absent; both are `null` when empty.
+When empty, return `{"latest":null}`.

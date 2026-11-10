@@ -58,7 +58,7 @@ try{
     if(config.interval){
       await until(async()=>{const list=await s3.send(new ListObjectsV2Command({Bucket:bucket,Prefix:"epilogue/",MaxKeys:1}));const k=list.Contents?.[0]?.Key;if(!k)return false;const r=await s3.send(new GetObjectCommand({Bucket:bucket,Key:k}));const bytes=await r.Body!.transformToByteArray();assert.equal(r.Metadata!.sha384,sha384(bytes));return BigInt(r.Metadata!.milestone)===tail;});
       for(let flow=0;flow<flows;flow++){
-        const state=await epilogueStatus(url,`live-${flow}`);assert.equal(state.latest?.viewpoint,BigInt(perFlow-1));assert.equal(state.recent?.viewpoint,BigInt(perFlow-1));
+        const state=await epilogueStatus(url,`live-${flow}`);assert.equal(state.latest?.viewpoint,BigInt(perFlow-1));
         const r=await s3.send(new GetObjectCommand({Bucket:bucket,Key:`flows/0x${Buffer.from(`live-${flow}`).toString("hex")}/${epilogueKey(BigInt(perFlow-1))}`}));assert.deepEqual(await r.Body!.transformToByteArray(),new Uint8Array(1024).fill(flow));
       }
     }

@@ -5,7 +5,6 @@ export type Position = { viewpoint: bigint };
 export type LatestMarker = Position & { length: number; url?: string; headers?: Record<string,string> };
 export type EpilogueStatus = {
   latest: LatestMarker | null;
-  recent: (Position & { url: string }) | null;
 };
 export type ViewpointMismatch = { next: Position };
 export type ApiError = { error: string; message: string };

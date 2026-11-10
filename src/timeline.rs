@@ -504,6 +504,15 @@ pub async fn recover(bucket: &Bucket) -> Result<Basin> {
     Ok(state)
 }
 
+/// Avoid snapshot discovery when a read's settled prefix is still current.
+pub async fn refresh_if_advanced(bucket: &Bucket, state: &mut Basin) -> Result<()> {
+    let next = &state.milestone + 1u8;
+    if exists(bucket, &next).await? {
+        refresh(bucket, state).await?;
+    }
+    Ok(())
+}
+
 pub async fn refresh(bucket: &Bucket, state: &mut Basin) -> Result<()> {
     if let Some(checkpoint) = crate::epilogue::latest_checkpoint(bucket).await? {
         if checkpoint.milestone > state.milestone {

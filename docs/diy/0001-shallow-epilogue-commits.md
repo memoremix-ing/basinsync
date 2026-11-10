@@ -1,4 +1,3 @@
-[0005-envbuf-log-formatting]: <0005-envbuf-log-formatting.md>
 [commit-marker]: <../glossary/commit-marker.md>
 [conditional-write]: <../glossary/conditional-write.md>
 [development]: <../development.md>
@@ -20,9 +19,10 @@ Start with an *Epilogue*[^][epilogue] of opaque blobs.
    *digest*[^][sha384]; otherwise *conditionally create*[^][conditional-write]
    its *marker*[^][commit-marker]. Advance after success; return an error and
    terminate after write failure.
-3. Offer `GET /api/v0/epilogue/status`. Its `latest` and `recent`
-   *viewpoints*[^][viewpoint] match; `recent` also contains the committed
-   *marker*[^][commit-marker]'s presigned GET URL.
+3. Offer `GET /api/v0/epilogue/status`. Return `latest` with the committed
+   *marker*[^][commit-marker]'s *viewpoint*[^][viewpoint], length, and presigned
+   GET URL with empty `headers`. For length zero, omit the URL and headers;
+   when empty, return `latest: null`.
    On *viewpoint*[^][viewpoint] mismatch, return the expected next
    *viewpoint*[^][viewpoint].
 4. Stress concurrent writers with TypeScript clients against local S3.
@@ -32,6 +32,3 @@ Start with an *Epilogue*[^][epilogue] of opaque blobs.
 Use the *wire protocol*[^][epilogue-protocol] and
 *development checks*[^][development]; leave richer *markers*[^][commit-marker]
 and graceful race recovery for later milestones.
-
-Here `latest` contains only its *Viewpoint*[^][viewpoint]; retrieval capabilities
-are introduced in *0005*[^][0005-envbuf-log-formatting].

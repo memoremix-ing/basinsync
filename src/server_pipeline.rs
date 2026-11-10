@@ -152,7 +152,7 @@ impl Preparation {
             message = queue.recv() => Ok(message),
         }
     }
-    async fn refreshed(&mut self) -> Result<timeline::Basin> {
+    async fn refreshed(&mut self, before_write: bool) -> Result<timeline::Basin> {
         let (reply, complete) = oneshot::channel();
         self.output
             .send(Publication::Barrier(reply))
@@ -164,7 +164,11 @@ impl Preparation {
             .take()
             .context("missing preparation state")?
             .into_settled(&prefix)?;
-        timeline::refresh(&self.bucket, &mut basin).await?;
+        if before_write {
+            timeline::refresh(&self.bucket, &mut basin).await?;
+        } else {
+            timeline::refresh_if_advanced(&self.bucket, &mut basin).await?;
+        }
         let (reply, complete) = oneshot::channel();
         let snapshot = basin.snapshot()?;
         self.output
@@ -190,19 +194,7 @@ impl Preparation {
             };
             match message {
                 Message::Status { flow, reply } => {
-                    let recent = match basinsync::epilogue::latest_key(
-                        &self.bucket,
-                        &basinsync::epilogue::flow_prefix(&flow),
-                    )
-                    .await?
-                    {
-                        Some((key, viewpoint)) => Some(RecentMarker {
-                            viewpoint,
-                            url: self.bucket.presign_get(key, 300, None).await?,
-                        }),
-                        None => None,
-                    };
-                    let basin = self.refreshed().await?;
+                    let basin = self.refreshed(false).await?;
                     let latest = if let Some(viewpoint) = basin.latest(&flow)? {
                         let mut location = basin.location(&flow, &viewpoint)?;
                         // Only retained image-delta fixtures lack an indexed location.
@@ -231,29 +223,25 @@ impl Preparation {
                             }
                         }
                         let location = location.context("missing committed marker location")?;
-                        let stored = if let Some(stored) =
-                            recent.as_ref().filter(|r| r.viewpoint == viewpoint)
-                        {
-                            if basinsync::epilogue::matches_marker(
-                                &self.bucket,
-                                &flow,
-                                &viewpoint,
-                                &location,
-                            )
-                            .await?
-                            {
-                                Some(stored)
-                            } else {
-                                None
-                            }
-                        } else {
-                            None
-                        };
                         let access = if location.length == 0 {
                             None
-                        } else if let Some(stored) = stored {
+                        } else if basinsync::epilogue::matches_marker(
+                            &self.bucket,
+                            &flow,
+                            &viewpoint,
+                            &location,
+                        )
+                        .await?
+                        {
                             Some(basinsync::range_get::Access {
-                                url: stored.url.clone(),
+                                url: self
+                                    .bucket
+                                    .presign_get(
+                                        basinsync::epilogue::flow_key(&flow, &viewpoint)?,
+                                        300,
+                                        None,
+                                    )
+                                    .await?,
                                 headers: BTreeMap::new(),
                             })
                         } else {
@@ -276,7 +264,7 @@ impl Preparation {
                         None
                     };
                     self.stager = Some(basin.into_stager());
-                    let _ = reply.send(Ok(EpilogueStatus { latest, recent }));
+                    let _ = reply.send(Ok(EpilogueStatus { latest }));
                 }
                 Message::Commit(first) => {
                     let permit = self
@@ -314,7 +302,7 @@ impl Preparation {
                     let settled =
                         self.stager.as_ref().unwrap().prefix() == *self.published.borrow();
                     if settled {
-                        let basin = self.refreshed().await?;
+                        let basin = self.refreshed(true).await?;
                         self.stager = Some(basin.into_stager());
                     }
                     let stager = self.stager.take().context("missing preparation state")?;

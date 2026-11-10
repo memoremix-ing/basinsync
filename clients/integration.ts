@@ -15,7 +15,7 @@ import { ingestWal } from "./wal";
 import { all as envelopes, before as previousEnvelope } from "./envbuf";
 import { stress } from "./stress";
 
-// Historical cases below assert cursor/replication positions; full capability
+// Cursor cases below assert positions; full capability
 // responses and their byte ranges are exercised separately.
 function positions(value:Awaited<ReturnType<typeof fullStatus>>){return {...value,latest:value.latest?{viewpoint:value.latest.viewpoint}:null};}
 async function epilogueStatus(...args:Parameters<typeof fullStatus>){return positions(await fullStatus(...args));}
@@ -145,6 +145,15 @@ async function badStartup(bucket: string) {
 
 function isBasinPut(request:Request){const path=new URL(request.url).pathname;return request.method==="PUT"&&path.includes("/epilogue/")&&!path.includes("/flows/");}
 const flowKey=(flow:string,vp:bigint)=>`flows/0x${Buffer.from(flow).toString("hex")}/${epilogueKey(vp)}`;
+async function flowBlob(bucket:string,flow:string,viewpoint:bigint):Promise<Uint8Array|null>{
+  try{
+    const response=await s3.send(new GetObjectCommand({Bucket:bucket,Key:flowKey(flow,viewpoint)}));
+    return await response.Body!.transformToByteArray();
+  }catch(error){
+    if((error as {$metadata?:{httpStatusCode?:number}}).$metadata?.httpStatusCode===404)return null;
+    throw error;
+  }
+}
 async function eventually<T>(read:()=>Promise<T>,done:(value:T)=>boolean):Promise<T>{
   const deadline=Date.now()+15000;let last:unknown;
   while(Date.now()<deadline){try{const value=await read();if(done(value))return value;last=value;}catch(error){last=error;}await Bun.sleep(10);}
@@ -177,7 +186,7 @@ try {
   const flowA = "0x雪/first", flowB = "__proto__";
   const a = bytes("359");
   assert(sha384(a).startsWith("00"));
-  assert.deepEqual(await epilogueStatus(writer.url,flowA),{latest:null,recent:null});
+  assert.deepEqual(await epilogueStatus(writer.url,flowA),{latest:null});
   await mismatch(await commit(writer.url,flowA,a,1n),0n);
   for (const kind of ["missing-details","duplicate-details","missing-flow","nul-flow","long-flow","missing-blob","duplicate-blob","unknown-part","legacy-part","unknown-details","decimal","number","negative","missing-viewpoint","missing-digest","hex-digest","array-digest","wrong-digest","short-digest","long-digest","malformed-json","duplicate-property","unescaped-flow","invalid-base64"]) {
     const data = form(flowA,a,0n);
@@ -236,12 +245,12 @@ try {
   }
   await accepted(writer.url,flowA,a,0n);
   await mismatch(await commit(writer.url,flowA,bytes("replacement"),0n),1n);
-  assert.deepEqual(await epilogueStatus(observer.url,flowA),{latest:{viewpoint:0n},recent:null},"running observer replays Timeline");
-  assert.deepEqual(await epilogueStatus(observer.url,flowB),{latest:null,recent:null});
+  assert.deepEqual(await epilogueStatus(observer.url,flowA),{latest:{viewpoint:0n}},"running observer replays Timeline");
+  assert.deepEqual(await epilogueStatus(observer.url,flowB),{latest:null});
   await accepted(writer.url,flowB,new Uint8Array([0,255,128]),0n);
   await accepted(observer.url,flowB,new Uint8Array(),1n);
   await accepted(writer.url,flowA,bytes("independent Flow"),1n);
-  assert.deepEqual(await epilogueStatus(writer.url,flowB),{latest:{viewpoint:1n},recent:null});
+  assert.deepEqual(await epilogueStatus(writer.url,flowB),{latest:{viewpoint:1n}});
   console.log("put of success: Flow isolation, validation, prototype-safe ids, and live Timeline refresh");
 
   const flows = ["red","blue","0","constructor"];
@@ -297,7 +306,7 @@ try {
   const startup=trace.slice(start);
   assert.equal(startup.filter(r=>r.method==="GET"&&r.url.searchParams.get("prefix")==="timeline/").length,1);
   assert.equal(startup.filter(r=>r.method==="GET"&&r.url.pathname.includes("/timeline/")).length,eventCount,"replay the entire Timeline");
-  for(const [flow,v] of replayed) assert.deepEqual(await epilogueStatus(writer.url,flow),{latest:{viewpoint:v},recent:null});
+  for(const [flow,v] of replayed) assert.deepEqual(await epilogueStatus(writer.url,flow),{latest:{viewpoint:v}});
   assert(trace.some(r=>r.url.searchParams.get("prefix")==="epilogue/"),"read the Basin recovery anchor before writing");
   await accepted(writer.url,flowA,bytes("after recovery"),2n);
   await stop(writer.process);await stop(observer.process);
@@ -366,7 +375,7 @@ try {
       await status(await statusRequest,503);
       assert.equal(await timeout(app.process.exited),1);assert.equal(puts,1,"queued batch never uploads after failure");
       const restored=await server(batchBucket);
-      assert.deepEqual(await epilogueStatus(restored.url,flow),{latest:{viewpoint:3n},recent:null});
+      assert.deepEqual(await epilogueStatus(restored.url,flow),{latest:{viewpoint:3n}});
       await status(await commit(restored.url,flow,a,4n),201);await stop(restored.process);
     }else{
       assert.equal((await statusRequest).status,200);
@@ -374,7 +383,7 @@ try {
       assert.deepEqual(entriesAt(await get(batchBucket,2n)).map(e=>e.marker.viewpoint),["4"]);
       modernRoot=stored;await stop(app.process);
       const restored=await server(batchBucket);
-      assert.deepEqual(await epilogueStatus(restored.url,flow),{latest:{viewpoint:4n},recent:null});await stop(restored.process);
+      assert.deepEqual(await epilogueStatus(restored.url,flow),{latest:{viewpoint:4n}});await stop(restored.process);
     }
     await proxy.service.stop(true);
   }
@@ -409,13 +418,13 @@ try {
     for(const result of results)await status(result,fault==="none"?201:503);
     assert.equal(peak,1,"only one conditional publication may be active");
     if(fault==="none"){
-      assert.deepEqual(positions(parse(await (await latest).text())),{latest:{viewpoint:2n},recent:null});assert.equal(puts,3);
+      assert.deepEqual(positions(parse(await (await latest).text())),{latest:{viewpoint:2n}});assert.equal(puts,3);
       for(let n=1;n<=3;n++)assert.equal(markerAt(await get(pipelineBucket,BigInt(n)),flow).viewpoint,String(n-1));
       await stop(app.process);
     }else{
       await status(await latest,503);assert.equal(puts,1);assert.equal(await timeout(app.process.exited),1);
       const restored=await server(pipelineBucket);
-      assert.deepEqual(await epilogueStatus(restored.url,flow),{latest:fault==="after"?{viewpoint:0n}:null,recent:null});
+      assert.deepEqual(await epilogueStatus(restored.url,flow),{latest:fault==="after"?{viewpoint:0n}:null});
       await status(await commit(restored.url,flow,a,fault==="after"?1n:0n),201);await stop(restored.process);
     }
     await proxy.service.stop(true);
@@ -436,7 +445,7 @@ try {
     await Bun.sleep(30);assert.equal(conflictDone,false);assert.equal(statusDone,false);
     second.resolve();await status(await next,fail?503:201);
     if(fail){await status(await conflict,503);await status(await latest,503);assert.equal(await timeout(app.process.exited),1);}
-    else{await mismatch(await conflict,2n);assert.deepEqual(positions(parse(await (await latest).text())),{latest:{viewpoint:1n},recent:null});await stop(app.process);}
+    else{await mismatch(await conflict,2n);assert.deepEqual(positions(parse(await (await latest).text())),{latest:{viewpoint:1n}});await stop(app.process);}
     assert.equal(puts,2,"mismatch-only work must not create an event");await proxy.service.stop(true);
   }
   {
@@ -466,7 +475,7 @@ try {
     const sockets=await Promise.all(Array.from({length:64},()=>new Promise<ReturnType<typeof createConnection>>((yes,no)=>{
       const socket=createConnection({host:"127.0.0.1",port},()=>{socket.write(`PUT /api/v0/epilogue HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nContent-Type: multipart/form-data; boundary=x\r\nContent-Length: 1024\r\n\r\n`);yes(socket)});socket.once("error",no);
     })));
-    try{await Bun.sleep(30);assert.deepEqual(await timeout(epilogueStatus(app.url,"idle"),3000),{latest:null,recent:null})}finally{for(const socket of sockets)socket.destroy()}
+    try{await Bun.sleep(30);assert.deepEqual(await timeout(epilogueStatus(app.url,"idle"),3000),{latest:null})}finally{for(const socket of sockets)socket.destroy()}
     await status(await commit(app.url,"idle",a,0n),201);await stop(app.process);
   }
   // Dropping an HTTP caller after admission does not cancel its owned batch.
@@ -477,7 +486,7 @@ try {
     const abort=new AbortController();
     const request=fetch(`${app.url}/api/v0/epilogue`,{method:"PUT",body:form("disconnected",a,0n),signal:abort.signal});
     await queued(app.log,"disconnected",0);await timeout(entered.promise);abort.abort();await assert.rejects(request);gate.resolve();
-    assert.deepEqual(await epilogueStatus(app.url,"disconnected"),{latest:{viewpoint:0n},recent:null});
+    assert.deepEqual(await epilogueStatus(app.url,"disconnected"),{latest:{viewpoint:0n}});
     await status(await commit(app.url,"disconnected",a,1n),201);await stop(app.process);await proxy.service.stop(true);
   }
   assert(modernRoot);
@@ -506,8 +515,8 @@ try {
   const validEvent = encodeEvent(markers, legacyDeltasAt(capturedBytes));
   await seed(fixture,1n,validEvent);
   const restored=await server(fixture);
-  assert.deepEqual(await epilogueStatus(restored.url,flowA),{latest:{viewpoint:0n},recent:null});
-  assert.deepEqual(await epilogueStatus(restored.url,flowB),{latest:{viewpoint:0n},recent:null});
+  assert.deepEqual(await epilogueStatus(restored.url,flowA),{latest:{viewpoint:0n}});
+  assert.deepEqual(await epilogueStatus(restored.url,flowB),{latest:{viewpoint:0n}});
   await status(await commit(restored.url,flowA,a,1n<<128n),409);
   await status(await commit(restored.url,flowA,a,1n),201);
   await stop(restored.process);
@@ -550,7 +559,7 @@ try {
   await status(await commit(failed.url,"f",a,0n),503);
   assert.equal(await timeout(failed.process.exited),1);assert.equal(puts,1);
   const recovered=await server(uncertain);
-  assert.deepEqual(await epilogueStatus(recovered.url,"f"),{latest:{viewpoint:0n},recent:null});
+  assert.deepEqual(await epilogueStatus(recovered.url,"f"),{latest:{viewpoint:0n}});
   await status(await commit(recovered.url,"f",a,1n),201);
   await stop(recovered.process);
   console.log("put of success: JS-to-Rust replay, malformed-event rejection, and ambiguous Timeline PUT recovery without retries");
@@ -571,8 +580,8 @@ try {
     const flow="0/雪/../";
     await status(await commit(app.url,flow,a,0n),201);await timeout(entered.promise);
     assert.equal((await basinBackup(b)),null,"no backup before its PUT completes");
-    const recent=await epilogueStatus(app.url,flow);assert.equal(recent.recent?.viewpoint,0n);
-    assert.deepEqual(new Uint8Array(await (await fetch(recent.recent!.url)).arrayBuffer()),a);
+    assert.deepEqual(await flowBlob(b,flow,0n),a);
+    assert.deepEqual(await latestBlob((await fullStatus(app.url,flow)).latest!),a);
     for(let n=0;n<12;n++)await status(await commit(app.url,`growth-${n}-${"x".repeat(140)}`,bytes(`payload-${n}`),0n),201);
     await status(await commit(app.url,flow,bytes("next"),1n),201);
     assert.equal(active,1);assert.equal(submitted.length,1,"coalesce targets while an upload is blocked");
@@ -601,7 +610,8 @@ try {
     const restored=await server(b,traced.url);
     assert.deepEqual(reads.filter(path=>path.includes("/timeline/")),[`/${b}/${key(15n)}`]);
     assert.equal((await epilogueStatus(restored.url,flow)).latest?.viewpoint,2n);
-    assert.equal((await epilogueStatus(restored.url,flow)).recent?.viewpoint,1n);
+    assert.deepEqual(await flowBlob(b,flow,1n),bytes("next"));
+    assert.equal(await flowBlob(b,flow,2n),null);
     await status(await commit(restored.url,flow,bytes("after restore"),3n),201);await stop(restored.process);
     // The full image is sufficient even when the pre-snapshot Timeline is unavailable.
     const snapshotOnly=await bucket();
@@ -640,12 +650,13 @@ try {
     await status(await commit(app.url,"copy",a,0n),201);await timeout(entered.promise);
     if(fault==="blocked"){
       assert.equal(backups,0);assert.equal(await basinBackup(b),null);
-      assert.equal((await epilogueStatus(app.url,"copy")).recent,null);
+      assert.equal(await flowBlob(b,"copy",0n),null);
       await status(await commit(app.url,"copy",bytes("second"),1n),201);
       app.process.kill("SIGKILL");await app.process.exited;gate.resolve();
       const restarted=await server(b,endpoint,{BASINSYNC_BACKUP_INTERVAL_MS:"10"});
       await eventually(()=>basinBackup(b),cp=>cp?.milestone===2n);
-      assert.equal((await epilogueStatus(restarted.url,"copy")).recent?.viewpoint,1n);await stop(restarted.process);
+      assert.deepEqual(await flowBlob(b,"copy",0n),a);
+      assert.deepEqual(await flowBlob(b,"copy",1n),bytes("second"));await stop(restarted.process);
     }else if(fault==="conflict"){
       await Bun.sleep(80);assert.equal(backups,0);assert.equal(await basinBackup(b),null);
       assert.equal((await epilogueStatus(app.url,"copy")).latest?.viewpoint,0n);assert.deepEqual(await latestBlob((await fullStatus(app.url,"copy")).latest!),a,"a conflicting stored marker must not replace latest contents");await stop(app.process);
@@ -682,7 +693,7 @@ try {
     const app=await server(b,proxy.url,{BASINSYNC_BACKUP_INTERVAL_MS:"10"});await timeout(entered.promise);
     assert.equal(active,8);assert.equal(backups,0);
     await status(await commit(app.url,"foreground",a,0n),201);
-    assert.equal((await epilogueStatus(app.url,"ordered-copy")).recent,null);
+    assert.equal(await flowBlob(b,"ordered-copy",0n),null);
     gate.resolve();await eventually(()=>basinBackup(b),cp=>cp?.milestone===2n);
     assert.equal(peak,8);assert.equal(finished,17);assert.equal(ordered,3);await stop(app.process);
   }
@@ -699,7 +710,8 @@ try {
     const checkpoint=await eventually(()=>basinBackup(b),cp=>cp?.milestone===3n);assert(checkpoint);await Bun.sleep(80);
     assert.equal(checkpoint.key,epilogueKey(0n));assert.equal(arrived,2);
     const objects=await s3.send(new ListObjectsV2Command({Bucket:b,Prefix:"epilogue/"}));assert.equal(objects.KeyCount,1);
-    for(const app of apps){assert.equal((await epilogueStatus(app.url,"race-copy")).recent?.viewpoint,2n);await stop(app.process);}
+    for(let n=0;n<3;n++)assert.deepEqual(await flowBlob(b,"race-copy",BigInt(n)),bytes(String(n)));
+    for(const app of apps){assert.equal((await epilogueStatus(app.url,"race-copy")).latest?.viewpoint,2n);await stop(app.process);}
   }
   // Different snapshot targets must remain monotonic whichever worker wins first.
   for(const winner of [1n,2n]){
@@ -781,13 +793,15 @@ try {
     await stop(app.process);
     const restarted=await server(b);assert.deepEqual(await latestBlob((await fullStatus(restarted.url,"public")).latest!),target);await stop(restarted.process);
     // Hold downstream copying: the URL must stay range-bound until the exact
-    // marker is stored, then it may reuse recent's whole-object URL.
+    // marker is stored, then it may use the Flow's whole-object URL.
     const gate=Promise.withResolvers<void>(),entered=Promise.withResolvers<void>();
     const proxy=relay((_,response)=>response,async request=>{if(request.method==="PUT"&&new URL(request.url).pathname.includes("/flows/")){entered.resolve();await gate.promise;}});
     const copying=await server(b,proxy.url,{BASINSYNC_BACKUP_INTERVAL_MS:"10"});await timeout(entered.promise);
     assert.deepEqual(await latestBlob((await fullStatus(copying.url,"public")).latest!),target);
     gate.resolve();
-    const complete=await eventually(()=>fullStatus(copying.url,"public"),s=>s.recent?.viewpoint===1n&&s.latest?.url===s.recent.url);
+    await eventually(()=>flowBlob(b,"public",1n),blob=>blob!==null);
+    const complete=await eventually(()=>fullStatus(copying.url,"public"),s=>!!s.latest?.url&&Object.keys(s.latest.headers??{}).length===0);
+    assert(new URL(complete.latest!.url!).pathname.endsWith(`/${flowKey("public",1n)}`));
     assert.deepEqual(complete.latest!.headers,{});assert.deepEqual(await latestBlob(complete.latest!),target);
     assert(!("url" in (await fullStatus(copying.url,"empty")).latest!));
     const checkpoint=await eventually(()=>basinBackup(b),cp=>cp?.milestone===1n);assert(checkpoint);
@@ -803,6 +817,52 @@ try {
     assert.equal(latest.viewpoint,2n);assert(new URL(latest.url!).pathname.endsWith(`/${key(2n)}`));assert.deepEqual(await latestBlob(latest),bytes("after checkpoint"));await stop(anchored.process);
   }
   console.log("put of success: signed blob-only Range capabilities, empty markers, downstream URL reuse, persistent locations, and snapshot-plus-suffix recovery");
+  // Current observers need no LIST; a positive successor probe discovers the
+  // Basin anchor before replay. Flow marker selection never lists its Epilogue.
+  {
+    const b=await bucket(),reads:{method:string;url:URL}[]=[];
+    const proxy=relay((request,response)=>{reads.push({method:request.method,url:new URL(request.url)});return response;});
+    const observer=await server(b,proxy.url);
+    async function checkedStatus(flow:string,advanced=false){
+      reads.length=0;
+      const state=await fullStatus(observer.url,flow);
+      const lists=reads.filter(r=>r.url.searchParams.has("list-type"));
+      assert(!lists.some(r=>r.url.searchParams.get("prefix")?.startsWith("flows/")),"never list a Flow Epilogue");
+      if(advanced){
+        assert(lists.some(r=>r.url.searchParams.get("prefix")==="epilogue/"),"discover the latest Basin anchor after a positive probe");
+        assert.equal(reads[0].method,"HEAD");assert(reads[0].url.pathname.includes("/timeline/"));
+      }else assert.equal(lists.length,0,"an absent successor avoids all LIST operations");
+      return state;
+    }
+    assert.deepEqual(await checkedStatus("absent"),{latest:null});
+    const writer=await server(b);
+    await status(await commit(writer.url,"known",a,0n),201);
+    assert.deepEqual(await latestBlob((await checkedStatus("known",true)).latest!),a);
+    await status(await commit(writer.url,"known",bytes("next"),1n),201);
+    await status(await commit(writer.url,"empty",new Uint8Array(),0n),201);
+    const pending=(await checkedStatus("known",true)).latest!;
+    assert.equal(pending.viewpoint,1n);assert(pending.headers?.Range);
+    assert.deepEqual(await latestBlob(pending),bytes("next"));
+    assert.deepEqual(await checkedStatus("empty"),{latest:{viewpoint:0n,length:0}});
+    // Leave this observer behind; snapshot discovery should skip older events.
+    await status(await commit(writer.url,"known",bytes("third"),2n),201);
+    await status(await commit(writer.url,"known",bytes("fourth"),3n),201);
+    await stop(writer.process);
+    const copying=await server(b,endpoint,{BASINSYNC_BACKUP_INTERVAL_MS:"10"});
+    await eventually(()=>basinBackup(b),cp=>cp?.milestone===5n);
+    assert.deepEqual(await flowBlob(b,"known",3n),bytes("fourth"));
+    const stored=(await checkedStatus("known",true)).latest!;
+    assert.equal(stored.viewpoint,3n);assert.deepEqual(stored.headers,{});
+    assert(!reads.some(r=>r.method==="GET"&&r.url.pathname.includes("/timeline/")),"load the newer snapshot instead of replaying its prefix");
+    assert.deepEqual(await latestBlob(stored),bytes("fourth"));
+    assert.deepEqual((await checkedStatus("known")).latest?.headers,{});
+    await status(await commit(copying.url,"known",bytes("suffix"),4n),201);
+    const suffix=(await checkedStatus("known",true)).latest!;
+    assert.equal(suffix.viewpoint,4n);assert.deepEqual(await latestBlob(suffix),bytes("suffix"));
+    assert.deepEqual(await checkedStatus("absent"),{latest:null});
+    await stop(copying.process);await stop(observer.process);
+  }
+  console.log("put of success: latest-only status probes successors, discovers newer snapshots only when behind, and never lists Flow Epilogues");
   console.log(`Integration passed. Logs: ${artifacts}`);
 } finally {
   await Promise.all(processes.map(stop));

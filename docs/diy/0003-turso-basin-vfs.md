@@ -11,18 +11,23 @@
 [conditional-write]: <../glossary/conditional-write.md>
 [development]: <../development.md>
 [differential-event]: <../glossary/differential-event.md>
+[downstream]: <../glossary/downstream.md>
 [durable-storage]: <../glossary/durable-storage.md>
+[envbuf]: <../glossary/envbuf.md>
 [epilogue]: <../glossary/epilogue.md>
 [flexbuffers]: <../glossary/flexbuffers.md>
 [flow]: <../glossary/flow.md>
 [leader]: <../glossary/leader.md>
+[lexidecimal]: <../glossary/lexidecimal.md>
 [logical-frame]: <../glossary/logical-frame.md>
 [milestone]: <../glossary/milestone.md>
 [mvcc]: <../glossary/mvcc.md>
 [physical-frame]: <../glossary/physical-frame.md>
+[range-manifest]: <../glossary/range-manifest.md>
 [timeline]: <../glossary/timeline.md>
 [turso]: <../glossary/turso.md>
 [turso-state]: <../turso-state.md>
+[upstream]: <../glossary/upstream.md>
 [viewpoint]: <../glossary/viewpoint.md>
 [virtual-file-system]: <../glossary/virtual-file-system.md>
 [wal]: <../glossary/wal.md>
@@ -46,8 +51,24 @@ CREATE TABLE flows (
   flow TEXT PRIMARY KEY NOT NULL,
   viewpoint TEXT NOT NULL
 );
+CREATE TABLE marker_ranges (
+  flow TEXT NOT NULL,
+  downstream TEXT NOT NULL,
+  upstream TEXT NOT NULL,
+  blob_offset INTEGER NOT NULL CHECK (blob_offset >= 0),
+  content_length INTEGER NOT NULL CHECK (content_length >= 0),
+  sha384 TEXT NOT NULL,
+  PRIMARY KEY (flow, downstream)
+);
+CREATE INDEX marker_ranges_upstream ON marker_ranges(upstream);
 INSERT INTO basin VALUES (1, '0');
 ```
+
+Materialize *0002*[^][0002-basin-timeline-race]'s blob locations in `marker_ranges`
+in the commit transaction. Its *upstream*[^][upstream] *Milestones*[^][milestone]
+and *downstream*[^][downstream] *Viewpoints*[^][viewpoint] use positive
+*Lexidecimal*[^][lexidecimal] text. Preserve locations for intermediate
+*Viewpoints*[^][viewpoint] within a batch and verify indexed-location recovery.
 
 Use crate features `fs` and `conn_raw_api` and call
 `connection.set_portable_logical_changes_enabled(true)`. Implement
@@ -69,19 +90,16 @@ preparation through publication, preparing the next while one ordered S3 upload
 waits. Refresh at drained boundaries; pending *conditional writes*[^][conditional-write]
 arbitrate *leadership*[^][leader]. Gather bounded requests, validate their
 *Viewpoints*[^][viewpoint] in order, and materialize final row values in one
-transaction. Preserve every *CommitMarker*[^][commit-marker] in an ordered
-*FlexBuffers*[^][flexbuffers] vector, with one frame-ingestion command last:
+transaction. Preserve every *CommitMarker*[^][commit-marker] in ordered
+*EnvBuf*[^][envbuf] chunks, each containing a *FlexBuffers*[^][flexbuffers]
+tuple. Append one frame-ingestion command before the final
+*range manifest*[^][range-manifest]:
 
 ```ts
-[
-  [Symbol.species, "sync.memoremix.com", "sts/0/databasin/commitflow", {
-    markers: { [flow]: { viewpoint, sha384, blob } }
-  }],
-  // Further commitflow commands, including successive viewpoints of one Flow.
-  [Symbol.species, "sync.memoremix.com", "sts/0/databasin/ingestturso", {
-    turso: { "default.turso": { version, logical, physical } }
-  }]
-]
+// Each tuple has its own EnvBuf; append after the commitflow chunks.
+[Symbol.species, "sync.memoremix.com", "sts/0/databasin/ingestturso", {
+  turso: { "default.turso": { version, logical, physical } }
+}]
 ```
 
 Use the *frame contract*[^][turso-state] and version
