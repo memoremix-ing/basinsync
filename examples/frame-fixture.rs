@@ -1,7 +1,7 @@
 use anyhow::Result;
 use basinsync::{
     event::{self, Marker},
-    timeline::Basin,
+    timeline::Watershed,
 };
 use std::{
     collections::BTreeMap,
@@ -81,7 +81,7 @@ fn main() -> Result<()> {
             },
         }
     } else {
-        Basin::default().prepare(markers)?.1
+        Watershed::default().prepare(markers)?.1
     };
     io::stdout().write_all(&event::encode(command)?)?;
     Ok(())

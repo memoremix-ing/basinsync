@@ -1,5 +1,3 @@
-[basin]: <glossary/basin.md>
-[basin-backup]: <basin-backup.md>
 [causal-consistency]: <glossary/causal-consistency.md>
 [commit-marker]: <glossary/commit-marker.md>
 [conditional-read]: <glossary/conditional-read.md>
@@ -17,12 +15,14 @@
 [timeline]: <glossary/timeline.md>
 [turso-state]: <turso-state.md>
 [viewpoint]: <glossary/viewpoint.md>
+[watershed]: <glossary/watershed.md>
+[watershed-backup]: <watershed-backup.md>
 
-# Basin Timeline
+# Watershed Timeline
 
-The *Basin*[^][basin]'s shared *Timeline*[^][timeline] records state changes at
+The *Watershed*[^][watershed]'s shared *Timeline*[^][timeline] records state changes at
 `timeline/Diffuse16(milestone)`. *Milestones*[^][milestone] start at one and increase
-without gaps. Before writing, read the latest *Basin*[^][basin] *recovery anchor*[^][basin-backup]
+without gaps. Before writing, read the latest *Watershed*[^][watershed] *recovery anchor*[^][watershed-backup]
 and ingest every subsequent *DifferentialEvent*[^][differential-event]. Its
 recorded *Milestone*[^][milestone] seeds exponential search for the tail.
 Without a *CommitMarker*[^][commit-marker], list a seed in the

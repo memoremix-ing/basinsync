@@ -575,7 +575,7 @@ fn wal_growth_deletion_rollback_and_corruption() -> Result<()> {
         native.conn.execute(sql)?;
         native
             .conn
-            .execute(format!("UPDATE basin SET milestone='{next}'"))?;
+            .execute(format!("UPDATE watershed SET milestone='{next}'"))?;
         native.conn.execute("COMMIT")?;
         let delta = live.capture(next.clone())?;
         let physical = delta.physical.ingest(&image, &before_cursor)?;
@@ -837,7 +837,7 @@ fn measure() -> Result<()> {
                 input(n, 1, if kind == "wal-vector" { 1 } else { flows }, &blob),
             )?);
         }
-        let mut basin = crate::timeline::Basin {
+        let mut watershed = crate::timeline::Watershed {
             milestone: 1u8.into(),
             database: Some(State::from_image(initial.clone())?),
             stopped: false,
@@ -848,7 +848,7 @@ fn measure() -> Result<()> {
         for (n, bytes) in events.iter().enumerate() {
             let start = Instant::now();
             if kind == "image-verify" {
-                basin.apply((n + 2).into(), crate::event::decode(bytes)?)?;
+                watershed.apply((n + 2).into(), crate::event::decode(bytes)?)?;
             } else if kind == "wal-vector" {
                 state = recover_vector(&state, bytes)?;
             } else if mode == "recover-sparse" {
@@ -861,7 +861,7 @@ fn measure() -> Result<()> {
             }
         }
         let image = if kind == "image-verify" {
-            basin.database.unwrap().image
+            watershed.database.unwrap().image
         } else {
             state.image
         };

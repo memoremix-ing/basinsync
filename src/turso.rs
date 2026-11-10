@@ -24,7 +24,7 @@ pub mod cow;
 pub const ID: &str = "default.turso";
 pub const VERSION: &str = "0.9.0-pre.1+032f5bb2c7e74107f7ef9b66d576312379000a88";
 pub const PAGE_SIZE: usize = 16384;
-pub const SCHEMA: &str = "CREATE TABLE basin (id INTEGER PRIMARY KEY CHECK (id = 1), milestone TEXT NOT NULL); CREATE TABLE flows (flow TEXT PRIMARY KEY NOT NULL, viewpoint TEXT NOT NULL); CREATE TABLE marker_ranges (flow TEXT NOT NULL, downstream TEXT NOT NULL, upstream TEXT NOT NULL, blob_offset INTEGER NOT NULL CHECK(blob_offset>=0), content_length INTEGER NOT NULL CHECK(content_length>=0), sha384 TEXT NOT NULL, PRIMARY KEY(flow, downstream)); CREATE INDEX marker_ranges_upstream ON marker_ranges(upstream); INSERT INTO basin VALUES (1, '0');";
+pub const SCHEMA: &str = "CREATE TABLE watershed (id INTEGER PRIMARY KEY CHECK (id = 1), milestone TEXT NOT NULL); CREATE TABLE flows (flow TEXT PRIMARY KEY NOT NULL, viewpoint TEXT NOT NULL); CREATE TABLE marker_ranges (flow TEXT NOT NULL, downstream TEXT NOT NULL, upstream TEXT NOT NULL, blob_offset INTEGER NOT NULL CHECK(blob_offset>=0), content_length INTEGER NOT NULL CHECK(content_length>=0), sha384 TEXT NOT NULL, PRIMARY KEY(flow, downstream)); CREATE INDEX marker_ranges_upstream ON marker_ranges(upstream); INSERT INTO watershed VALUES (1, '0');";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Blob(#[serde(with = "serde_bytes")] pub Vec<u8>);
@@ -321,14 +321,14 @@ impl State {
         let mut query = self
             .native
             .conn
-            .query("SELECT milestone FROM basin WHERE id = 1")?
+            .query("SELECT milestone FROM watershed WHERE id = 1")?
             .unwrap();
         ensure!(
             matches!(
                 ready_step(&*self.native.io, || query.step())?,
                 StepResult::Row
             ),
-            "missing Basin cursor"
+            "missing Watershed cursor"
         );
         let value = query.row().unwrap().get::<String>(0)?;
         ensure!(
@@ -336,7 +336,7 @@ impl State {
                 ready_step(&*self.native.io, || query.step())?,
                 StepResult::Done
             ),
-            "duplicate Basin cursor"
+            "duplicate Watershed cursor"
         );
         Ok(value)
     }
@@ -428,7 +428,7 @@ impl State {
             }
             stmt.run_ignore_rows()?;
         }
-        let mut stmt = conn.prepare("UPDATE basin SET milestone = ?1 WHERE id = 1")?;
+        let mut stmt = conn.prepare("UPDATE watershed SET milestone = ?1 WHERE id = 1")?;
         stmt.bind_at(
             NonZeroUsize::new(1).unwrap(),
             Value::build_text(milestone.to_owned()),
@@ -816,10 +816,10 @@ mod tests {
             .collect();
         let (mut state, _) = initial.stage("1", &markers, true)?;
         for sql in [
-            "DELETE FROM flows WHERE rowid % 2 = 0; UPDATE basin SET milestone = '2'",
-            "UPDATE flows SET viewpoint = '340282366920938463463374607431768211456'; UPDATE basin SET milestone = '3'",
-            "DELETE FROM flows; UPDATE basin SET milestone = '4'",
-            "INSERT INTO flows VALUES ('reused', '0'); UPDATE basin SET milestone = '5'",
+            "DELETE FROM flows WHERE rowid % 2 = 0; UPDATE watershed SET milestone = '2'",
+            "UPDATE flows SET viewpoint = '340282366920938463463374607431768211456'; UPDATE watershed SET milestone = '3'",
+            "DELETE FROM flows; UPDATE watershed SET milestone = '4'",
+            "INSERT INTO flows VALUES ('reused', '0'); UPDATE watershed SET milestone = '5'",
         ] {
             let native = Native::open(&state.image, None)?;
             native.conn.set_portable_logical_changes_enabled(true);

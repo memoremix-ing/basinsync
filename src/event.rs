@@ -80,7 +80,7 @@ pub fn decode(bytes: &[u8]) -> Result<CommitFlow> {
     let command = tuple.index(2)?.get_str()?;
     ensure!(
         namespace == NAMESPACE && command == COMMIT_FLOW,
-        "unknown Basin command"
+        "unknown Watershed command"
     );
     let payload = CommitFlow::deserialize(tuple.index(3)?)?;
     ensure!(
@@ -106,7 +106,7 @@ mod tests {
             sha384: format!("{:x}", Sha384::digest(&blob)),
             blob: blob.clone(),
         };
-        let state = crate::timeline::Basin::default();
+        let state = crate::timeline::Watershed::default();
         let (_, command) = state
             .prepare(BTreeMap::from([("雪/flow".into(), marker)]))
             .unwrap();
@@ -527,7 +527,7 @@ mod envelope_tests {
             assert_eq!(&bytes[start..start + location.length as usize], original);
             assert_eq!(digest(original), location.sha384);
         }
-        let mut recovered = crate::timeline::Basin::default();
+        let mut recovered = crate::timeline::Watershed::default();
         recovered.apply_entry(1u8.into(), &bytes)?;
         assert_eq!(recovered.database.unwrap().image, writer.image()?);
         Ok(())
@@ -568,7 +568,7 @@ mod envelope_tests {
                 crate::turso::wal::Writer::open(&crate::turso::State::genesis()?.image)?;
             let delta = writer.prepare_with_ranges(&0u8.into(), None, &commands, &locations)?;
             let bytes = encode_wal(commands, delta)?;
-            let mut recovered = crate::timeline::Basin::default();
+            let mut recovered = crate::timeline::Watershed::default();
             let error = recovered.apply_entry(1u8.into(), &bytes).err().unwrap();
             assert!(error.to_string().contains("marker location"), "{error:?}");
             assert_eq!(recovered.milestone, num_bigint::BigUint::from(0u8));

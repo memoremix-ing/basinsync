@@ -286,7 +286,7 @@ impl Message {
 }
 struct Worker {
     bucket: Box<Bucket>,
-    state: timeline::Basin,
+    state: timeline::Watershed,
     batch_max: usize,
     batch_wait: Duration,
     backup_interval: Duration,
@@ -353,7 +353,7 @@ async fn main() -> Result<()> {
         .with_request_timeout(Duration::from_secs(10))?;
     let state = timeline::recover(&bucket)
         .await
-        .context("recover Basin Timeline")?;
+        .context("recover Watershed Timeline")?;
     let (published, published_rx) = watch::channel(state.prefix());
     let next = &state.milestone + 1u8;
     diffuse16::key(&next)?;
@@ -455,7 +455,7 @@ mod tests {
     #[test]
     fn responses_use_json0_bigints_and_escape_literal_strings() {
         let viewpoint = Viewpoint::parse("340282366920938463463374607431768211456").unwrap();
-        let prefix = timeline::Basin {
+        let prefix = timeline::Watershed {
             milestone: "340282366920938463463374607431768211457".parse().unwrap(),
             ..Default::default()
         }

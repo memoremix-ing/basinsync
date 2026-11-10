@@ -5,7 +5,7 @@ use s3::Bucket;
 use std::{collections::BTreeMap, future::Future};
 
 #[derive(Default)]
-pub struct Basin {
+pub struct Watershed {
     pub milestone: BigUint,
     pub database: Option<crate::turso::State>,
     pub stopped: bool,
@@ -13,7 +13,7 @@ pub struct Basin {
     pub head: Option<String>,
 }
 
-impl Basin {
+impl Watershed {
     pub fn latest(&self, flow: &str) -> Result<Option<Viewpoint>> {
         if let Some(writer) = &self.writer {
             ensure!(
@@ -175,7 +175,7 @@ pub struct Snapshot {
 }
 
 pub struct Stager {
-    state: Basin,
+    state: Watershed,
 }
 impl Stager {
     pub fn prefix(&self) -> Prefix {
@@ -190,7 +190,7 @@ impl Stager {
         self.state.head = Some(prepared.digest.clone());
         Ok(prepared)
     }
-    pub fn into_settled(self, published: &Prefix) -> Result<Basin> {
+    pub fn into_settled(self, published: &Prefix) -> Result<Watershed> {
         ensure!(
             self.prefix() == *published,
             "unpublished preparation remains"
@@ -242,7 +242,7 @@ impl Prepared {
         })
     }
 }
-impl Basin {
+impl Watershed {
     pub fn prefix(&self) -> Prefix {
         Prefix {
             milestone: self.milestone.clone(),
@@ -455,7 +455,7 @@ pub async fn exists(bucket: &Bucket, milestone: &BigUint) -> Result<bool> {
     crate::object_read::exists(bucket, &diffuse16::key(milestone)?).await
 }
 
-async fn replay(bucket: &Bucket, state: &mut Basin, tail: BigUint) -> Result<()> {
+async fn replay(bucket: &Bucket, state: &mut Watershed, tail: BigUint) -> Result<()> {
     while state.milestone < tail {
         let milestone = &state.milestone + 1u8;
         let response = crate::object_read::if_present(bucket)?
@@ -479,7 +479,7 @@ pub async fn check_write_base(bucket: &Bucket, prefix: &Prefix) -> Result<()> {
     if let Some(checkpoint) = crate::epilogue::latest_checkpoint(bucket).await? {
         ensure!(
             checkpoint.milestone <= prefix.milestone,
-            "Basin backup advanced beyond writer"
+            "Watershed backup advanced beyond writer"
         );
         if checkpoint.milestone == prefix.milestone {
             ensure!(
@@ -495,14 +495,14 @@ pub async fn check_write_base(bucket: &Bucket, prefix: &Prefix) -> Result<()> {
     Ok(())
 }
 
-pub async fn recover(bucket: &Bucket) -> Result<Basin> {
-    let mut state = Basin::default();
+pub async fn recover(bucket: &Bucket) -> Result<Watershed> {
+    let mut state = Watershed::default();
     refresh(bucket, &mut state).await?;
     Ok(state)
 }
 
 /// Avoid snapshot discovery when a read's settled prefix is still current.
-pub async fn refresh_if_advanced(bucket: &Bucket, state: &mut Basin) -> Result<()> {
+pub async fn refresh_if_advanced(bucket: &Bucket, state: &mut Watershed) -> Result<()> {
     let next = &state.milestone + 1u8;
     if exists(bucket, &next).await? {
         refresh(bucket, state).await?;
@@ -510,7 +510,7 @@ pub async fn refresh_if_advanced(bucket: &Bucket, state: &mut Basin) -> Result<(
     Ok(())
 }
 
-pub async fn refresh(bucket: &Bucket, state: &mut Basin) -> Result<()> {
+pub async fn refresh(bucket: &Bucket, state: &mut Watershed) -> Result<()> {
     if let Some(checkpoint) = crate::epilogue::latest_checkpoint(bucket).await? {
         if checkpoint.milestone > state.milestone {
             *state = checkpoint.load(bucket).await?;
@@ -521,7 +521,7 @@ pub async fn refresh(bucket: &Bucket, state: &mut Basin) -> Result<()> {
             );
         }
     }
-    // A Basin Epilogue supplies the seed directly; no Timeline listing is needed.
+    // A Watershed Epilogue supplies the seed directly; no Timeline listing is needed.
     // Genesis has no anchor yet, so discover a seed with one minimum-sized LIST.
     let seed = if state.milestone == 0u8.into() {
         let (page, status) = bucket
@@ -556,24 +556,24 @@ mod tests {
 
     #[test]
     fn snapshots_reject_unpublished_preparation() -> Result<()> {
-        let mut basin = Basin::default();
-        let first = basin.prepare_wal(vec![event::FlowCommand {
+        let mut watershed = Watershed::default();
+        let first = watershed.prepare_wal(vec![event::FlowCommand {
             markers: BTreeMap::from([("flow".into(), marker("0"))]),
         }])?;
-        basin.milestone = first.milestone.clone();
-        basin.head = Some(first.digest.clone());
-        assert!(basin.snapshot()?.is_some());
-        let _unpublished = basin.prepare_wal(vec![event::FlowCommand {
+        watershed.milestone = first.milestone.clone();
+        watershed.head = Some(first.digest.clone());
+        assert!(watershed.snapshot()?.is_some());
+        let _unpublished = watershed.prepare_wal(vec![event::FlowCommand {
             markers: BTreeMap::from([("flow".into(), marker("1"))]),
         }])?;
-        assert!(basin.snapshot().is_err());
+        assert!(watershed.snapshot().is_err());
         Ok(())
     }
 
     #[test]
     fn pinned_backup_prefixes_recover_the_same_physical_state_as_genesis_replay() -> Result<()> {
-        let mut producer = Basin::default().into_stager();
-        let mut full = Basin::default();
+        let mut producer = Watershed::default().into_stager();
+        let mut full = Watershed::default();
         let mut entries = Vec::new();
         let mut checkpoints = Vec::new();
         for n in 0..48u32 {
@@ -603,7 +603,7 @@ mod tests {
             let (file, digest) = snapshot.view.export()?;
             assert_eq!(std::fs::read(file.path())?, image);
             assert_eq!(digest, event::digest(&image));
-            let mut recovered = Basin {
+            let mut recovered = Watershed {
                 milestone: snapshot.prefix.milestone.clone(),
                 head: snapshot.prefix.digest.clone(),
                 database: Some(crate::turso::State::from_image(image)?),
@@ -624,8 +624,8 @@ mod tests {
 
     #[test]
     fn staged_batches_link_before_publication_and_settle_only_at_the_same_prefix() -> Result<()> {
-        let committed = Basin::default().prefix();
-        let mut stager = Basin::default().into_stager();
+        let committed = Watershed::default().prefix();
+        let mut stager = Watershed::default().into_stager();
         let first = stager.prepare(vec![event::FlowCommand {
             markers: BTreeMap::from([("flow".into(), marker("0"))]),
         }])?;
@@ -635,7 +635,7 @@ mod tests {
         }])?;
         assert_eq!(second.parent, Some(event::digest(first.bytes())));
         assert_eq!(second.milestone(), &BigUint::from(2u8));
-        let mut recovered = Basin::default();
+        let mut recovered = Watershed::default();
         recovered.apply_entry(1u8.into(), first.bytes())?;
         assert_ne!(stager.prefix(), recovered.prefix());
         recovered.apply_entry(2u8.into(), second.bytes())?;
@@ -647,7 +647,7 @@ mod tests {
 
     #[test]
     fn replay_applies_frames_atomically_and_preserves_big_counters() -> Result<()> {
-        let mut state = Basin::default();
+        let mut state = Watershed::default();
         assert!(
             state
                 .prepare(BTreeMap::from([

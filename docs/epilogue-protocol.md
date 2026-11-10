@@ -1,4 +1,3 @@
-[basin-backup]: <basin-backup.md>
 [causal-consistency]: <glossary/causal-consistency.md>
 [commit-marker]: <glossary/commit-marker.md>
 [conditional-read]: <glossary/conditional-read.md>
@@ -12,11 +11,12 @@
 [sha384]: <glossary/sha384.md>
 [viewpoint]: <glossary/viewpoint.md>
 [watershed]: <glossary/watershed.md>
+[watershed-backup]: <watershed-backup.md>
 
 # Epilogue protocol
 
 *CommitMarkers*[^][commit-marker] use `epilogue/Lexidecimal(~viewpoint)` keys
-within each *Reservoir*[^][reservoir] namespace; see the *key layout*[^][basin-backup].
+within each *Reservoir*[^][reservoir] namespace; see the *key layout*[^][watershed-backup].
 *Viewpoints*[^][viewpoint] increase from zero; their
 *encoded keys*[^][lexidecimal] decrease lexicographically.
 

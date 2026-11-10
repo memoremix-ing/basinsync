@@ -23,8 +23,8 @@ const endpoint=`http://127.0.0.1:${await port()}`;
 const s3=new S3Client({endpoint,region:"us-east-1",forcePathStyle:true,credentials,maxAttempts:1});
 let delayMs=0,backupPuts=0;
 const relay=Bun.serve({hostname:"127.0.0.1",port:0,async fetch(request){
-  const url=new URL(request.url),basinPut=request.method==="PUT"&&url.pathname.includes("/epilogue/")&&!url.pathname.includes("/flows/");
-  if(basinPut){backupPuts++;if(delayMs)await Bun.sleep(delayMs);}
+  const url=new URL(request.url),watershedPut=request.method==="PUT"&&url.pathname.includes("/epilogue/")&&!url.pathname.includes("/flows/");
+  if(watershedPut){backupPuts++;if(delayMs)await Bun.sleep(delayMs);}
   return fetch(`${endpoint}${url.pathname}${url.search}`,{method:request.method,headers:request.headers,body:["GET","HEAD"].includes(request.method)?undefined:await request.arrayBuffer()});
 }});
 const configurations=[{name:"off",interval:0,delay:0},{name:"default",interval:1000,delay:0},{name:"backup",interval:20,delay:0},{name:"backup+100ms",interval:20,delay:100}].filter(c=>!process.env.BACKUP_MODES||process.env.BACKUP_MODES.split(",").includes(c.name));

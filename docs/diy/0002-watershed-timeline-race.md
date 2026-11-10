@@ -1,5 +1,3 @@
-[basin]: <../glossary/basin.md>
-[basin-timeline]: <../basin-timeline.md>
 [commit-marker]: <../glossary/commit-marker.md>
 [development]: <../development.md>
 [differential-event]: <../glossary/differential-event.md>
@@ -18,10 +16,12 @@
 [timeline]: <../glossary/timeline.md>
 [upstream]: <../glossary/upstream.md>
 [viewpoint]: <../glossary/viewpoint.md>
+[watershed]: <../glossary/watershed.md>
+[watershed-timeline]: <../watershed-timeline.md>
 
-# 0002 — Basin Timeline race
+# 0002 — Watershed Timeline race
 
-Give the *Basin*[^][basin] a shared *Timeline*[^][timeline] for changes across
+Give the *Watershed*[^][watershed] a shared *Timeline*[^][timeline] for changes across
 *Flows*[^][flow], replacing *Epilogue*[^][epilogue] listings for state recovery
 and refresh.
 
@@ -37,13 +37,13 @@ and refresh.
    *marker*[^][commit-marker] and provides its *GET capability*[^][epilogue-protocol].
    Include `timelines.watershed.milestone` in API responses so clients can detect an
    older materialized prefix when switching servers.
-   When the *probe freshness window*[^][basin-timeline] expires, probe the next
+   When the *probe freshness window*[^][watershed-timeline] expires, probe the next
    *Milestone*[^][milestone] before refreshing; absence confirms the materialized
    state is current.
 
 Start each *DifferentialEvent*[^][differential-event] with one
 *EnvBuf*[^][envbuf]-wrapped *FlexBuffers*[^][flexbuffers]
-*commitflow tuple*[^][basin-timeline]:
+*commitflow tuple*[^][watershed-timeline]:
 
 ```ts
 [Symbol.species, "sync.memoremix.com", "sts/0/databasin/commitflow", {
@@ -66,11 +66,11 @@ Encode both positions as positive *Lexidecimal*[^][lexidecimal] text for indexin
 derive object keys from *Milestones*[^][milestone] using *Diffuse16*[^][diffuse16].
 
 Return `latest`'s length and a signed *Range GET*[^][range-get] for its bytes in
-the *Basin*[^][basin] *Timeline*[^][timeline]. Every successful GET must expose
+the *Watershed*[^][watershed] *Timeline*[^][timeline]. Every successful GET must expose
 only that *marker*[^][commit-marker]; reject omitted or changed Range headers.
 For length zero, omit the URL and headers and use empty bytes without fetching.
 
-Use the *command and route contract*[^][basin-timeline] and
+Use the *command and route contract*[^][watershed-timeline] and
 *development checks*[^][development]. A separate thread will later copy
 *CommitMarkers*[^][commit-marker] from the *Timeline*[^][timeline] into
 *Flow*[^][flow] *Epilogues*[^][epilogue] and create recovery snapshots.

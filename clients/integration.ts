@@ -18,7 +18,7 @@ import { stress } from "./stress";
 // Cursor cases below assert positions; full capability
 // responses and their byte ranges are exercised separately.
 function payload<T extends {timelines:Timelines}>(value:T){
-  assert(typeof value.timelines?.watershed?.milestone==="bigint"&&value.timelines.watershed.milestone>=0n,"every API response carries its durable Basin prefix");
+  assert(typeof value.timelines?.watershed?.milestone==="bigint"&&value.timelines.watershed.milestone>=0n,"every API response carries its durable Watershed prefix");
   const {timelines,...body}=value;return body;
 }
 function positions(value:Awaited<ReturnType<typeof fullStatus>>){return {...payload(value),latest:value.latest?{viewpoint:value.latest.viewpoint}:null};}
@@ -149,7 +149,7 @@ async function badStartup(bucket: string) {
   assert.equal(await timeout(serverProcess(bucket,endpoint,"127.0.0.1:0").exited),1);
 }
 
-function isBasinPut(request:Request){const path=new URL(request.url).pathname;return request.method==="PUT"&&path.includes("/epilogue/")&&!path.includes("/flows/");}
+function isWatershedPut(request:Request){const path=new URL(request.url).pathname;return request.method==="PUT"&&path.includes("/epilogue/")&&!path.includes("/flows/");}
 const flowKey=(flow:string,vp:bigint)=>`flows/0x${Buffer.from(flow).toString("hex")}/${epilogueKey(vp)}`;
 async function flowBlob(bucket:string,flow:string,viewpoint:bigint):Promise<Uint8Array|null>{
   try{
@@ -165,7 +165,7 @@ async function eventually<T>(read:()=>Promise<T>,done:(value:T)=>boolean):Promis
   while(Date.now()<deadline){try{const value=await read();if(done(value))return value;last=value;}catch(error){last=error;}await Bun.sleep(10);}
   throw new Error(`condition not reached: ${JSON.stringify(last)}; ${artifacts}`);
 }
-async function basinBackup(bucket:string){
+async function watershedBackup(bucket:string){
   const list=await s3.send(new ListObjectsV2Command({Bucket:bucket,Prefix:"epilogue/",MaxKeys:1}));
   const key=list.Contents?.[0]?.Key;if(!key)return null;
   const response=await s3.send(new GetObjectCommand({Bucket:bucket,Key:key}));
@@ -183,7 +183,7 @@ try {
   });
   await ready(fs,async()=>{await s3.send(new CreateBucketCommand({Bucket:"readiness"}));});
   const b = await bucket();
-  // Flow Epilogue contents must never become a source of Basin state.
+  // Flow Epilogue contents must never become a source of Watershed state.
   await s3.send(new PutObjectCommand({Bucket:b,Key:"flows/unrelated/epilogue/0",Body:bytes("legacy, not a Timeline")}));
   const trace: {method:string;url:URL}[] = [];
   const traced = relay((r,response)=>{ trace.push({method:r.method,url:new URL(r.url)}); return response; });
@@ -313,7 +313,7 @@ try {
   assert.equal(startup.filter(r=>r.method==="GET"&&r.url.searchParams.get("prefix")==="timeline/").length,1);
   assert.equal(startup.filter(r=>r.method==="GET"&&r.url.pathname.includes("/timeline/")).length,eventCount,"replay the entire Timeline");
   for(const [flow,v] of replayed) assert.deepEqual(await epilogueStatus(writer.url,flow),{latest:{viewpoint:v}});
-  assert(trace.some(r=>r.url.searchParams.get("prefix")==="epilogue/"),"read the Basin recovery anchor before writing");
+  assert(trace.some(r=>r.url.searchParams.get("prefix")==="epilogue/"),"read the Watershed recovery anchor before writing");
   await accepted(writer.url,flowA,bytes("after recovery"),2n);
   await stop(writer.process);await stop(observer.process);
   console.log(`put of success: ${total} markers across ${eventCount} gapless Milestones; independent TS WAL ingestion, full replay, and minimum-key seed search`);
@@ -577,13 +577,13 @@ try {
   await status(await commit(recovered.url,"f",a,1n),201);
   await stop(recovered.process);
   console.log("put of success: JS-to-Rust replay, malformed-event rejection, and ambiguous Timeline PUT recovery without retries");
-  // A delayed Basin upload retains an exact old image while primary writes keep succeeding.
+  // A delayed Watershed upload retains an exact old image while primary writes keep succeeding.
   {
     const b=await bucket(), gate=Promise.withResolvers<void>(), entered=Promise.withResolvers<void>();
     const submitted:{milestone:bigint;blob:Uint8Array;metadata:Record<string,string>}[]=[];
     let active=0,peak=0;
-    const proxy=relay((request,response)=>{if(isBasinPut(request)){active--;}return response;},async request=>{
-      if(!isBasinPut(request))return;
+    const proxy=relay((request,response)=>{if(isWatershedPut(request)){active--;}return response;},async request=>{
+      if(!isWatershedPut(request))return;
       assert.equal(request.headers.get("if-none-match"),"*");active++;peak=Math.max(peak,active);
       const metadata=Object.fromEntries([...request.headers].filter(([name])=>name.startsWith("x-amz-meta-")).map(([name,value])=>[name.slice(11),value]));
       submitted.push({milestone:BigInt(metadata.milestone),blob:new Uint8Array(await request.clone().arrayBuffer()),metadata});
@@ -593,14 +593,14 @@ try {
     const app=await server(b,proxy.url,{BASINSYNC_BACKUP_INTERVAL_MS:"10",BASINSYNC_BATCH_MAX:"1",BASINSYNC_BATCH_WAIT_MS:"0"});
     const flow="0/雪/../";
     await status(await commit(app.url,flow,a,0n),201);await timeout(entered.promise);
-    assert.equal((await basinBackup(b)),null,"no backup before its PUT completes");
+    assert.equal((await watershedBackup(b)),null,"no backup before its PUT completes");
     assert.deepEqual(await flowBlob(b,flow,0n),a);
     assert.deepEqual(await latestBlob((await fullStatus(app.url,flow)).latest!),a);
     for(let n=0;n<12;n++)await status(await commit(app.url,`growth-${n}-${"x".repeat(140)}`,bytes(`payload-${n}`),0n),201);
     await status(await commit(app.url,flow,bytes("next"),1n),201);
     assert.equal(active,1);assert.equal(submitted.length,1,"coalesce targets while an upload is blocked");
     gate.resolve();
-    const checkpoint=await eventually(()=>basinBackup(b),cp=>cp?.milestone===14n);
+    const checkpoint=await eventually(()=>watershedBackup(b),cp=>cp?.milestone===14n);
     assert(checkpoint);assert.equal(peak,1);
     assert.deepEqual(submitted.map(s=>s.milestone),[1n,14n]);
     let image:Uint8Array=new Uint8Array();
@@ -614,7 +614,7 @@ try {
     const inspected=await inspectImage(checkpoint.blob);
     assert.equal(inspected.milestone,"14");assert.equal(inspected.flows[flow],"1");
     assert.equal(checkpoint.metadata["turso-version"],"0.9.0-pre.1+032f5bb2c7e74107f7ef9b66d576312379000a88");
-    assert.equal(checkpoint.key,epilogueKey(1n),"Basin Viewpoints count backups independently of Milestones");
+    assert.equal(checkpoint.key,epilogueKey(1n),"Watershed Viewpoints count backups independently of Milestones");
     await stop(app.process);
     // Keep a suffix after the snapshot; restart must never GET the older prefix.
     assert.equal((await epilogueStatus(observer.url,flow)).latest?.viewpoint,1n,"an already running observer adopts the latest backup");
@@ -646,16 +646,16 @@ try {
   }
   console.log("put of success: pinned full-file backups, nonblocking coalesced uploads, exact TS WAL equivalence, snapshot-plus-suffix recovery, and corrupt-anchor rejection");
 
-  // Flow copies gate Basin backup, while requests and status remain independent.
+  // Flow copies gate Watershed backup, while requests and status remain independent.
   for(const fault of ["blocked","lost-flow-reply","lost-backup-reply","conflict"]){
     const b=await bucket(),gate=Promise.withResolvers<void>(),entered=Promise.withResolvers<void>();
     let copies=0,backups=0,lost=false;
     if(fault==="conflict")await s3.send(new PutObjectCommand({Bucket:b,Key:flowKey("copy",0n),Body:bytes("conflict")}));
     const proxy=relay(async(request,response)=>{
-      const lose=fault==="lost-flow-reply"&&request.method==="PUT"&&new URL(request.url).pathname.includes("/flows/")||fault==="lost-backup-reply"&&isBasinPut(request);
+      const lose=fault==="lost-flow-reply"&&request.method==="PUT"&&new URL(request.url).pathname.includes("/flows/")||fault==="lost-backup-reply"&&isWatershedPut(request);
       if(lose&&!lost){lost=true;await response.arrayBuffer();return new Response("reply lost",{status:503});}return response;
     },async request=>{
-      if(isBasinPut(request))backups++;
+      if(isWatershedPut(request))backups++;
       if(request.method==="PUT"&&new URL(request.url).pathname.includes("/flows/")){
         copies++;entered.resolve();if(fault==="blocked")await gate.promise;
       }
@@ -663,19 +663,19 @@ try {
     const app=await server(b,proxy.url,{BASINSYNC_BACKUP_INTERVAL_MS:"10",BASINSYNC_BATCH_MAX:"1",BASINSYNC_BATCH_WAIT_MS:"0"});
     await status(await commit(app.url,"copy",a,0n),201);await timeout(entered.promise);
     if(fault==="blocked"){
-      assert.equal(backups,0);assert.equal(await basinBackup(b),null);
+      assert.equal(backups,0);assert.equal(await watershedBackup(b),null);
       assert.equal(await flowBlob(b,"copy",0n),null);
       await status(await commit(app.url,"copy",bytes("second"),1n),201);
       app.process.kill("SIGKILL");await app.process.exited;gate.resolve();
       const restarted=await server(b,endpoint,{BASINSYNC_BACKUP_INTERVAL_MS:"10"});
-      await eventually(()=>basinBackup(b),cp=>cp?.milestone===2n);
+      await eventually(()=>watershedBackup(b),cp=>cp?.milestone===2n);
       assert.deepEqual(await flowBlob(b,"copy",0n),a);
       assert.deepEqual(await flowBlob(b,"copy",1n),bytes("second"));await stop(restarted.process);
     }else if(fault==="conflict"){
-      await Bun.sleep(80);assert.equal(backups,0);assert.equal(await basinBackup(b),null);
+      await Bun.sleep(80);assert.equal(backups,0);assert.equal(await watershedBackup(b),null);
       assert.equal((await epilogueStatus(app.url,"copy")).latest?.viewpoint,0n);assert.deepEqual(await latestBlob((await fullStatus(app.url,"copy")).latest!),a,"a conflicting stored marker must not replace latest contents");await stop(app.process);
     }else{
-      const checkpoint=await eventually(()=>basinBackup(b),cp=>cp?.milestone===1n);assert(checkpoint);
+      const checkpoint=await eventually(()=>watershedBackup(b),cp=>cp?.milestone===1n);assert(checkpoint);
       await Bun.sleep(50);assert.equal(checkpoint.key,epilogueKey(0n));assert.equal(copies,1);assert.equal(backups,1);
       await stop(app.process);
     }
@@ -699,7 +699,7 @@ try {
       }
       return response;
     },async request=>{
-      if(isBasinPut(request)){assert(finished>=16,"all markers precede the first backup");backups++;}
+      if(isWatershedPut(request)){assert(finished>=16,"all markers precede the first backup");backups++;}
       if(request.method==="PUT"&&new URL(request.url).pathname.includes("/flows/")){
         active++;peak=Math.max(peak,active);if(active===8)entered.resolve();await gate.promise;
       }
@@ -708,20 +708,20 @@ try {
     assert.equal(active,8);assert.equal(backups,0);
     await status(await commit(app.url,"foreground",a,0n),201);
     assert.equal(await flowBlob(b,"ordered-copy",0n),null);
-    gate.resolve();await eventually(()=>basinBackup(b),cp=>cp?.milestone===2n);
+    gate.resolve();await eventually(()=>watershedBackup(b),cp=>cp?.milestone===2n);
     assert.equal(peak,8);assert.equal(finished,17);assert.equal(ordered,3);await stop(app.process);
   }
   console.log("put of success: bounded independent Flow copies preserve per-Flow order and Milestone barriers without blocking requests");
 
-  // Backup workers race on Basin Viewpoints and adopt the winning immutable snapshot.
+  // Backup workers race on Watershed Viewpoints and adopt the winning immutable snapshot.
   {
     const b=await bucket(),source=await server(b);
     for(let i=0;i<3;i++)await status(await commit(source.url,"race-copy",bytes(String(i)),BigInt(i)),201);
     await stop(source.process);
     const gate=Promise.withResolvers<void>();let arrived=0;
-    const proxy=relay((_,response)=>response,async request=>{if(isBasinPut(request)){if(++arrived===2)gate.resolve();await gate.promise;}});
+    const proxy=relay((_,response)=>response,async request=>{if(isWatershedPut(request)){if(++arrived===2)gate.resolve();await gate.promise;}});
     const apps=await Promise.all([server(b,proxy.url,{BASINSYNC_BACKUP_INTERVAL_MS:"10"}),server(b,proxy.url,{BASINSYNC_BACKUP_INTERVAL_MS:"10"})]);
-    const checkpoint=await eventually(()=>basinBackup(b),cp=>cp?.milestone===3n);assert(checkpoint);await Bun.sleep(80);
+    const checkpoint=await eventually(()=>watershedBackup(b),cp=>cp?.milestone===3n);assert(checkpoint);await Bun.sleep(80);
     assert.equal(checkpoint.key,epilogueKey(0n));assert.equal(arrived,2);
     const objects=await s3.send(new ListObjectsV2Command({Bucket:b,Prefix:"epilogue/"}));assert.equal(objects.KeyCount,1);
     for(let n=0;n<3;n++)assert.deepEqual(await flowBlob(b,"race-copy",BigInt(n)),bytes(String(n)));
@@ -733,21 +733,21 @@ try {
     await status(await commit(source.url,"monotonic",a,0n),201);await stop(source.process);
     const low=Promise.withResolvers<void>(),high=Promise.withResolvers<void>(),lowEntered=Promise.withResolvers<void>(),highEntered=Promise.withResolvers<void>();
     const proxy=relay((_,response)=>response,async request=>{
-      if(!isBasinPut(request))return;
+      if(!isWatershedPut(request))return;
       const m=BigInt(request.headers.get("x-amz-meta-milestone")!);
       if(m===1n){lowEntered.resolve();await low.promise;}else{highEntered.resolve();await high.promise;}
     });
     const lowApp=await server(b,proxy.url,{BASINSYNC_BACKUP_INTERVAL_MS:"10"});await timeout(lowEntered.promise);
     const producer=await server(b);await status(await commit(producer.url,"monotonic",bytes("second"),1n),201);await stop(producer.process);
     const highApp=await server(b,proxy.url,{BASINSYNC_BACKUP_INTERVAL_MS:"10"});await timeout(highEntered.promise);
-    (winner===1n?low:high).resolve();await eventually(()=>basinBackup(b),cp=>cp?.milestone===winner);
+    (winner===1n?low:high).resolve();await eventually(()=>watershedBackup(b),cp=>cp?.milestone===winner);
     (winner===1n?high:low).resolve();
-    const checkpoint=await eventually(()=>basinBackup(b),cp=>cp?.milestone===2n);assert(checkpoint);await Bun.sleep(40);
+    const checkpoint=await eventually(()=>watershedBackup(b),cp=>cp?.milestone===2n);assert(checkpoint);await Bun.sleep(40);
     assert.equal(checkpoint.key,epilogueKey(winner===1n?1n:0n));
     const list=await s3.send(new ListObjectsV2Command({Bucket:b,Prefix:"epilogue/"}));assert.equal(list.KeyCount,winner===1n?2:1);
     await stop(lowApp.process);await stop(highApp.process);
   }
-  console.log("put of success: competing backup workers retain a gapless Basin Epilogue");
+  console.log("put of success: competing backup workers retain a gapless Watershed Epilogue");
   // Full database images cross the multipart threshold without weakening first-writer wins.
   {
     const b=await bucket();
@@ -761,14 +761,14 @@ try {
       return response;
     });
     const app=await server(b,proxy.url,{BASINSYNC_BACKUP_INTERVAL_MS:"10"});
-    const cp=await eventually(()=>basinBackup(b),cp=>cp?.milestone===1n);assert(cp);assert(cp.blob.length>8*1024*1024);await eventually(async()=>completed,n=>n===1);assert.equal(completed,1,JSON.stringify(operations));
+    const cp=await eventually(()=>watershedBackup(b),cp=>cp?.milestone===1n);assert(cp);assert(cp.blob.length>8*1024*1024);await eventually(async()=>completed,n=>n===1);assert.equal(completed,1,JSON.stringify(operations));
     assert.equal(cp.metadata.sha384,sha384(cp.blob));assert.equal((await inspectImage(cp.blob)).flows.large,"0");
     const upload=await s3.send(new CreateMultipartUploadCommand({Bucket:b,Key:cp.key}));
     try{
       const part=await s3.send(new UploadPartCommand({Bucket:b,Key:cp.key,UploadId:upload.UploadId!,PartNumber:1,Body:a}));
       await assert.rejects(()=>s3.send(new CompleteMultipartUploadCommand({Bucket:b,Key:cp.key,UploadId:upload.UploadId!,IfNoneMatch:"*",MultipartUpload:{Parts:[{PartNumber:1,ETag:part.ETag}]}})),(error:unknown)=>(error as {$metadata?:{httpStatusCode?:number}}).$metadata?.httpStatusCode===412);
     }finally{await s3.send(new AbortMultipartUploadCommand({Bucket:b,Key:cp.key,UploadId:upload.UploadId!}));}
-    assert.equal((await basinBackup(b))?.metadata.sha384,cp.metadata.sha384);
+    assert.equal((await watershedBackup(b))?.metadata.sha384,cp.metadata.sha384);
     await status(await commit(app.url,"large",bytes("suffix"),1n),201);await stop(app.process);
     const restored=await server(b);assert.equal((await epilogueStatus(restored.url,"large")).latest?.viewpoint,1n);await stop(restored.process);
   }
@@ -822,7 +822,7 @@ try {
     assert.equal(new URL(complete.latest!.url!).searchParams.get("X-Amz-SignedHeaders"),"host;if-match");
     const unguarded=await fetch(complete.latest!.url!);assert(unguarded.status>=400,"a missing signed condition must fail authentication");await unguarded.arrayBuffer();
     assert(!("url" in (await fullStatus(copying.url,"empty")).latest!));
-    const checkpoint=await eventually(()=>basinBackup(b),cp=>cp?.milestone===1n);assert(checkpoint);
+    const checkpoint=await eventually(()=>watershedBackup(b),cp=>cp?.milestone===1n);assert(checkpoint);
     const path=`${artifacts}/ranges-backup.turso`;writeFileSync(path,checkpoint.blob);
     for(const item of ranges){
       const inspect=spawn([`${root}/target/debug/examples/frame-fixture`,"--locate",path,item.flow,item.marker.viewpoint],{cwd:root,stdout:"pipe",stderr:"inherit"});
@@ -836,7 +836,7 @@ try {
   }
   console.log("put of success: signed blob-only Range capabilities, empty markers, downstream URL reuse, persistent locations, and snapshot-plus-suffix recovery");
   // Current observers need no LIST; a positive successor probe discovers the
-  // Basin anchor before replay. Flow marker selection never lists its Epilogue.
+  // Watershed anchor before replay. Flow marker selection never lists its Epilogue.
   {
     const b=await bucket(),reads:{method:string;url:URL}[]=[];
     const proxy=relay((request,response)=>{reads.push({method:request.method,url:new URL(request.url)});return response;});
@@ -847,7 +847,7 @@ try {
       const lists=reads.filter(r=>r.url.searchParams.has("list-type"));
       assert(!lists.some(r=>r.url.searchParams.get("prefix")?.startsWith("flows/")),"never list a Flow Epilogue");
       if(advanced){
-        assert(lists.some(r=>r.url.searchParams.get("prefix")==="epilogue/"),"discover the latest Basin anchor after a positive probe");
+        assert(lists.some(r=>r.url.searchParams.get("prefix")==="epilogue/"),"discover the latest Watershed anchor after a positive probe");
         assert.equal(reads[0].method,"HEAD");assert(reads[0].url.pathname.includes("/timeline/"));
       }else assert.equal(lists.length,0,"an absent successor avoids all LIST operations");
       return payload(state);
@@ -867,7 +867,7 @@ try {
     await status(await commit(writer.url,"known",bytes("fourth"),3n),201);
     await stop(writer.process);
     const copying=await server(b,endpoint,{BASINSYNC_BACKUP_INTERVAL_MS:"10"});
-    await eventually(()=>basinBackup(b),cp=>cp?.milestone===5n);
+    await eventually(()=>watershedBackup(b),cp=>cp?.milestone===5n);
     assert.deepEqual(await flowBlob(b,"known",3n),bytes("fourth"));
     const stored=(await checkedStatus("known",true)).latest!;
     assert.equal(stored.viewpoint,3n);assert.deepEqual(stored.headers,{"If-Match":"*"});
@@ -881,7 +881,7 @@ try {
     await stop(copying.process);await stop(observer.process);
   }
   console.log("put of success: latest-only status probes successors, discovers newer snapshots only when behind, and never lists Flow Epilogues");
-  // Probe freshness is Basin-wide; status cache hits never extend the window.
+  // Probe freshness is Watershed-wide; status cache hits never extend the window.
   {
     const b=await bucket(),reads:{method:string;url:URL}[]=[];
     const proxy=relay((request,response)=>{reads.push({method:request.method,url:new URL(request.url)});return response;});
@@ -900,7 +900,7 @@ try {
     assert.deepEqual(payload(stale),{latest:null});
     assert(stale.timelines.watershed.milestone<receipt.timelines.watershed.milestone,"a different instance exposes its older causal prefix");
     assert.deepEqual(payload(await fullStatus(observer.url,"another-flow")),{latest:null});
-    assert.equal(reads.length,0,"all Flows reuse the recent Basin check");
+    assert.equal(reads.length,0,"all Flows reuse the recent Watershed check");
     await Bun.sleep(1600);
     assert.deepEqual(payload(await fullStatus(observer.url,"external")),{latest:null});
     assert.equal(reads.length,0,"cache hits do not probe");
@@ -916,7 +916,7 @@ try {
     const localWrite=await commit(observer.url,"local",a,0n);
     assert.equal(parse<CommitResponse>(await localWrite.clone().text()).timelines.watershed.milestone,3n);
     await status(localWrite,201);
-    assert(reads.some(r=>r.url.searchParams.get("prefix")==="epilogue/"),"writes always discover the Basin anchor");
+    assert(reads.some(r=>r.url.searchParams.get("prefix")==="epilogue/"),"writes always discover the Watershed anchor");
     reads.length=0;
     const local=await fullStatus(observer.url,"local");
     assert.equal(local.timelines.watershed.milestone,3n);

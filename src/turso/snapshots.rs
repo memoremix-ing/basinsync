@@ -6,7 +6,7 @@ pub(super) use crate::turso::cow;
 use cow::Store;
 
 pub(super) fn cursor(conn: &Arc<Connection>) -> Result<String> {
-    let mut query = conn.prepare("SELECT milestone FROM basin WHERE id=1")?;
+    let mut query = conn.prepare("SELECT milestone FROM watershed WHERE id=1")?;
     ensure!(matches!(query.step()?, StepResult::Row), "missing cursor");
     let value = query.row().unwrap().get::<String>(0)?;
     ensure!(
@@ -34,7 +34,7 @@ fn rolling_read_transactions_keep_old_rows_and_probe_checkpoints() -> Result<()>
         let before = db.connect(ConnectOpts::new())?;
         before.execute("BEGIN CONCURRENT")?;
         assert_eq!(cursor(&before)?, "1");
-        writer.execute("UPDATE basin SET milestone='2' WHERE id=1")?;
+        writer.execute("UPDATE watershed SET milestone='2' WHERE id=1")?;
         assert_eq!(cursor(&before)?, "1");
         assert_eq!(cursor(&writer)?, "2");
         let mode = if passive {
@@ -80,7 +80,7 @@ fn cow_views_survive_primary_checkpoints_without_rebuild() -> Result<()> {
     let before = store.pin()?;
     let reader = before.connect()?;
     assert_eq!(cursor(&reader)?, "1");
-    primary.execute("UPDATE basin SET milestone='2' WHERE id=1; UPDATE items SET b=x'ff' WHERE id=1; DELETE FROM items WHERE id=2")?;
+    primary.execute("UPDATE watershed SET milestone='2' WHERE id=1; UPDATE items SET b=x'ff' WHERE id=1; DELETE FROM items WHERE id=2")?;
     primary.checkpoint(CheckpointMode::Truncate {
         upper_bound_inclusive: None,
     })?;
@@ -90,7 +90,7 @@ fn cow_views_survive_primary_checkpoints_without_rebuild() -> Result<()> {
     assert_eq!(cursor(&reader)?, "1");
     assert_eq!(cursor(&next)?, "2");
     primary.execute(
-        "UPDATE basin SET milestone='3' WHERE id=1; INSERT INTO items VALUES(3,zeroblob(160000))",
+        "UPDATE watershed SET milestone='3' WHERE id=1; INSERT INTO items VALUES(3,zeroblob(160000))",
     )?;
     primary.checkpoint(CheckpointMode::Truncate {
         upper_bound_inclusive: None,

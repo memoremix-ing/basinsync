@@ -1,4 +1,4 @@
-//! Reservoir object namespaces and durable Basin recovery anchors.
+//! Reservoir object namespaces and durable Watershed recovery anchors.
 use crate::{event, lexidecimal::Viewpoint, turso};
 use anyhow::{Context, Result, ensure};
 use axum::http::{HeaderMap, HeaderValue};
@@ -6,7 +6,7 @@ use num_bigint::BigUint;
 use s3::Bucket;
 use std::collections::HashMap;
 
-pub const BASIN_PREFIX: &str = "epilogue/";
+pub const WATERSHED_PREFIX: &str = "epilogue/";
 
 pub fn flow_prefix(flow: &str) -> String {
     // A reversible, path-safe encoding; no restrictions on leading zeroes or '/'.
@@ -17,7 +17,7 @@ pub fn flow_key(flow: &str, viewpoint: &Viewpoint) -> Result<String> {
     let key = format!(
         "{}{}",
         flow_prefix(flow),
-        viewpoint.key()?.strip_prefix(BASIN_PREFIX).unwrap()
+        viewpoint.key()?.strip_prefix(WATERSHED_PREFIX).unwrap()
     );
     ensure!(
         key.len() <= 1024,
@@ -44,7 +44,7 @@ pub async fn latest_key(bucket: &Bucket, prefix: &str) -> Result<Option<(String,
                 .key
                 .strip_prefix(prefix)
                 .context("invalid Epilogue key")?;
-            let viewpoint = Viewpoint::from_key(&format!("{BASIN_PREFIX}{suffix}"))?;
+            let viewpoint = Viewpoint::from_key(&format!("{WATERSHED_PREFIX}{suffix}"))?;
             Ok((object.key.clone(), viewpoint))
         })
         .transpose()
@@ -107,7 +107,7 @@ impl Checkpoint {
         }
         Ok(headers)
     }
-    pub async fn load(&self, bucket: &Bucket) -> Result<crate::timeline::Basin> {
+    pub async fn load(&self, bucket: &Bucket) -> Result<crate::timeline::Watershed> {
         let response = crate::object_read::if_present(bucket)?
             .get_object(self.viewpoint.key()?)
             .await?;
@@ -134,7 +134,7 @@ impl Checkpoint {
             database.milestone()? == self.milestone.to_string(),
             "backup database Milestone mismatch"
         );
-        Ok(crate::timeline::Basin {
+        Ok(crate::timeline::Watershed {
             milestone: self.milestone.clone(),
             head: Some(self.digest.clone()),
             database: Some(database),
@@ -144,7 +144,7 @@ impl Checkpoint {
 }
 
 pub async fn latest_checkpoint(bucket: &Bucket) -> Result<Option<Checkpoint>> {
-    let Some((key, viewpoint)) = latest_key(bucket, BASIN_PREFIX).await? else {
+    let Some((key, viewpoint)) = latest_key(bucket, WATERSHED_PREFIX).await? else {
         return Ok(None);
     };
     let (head, status) = crate::object_read::if_present(bucket)?
@@ -221,7 +221,7 @@ mod tests {
         let mut keys = std::collections::BTreeSet::new();
         for flow in ids {
             let key = flow_key(flow, &vp)?;
-            assert!(!key.starts_with(BASIN_PREFIX));
+            assert!(!key.starts_with(WATERSHED_PREFIX));
             assert!(keys.insert(key));
         }
         assert!(flow_key(&"x".repeat(600), &vp).is_err());

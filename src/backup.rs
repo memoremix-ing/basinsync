@@ -1,4 +1,4 @@
-//! A coalescing background consumer: replicate Flow markers before backing up a Basin.
+//! A coalescing background consumer: replicate Flow markers before backing up a Watershed.
 use crate::{diffuse16, epilogue, event, lexidecimal::Viewpoint, timeline::Snapshot, turso};
 use anyhow::{Context, Result, ensure};
 use num_bigint::BigUint;
@@ -94,7 +94,7 @@ pub async fn publish(bucket: &Bucket, snapshot: &Snapshot) -> Result<()> {
         .with_max_concurrent_chunks(1)
         .execute_stream(&mut reader)
         .await?;
-    tracing::info!(viewpoint=%checkpoint.viewpoint.decimal(), milestone=%checkpoint.milestone, "Basin backup published");
+    tracing::info!(viewpoint=%checkpoint.viewpoint.decimal(), milestone=%checkpoint.milestone, "Watershed backup published");
     Ok(())
 }
 
@@ -111,7 +111,7 @@ pub async fn run(
         if let Some(snapshot) = target.filter(|s| s.prefix.milestone() > &completed) {
             match publish(&bucket, &snapshot).await {
                 Ok(()) => completed = snapshot.prefix.milestone().clone(),
-                Err(error) => tracing::warn!(%error, "Basin backup will retry"),
+                Err(error) => tracing::warn!(%error, "Watershed backup will retry"),
             }
         }
         // Drop retained generations once the pipeline closes. A crash recovers from S3.

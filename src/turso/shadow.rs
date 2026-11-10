@@ -266,7 +266,7 @@ impl RedbCache {
             }
             let mut query = source
                 .conn
-                .prepare("SELECT milestone FROM basin WHERE id=1")?;
+                .prepare("SELECT milestone FROM watershed WHERE id=1")?;
             ensure!(
                 matches!(query.step()?, StepResult::Row),
                 "missing initial cursor"
@@ -477,7 +477,7 @@ impl Shadow {
         let mut query = self
             .native
             .conn
-            .prepare("SELECT milestone FROM basin WHERE id=1")?;
+            .prepare("SELECT milestone FROM watershed WHERE id=1")?;
         ensure!(
             matches!(query.step()?, StepResult::Row)
                 && query.row().unwrap().get::<String>(0)? == self.cursor.to_string(),
@@ -499,7 +499,7 @@ fn vfs_capture_sees_checkpoint_not_each_mvcc_commit() -> Result<()> {
     let before = fs::read(&path)?;
     for milestone in ["1", "2"] {
         writer.state.native.conn.execute(format!(
-            "UPDATE basin SET milestone='{milestone}' WHERE id=1"
+            "UPDATE watershed SET milestone='{milestone}' WHERE id=1"
         ))?;
         let recorder = writer.recorder.lock().unwrap();
         assert!(recorder.current.is_empty() && recorder.segments.is_empty());
@@ -569,7 +569,7 @@ fn shadow_uses_sql_old_values_for_generic_rows() -> Result<()> {
         "INSERT INTO items VALUES(-9,'temporary',1.0,NULL); DELETE FROM items WHERE id=-9; UPDATE bag SET value=value;",
     ].iter().enumerate(){
         let base=writer.cursor.clone();let milestone=&base+1u8;
-        writer.state.native.conn.execute(format!("BEGIN CONCURRENT; {sql} UPDATE basin SET milestone='{milestone}'; COMMIT;"))?;
+        writer.state.native.conn.execute(format!("BEGIN CONCURRENT; {sql} UPDATE watershed SET milestone='{milestone}'; COMMIT;"))?;
         let delta=writer.capture(&base,None,milestone)?;
         let feed=shadow.apply(&delta)?;
         assert_eq!(consolidated(&feed)?,consolidated(&cache.apply(&delta)?)?);
@@ -1026,11 +1026,11 @@ fn verify_history(
     expected_final: &Path,
     has_feed: bool,
 ) -> Result<usize> {
-    let mut basin = crate::timeline::Basin::default();
-    basin.apply_entry(1u8.into(), seed)?;
-    let schema = tables(&basin.database.as_ref().unwrap().native)?;
+    let mut watershed = crate::timeline::Watershed::default();
+    watershed.apply_entry(1u8.into(), seed)?;
+    let schema = tables(&watershed.database.as_ref().unwrap().native)?;
     let mut integrated = consolidated(&snapshot(
-        &basin.database.as_ref().unwrap().native,
+        &watershed.database.as_ref().unwrap().native,
         &schema,
     )?)?;
     let mut n = 1;
@@ -1046,10 +1046,10 @@ fn verify_history(
             }
             integrated.retain(|_, weight| *weight != 0);
         }
-        basin.apply_entry(n.into(), &event::encode_wal(commands, delta)?)?;
-        basin.head = Some(event::digest(&bytes));
+        watershed.apply_entry(n.into(), &event::encode_wal(commands, delta)?)?;
+        watershed.head = Some(event::digest(&bytes));
     }
-    let state = basin.database.unwrap();
+    let state = watershed.database.unwrap();
     ensure!(
         state.image == fs::read(expected_final)?,
         "replayed file differs from primary"

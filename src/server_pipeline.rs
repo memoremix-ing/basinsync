@@ -154,14 +154,14 @@ impl Preparation {
             message = queue.recv() => Ok(message),
         }
     }
-    async fn refreshed(&mut self, before_write: bool) -> Result<timeline::Basin> {
+    async fn refreshed(&mut self, before_write: bool) -> Result<timeline::Watershed> {
         let (reply, complete) = oneshot::channel();
         self.output
             .send(Publication::Barrier(reply))
             .await
             .map_err(|_| anyhow::anyhow!("publication stopped"))?;
         let prefix = complete.await.context("publication barrier stopped")??;
-        let mut basin = self
+        let mut watershed = self
             .stager
             .take()
             .context("missing preparation state")?
@@ -169,26 +169,26 @@ impl Preparation {
         // Count freshness from before the IO, so a slow probe cannot extend it.
         let started = tokio::time::Instant::now();
         if before_write {
-            timeline::refresh(&self.bucket, &mut basin).await?;
+            timeline::refresh(&self.bucket, &mut watershed).await?;
             self.last_probe = Some(started);
         } else if self
             .last_probe
             .is_none_or(|last| started.duration_since(last) >= self.status_probe_max_age)
         {
-            timeline::refresh_if_advanced(&self.bucket, &mut basin).await?;
+            timeline::refresh_if_advanced(&self.bucket, &mut watershed).await?;
             self.last_probe = Some(started);
         }
         let (reply, complete) = oneshot::channel();
-        let snapshot = basin.snapshot()?;
+        let snapshot = watershed.snapshot()?;
         self.output
-            .send(Publication::Refresh(basin.prefix(), snapshot, reply))
+            .send(Publication::Refresh(watershed.prefix(), snapshot, reply))
             .await
             .map_err(|_| anyhow::anyhow!("publication stopped"))?;
         anyhow::ensure!(
-            complete.await.context("publication refresh stopped")?? == basin.prefix(),
+            complete.await.context("publication refresh stopped")?? == watershed.prefix(),
             "refresh acknowledgement mismatch"
         );
-        Ok(basin)
+        Ok(watershed)
     }
     async fn run(&mut self, queue: &mut mpsc::Receiver<Message>) -> Result<()> {
         let mut pending = None;
@@ -203,12 +203,12 @@ impl Preparation {
             };
             match message {
                 Message::Status { flow, reply } => {
-                    let basin = self.refreshed(false).await?;
-                    let latest = if let Some(viewpoint) = basin.latest(&flow)? {
-                        let mut location = basin.location(&flow, &viewpoint)?;
+                    let watershed = self.refreshed(false).await?;
+                    let latest = if let Some(viewpoint) = watershed.latest(&flow)? {
+                        let mut location = watershed.location(&flow, &viewpoint)?;
                         // Only retained image-delta fixtures lack an indexed location.
                         if location.is_none() {
-                            let mut milestone = basin.milestone.clone();
+                            let mut milestone = watershed.milestone.clone();
                             while milestone > 0u8.into() {
                                 let bytes = basinsync::object_read::if_present(&self.bucket)?
                                     .get_object(diffuse16::key(&milestone)?)
@@ -269,8 +269,8 @@ impl Preparation {
                     } else {
                         None
                     };
-                    let response = observed(Ok(EpilogueStatus { latest }), &basin.prefix());
-                    self.stager = Some(basin.into_stager());
+                    let response = observed(Ok(EpilogueStatus { latest }), &watershed.prefix());
+                    self.stager = Some(watershed.into_stager());
                     let _ = reply.send(response);
                 }
                 Message::Commit(first) => {
@@ -309,8 +309,8 @@ impl Preparation {
                     let settled =
                         self.stager.as_ref().unwrap().prefix() == *self.published.borrow();
                     if settled {
-                        let basin = self.refreshed(true).await?;
-                        self.stager = Some(basin.into_stager());
+                        let watershed = self.refreshed(true).await?;
+                        self.stager = Some(watershed.into_stager());
                     }
                     let stager = self.stager.take().context("missing preparation state")?;
                     let (stager, batch) =

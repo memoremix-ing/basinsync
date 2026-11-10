@@ -1,12 +1,10 @@
-[0002-basin-timeline-race]: <0002-basin-timeline-race.md>
+[0002-watershed-timeline-race]: <0002-watershed-timeline-race.md>
 [0003-commit-baseline]: <../benchmarks/0003-commit-baseline.md>
 [0003-disk-shadow]: <../benchmarks/0003-disk-shadow.md>
 [0003-s3-latency]: <../benchmarks/0003-s3-latency.md>
 [0003-snapshot-readers]: <../benchmarks/0003-snapshot-readers.md>
 [0003-wal-experiments]: <../benchmarks/0003-wal-experiments.md>
 [0003-zset-experiments]: <../benchmarks/0003-zset-experiments.md>
-[basin]: <../glossary/basin.md>
-[basin-timeline]: <../basin-timeline.md>
 [commit-marker]: <../glossary/commit-marker.md>
 [conditional-write]: <../glossary/conditional-write.md>
 [development]: <../development.md>
@@ -31,11 +29,13 @@
 [viewpoint]: <../glossary/viewpoint.md>
 [virtual-file-system]: <../glossary/virtual-file-system.md>
 [wal]: <../glossary/wal.md>
+[watershed]: <../glossary/watershed.md>
+[watershed-timeline]: <../watershed-timeline.md>
 [z-set]: <../glossary/z-set.md>
 
-# 0003 — Turso Basin VFS
+# 0003 — Turso Reservoir VFS
 
-Materialize the *Basin*[^][basin]'s *Timeline*[^][timeline] in *Turso*[^][turso]
+Materialize the *Watershed*[^][watershed]'s *Timeline*[^][timeline] in *Turso*[^][turso]
 with 16 KiB pages, *MVCC*[^][mvcc], and portable logical changes. Store the applied
 *Milestone*[^][milestone] and each *Flow*[^][flow]'s latest
 *Viewpoint*[^][viewpoint] as decimal text:
@@ -43,7 +43,7 @@ with 16 KiB pages, *MVCC*[^][mvcc], and portable logical changes. Store the appl
 ```sql
 PRAGMA page_size = 16384;
 PRAGMA journal_mode = mvcc;
-CREATE TABLE basin (
+CREATE TABLE watershed (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   milestone TEXT NOT NULL
 );
@@ -61,10 +61,10 @@ CREATE TABLE marker_ranges (
   PRIMARY KEY (flow, downstream)
 );
 CREATE INDEX marker_ranges_upstream ON marker_ranges(upstream);
-INSERT INTO basin VALUES (1, '0');
+INSERT INTO watershed VALUES (1, '0');
 ```
 
-Materialize *0002*[^][0002-basin-timeline-race]'s blob locations in `marker_ranges`
+Materialize *0002*[^][0002-watershed-timeline-race]'s blob locations in `marker_ranges`
 in the commit transaction. Its *upstream*[^][upstream] *Milestones*[^][milestone]
 and *downstream*[^][downstream] *Viewpoints*[^][viewpoint] use positive
 *Lexidecimal*[^][lexidecimal] text. Preserve locations for intermediate
@@ -106,7 +106,7 @@ Use the *frame contract*[^][turso-state] and version
 `0.9.0-pre.1+032f5bb2c7e74107f7ef9b66d576312379000a88`.
 One *DifferentialEvent*[^][differential-event] occupies one
 *Milestone*[^][milestone], regardless of request count. Increasing in-flight
-limits must preserve *causal publication order*[^][basin-timeline];
+limits must preserve *causal publication order*[^][watershed-timeline];
 acknowledge all successful requests only after their event's
 *conditional PUT*[^][conditional-write] succeeds. On failure or an ambiguous
 reply, reject queued work and terminate. Status requests wait behind outstanding
@@ -119,7 +119,7 @@ request data per batch. A larger individual request forms its own batch.
 admission and the queue remain bounded, with room for two full batches
 (64 requests at the default size).
 
-Recover the complete history as in *0002*[^][0002-basin-timeline-race], ingesting
+Recover the complete history as in *0002*[^][0002-watershed-timeline-race], ingesting
 *physical frames*[^][physical-frame] instead of rerunning commit SQL. Check
 versions, native framing, initial-image identity, predecessor linkage, and
 cursors; verify affected rows. Earlier image-delta entries remain readable, and
