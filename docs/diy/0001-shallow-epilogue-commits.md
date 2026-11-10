@@ -1,4 +1,5 @@
 [commit-marker]: <../glossary/commit-marker.md>
+[conditional-read]: <../glossary/conditional-read.md>
 [conditional-write]: <../glossary/conditional-write.md>
 [development]: <../development.md>
 [epilogue]: <../glossary/epilogue.md>
@@ -21,7 +22,8 @@ Start with an *Epilogue*[^][epilogue] of opaque blobs.
    terminate after write failure.
 3. Offer `GET /api/v0/epilogue/status`. Return `latest` with the committed
    *marker*[^][commit-marker]'s *viewpoint*[^][viewpoint], length, and presigned
-   GET URL with empty `headers`. For length zero, omit the URL and headers;
+   GET URL with *conditional read headers*[^][conditional-read]. For length zero,
+   omit the URL and headers;
    when empty, return `latest: null`.
    On *viewpoint*[^][viewpoint] mismatch, return the expected next
    *viewpoint*[^][viewpoint].

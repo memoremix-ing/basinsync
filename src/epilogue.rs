@@ -108,7 +108,9 @@ impl Checkpoint {
         Ok(headers)
     }
     pub async fn load(&self, bucket: &Bucket) -> Result<crate::timeline::Basin> {
-        let response = bucket.get_object(self.viewpoint.key()?).await?;
+        let response = crate::object_read::if_present(bucket)?
+            .get_object(self.viewpoint.key()?)
+            .await?;
         ensure!(
             response.status_code() == 200,
             "backup GET returned HTTP {}",
@@ -145,7 +147,9 @@ pub async fn latest_checkpoint(bucket: &Bucket) -> Result<Option<Checkpoint>> {
     let Some((key, viewpoint)) = latest_key(bucket, BASIN_PREFIX).await? else {
         return Ok(None);
     };
-    let (head, status) = bucket.head_object(key).await?;
+    let (head, status) = crate::object_read::if_present(bucket)?
+        .head_object(key)
+        .await?;
     ensure!(status == 200, "backup HEAD returned HTTP {status}");
     let headers = head
         .metadata
@@ -168,7 +172,9 @@ pub async fn replicate(bucket: &Bucket, flow: &str, marker: &event::Marker) -> R
         Ok(response) if (200..300).contains(&response.status_code()) => return Ok(()),
         // Resolve conflicts and ambiguous replies by verifying the immutable object.
         result => {
-            let existing = bucket.get_object(&key).await?;
+            let existing = crate::object_read::if_present(bucket)?
+                .get_object(&key)
+                .await?;
             ensure!(
                 existing.status_code() == 200,
                 "Flow replication failed: {result:?}"
@@ -188,7 +194,13 @@ pub async fn matches_marker(
     viewpoint: &Viewpoint,
     location: &turso::Location,
 ) -> Result<bool> {
-    let (head, status) = bucket.head_object(flow_key(flow, viewpoint)?).await?;
+    let (head, status) = crate::object_read::if_present(bucket)?
+        .head_object(flow_key(flow, viewpoint)?)
+        .await?;
+    ensure!(
+        matches!(status, 200 | 404 | 412),
+        "Flow HEAD returned HTTP {status}"
+    );
     Ok(status == 200
         && head.content_length.and_then(|n| u64::try_from(n).ok()) == Some(location.length)
         && head

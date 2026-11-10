@@ -2,6 +2,7 @@
 [basin-backup]: <basin-backup.md>
 [causal-consistency]: <glossary/causal-consistency.md>
 [commit-marker]: <glossary/commit-marker.md>
+[conditional-read]: <glossary/conditional-read.md>
 [conditional-write]: <glossary/conditional-write.md>
 [differential-event]: <glossary/differential-event.md>
 [diffuse16]: <glossary/diffuse16.md>
@@ -28,6 +29,7 @@ Without a *CommitMarker*[^][commit-marker], list a seed in the
 *Timeline*[^][timeline] keyspace and replay from the beginning.
 *Diffuse16*[^][diffuse16] key order does not reveal the latest.
 An empty *Timeline*[^][timeline] expects *Milestone*[^][milestone] one.
+Use *conditional reads*[^][conditional-read] for GETs and HEADs, including search probes.
 
 Commitflow tuples begin with `Symbol.species`, using the
 *FlexBuffers*[^][flexbuffers] extension encoding, and carry a `markers` map

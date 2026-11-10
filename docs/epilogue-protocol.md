@@ -1,6 +1,7 @@
 [basin-backup]: <basin-backup.md>
 [causal-consistency]: <glossary/causal-consistency.md>
 [commit-marker]: <glossary/commit-marker.md>
+[conditional-read]: <glossary/conditional-read.md>
 [differential-event]: <glossary/differential-event.md>
 [epilogue]: <glossary/epilogue.md>
 [json0]: <glossary/json0.md>
@@ -42,13 +43,14 @@ A *viewpoint*[^][viewpoint] mismatch returns HTTP 409:
 *CommitMarker*[^][commit-marker]:
 
 ```json
-{"latest":{"viewpoint":"0x1","length":10,"url":"<presigned GET>","headers":{"Range":"bytes=128-137"}},"timelines":{"watershed":{"milestone":"0x2"}}}
+{"latest":{"viewpoint":"0x1","length":10,"url":"<presigned GET>","headers":{"If-Match":"*","Range":"bytes=128-137"}},"timelines":{"watershed":{"milestone":"0x2"}}}
 ```
 
-For `latest`, send the returned `headers` with its URL. A
+For `latest`, send the returned `headers` with its URL, including the signed
+*conditional read*[^][conditional-read] header. A
 *Range GET*[^][range-get] must be cryptographically restricted to the expected
 *marker*[^][commit-marker] bytes. When the matching stored
-*marker*[^][commit-marker] supplies the URL, `headers` is `{}`. For zero length,
+*marker*[^][commit-marker] supplies the URL, `headers` is `{"If-Match":"*"}`. For zero length,
 omit `url` and `headers` and use empty bytes without fetching.
 
 With no committed *marker*[^][commit-marker], `latest` is `null`.

@@ -795,11 +795,13 @@ try {
     const current=(await fullStatus(app.url,"public")).latest!;
     assert.equal(current.viewpoint,1n);assert.equal(current.length,target.length);
     assert.equal(current.headers?.Range,`bytes=${range.offset}-${range.offset+range.length-1}`);
-    assert.equal(new URL(current.url!).searchParams.get("X-Amz-SignedHeaders"),"host;range");
+    assert.equal(new URL(current.url!).searchParams.get("X-Amz-SignedHeaders"),"host;if-match;range");
     assert.deepEqual(await latestBlob(current),target);
+    assert.equal(current.headers?.["If-Match"],"*");
     const direct=await fetch(current.url!,{headers:current.headers});assert.equal(direct.status,206);
     assert.equal(direct.headers.get("content-range"),`bytes ${range.offset}-${range.offset+range.length-1}/${stored.length}`);await direct.arrayBuffer();
-    for(const headers of [undefined,{Range:`bytes=0-${stored.length-1}`},{Range:`bytes=${range.offset}-${range.offset}`},{Range:`bytes=${range.offset}-${range.offset+range.length-1},0-7`}]){
+    const alteredHeaders:(Record<string,string>|undefined)[]=[undefined,{"If-Match":"*"},{Range:current.headers!.Range},{...current.headers,"If-Match":"\"different\""},{...current.headers,Range:`bytes=0-${stored.length-1}`},{...current.headers,Range:`bytes=${range.offset}-${range.offset}`},{...current.headers,Range:`bytes=${range.offset}-${range.offset+range.length-1},0-7`}];
+    for(const headers of alteredHeaders){
       const refused=await fetch(current.url!,{headers});assert(refused.status>=400,"an omitted, changed, or expanded Range must fail authentication");
       const body=await refused.text();assert(!body.includes("PRIVATE:"));
     }
@@ -814,9 +816,11 @@ try {
     assert.deepEqual(await latestBlob((await fullStatus(copying.url,"public")).latest!),target);
     gate.resolve();
     await eventually(()=>flowBlob(b,"public",1n),blob=>blob!==null);
-    const complete=await eventually(()=>fullStatus(copying.url,"public"),s=>!!s.latest?.url&&Object.keys(s.latest.headers??{}).length===0);
+    const complete=await eventually(()=>fullStatus(copying.url,"public"),s=>!!s.latest?.url&&!s.latest.headers?.Range);
     assert(new URL(complete.latest!.url!).pathname.endsWith(`/${flowKey("public",1n)}`));
-    assert.deepEqual(complete.latest!.headers,{});assert.deepEqual(await latestBlob(complete.latest!),target);
+    assert.deepEqual(complete.latest!.headers,{"If-Match":"*"});assert.deepEqual(await latestBlob(complete.latest!),target);
+    assert.equal(new URL(complete.latest!.url!).searchParams.get("X-Amz-SignedHeaders"),"host;if-match");
+    const unguarded=await fetch(complete.latest!.url!);assert(unguarded.status>=400,"a missing signed condition must fail authentication");await unguarded.arrayBuffer();
     assert(!("url" in (await fullStatus(copying.url,"empty")).latest!));
     const checkpoint=await eventually(()=>basinBackup(b),cp=>cp?.milestone===1n);assert(checkpoint);
     const path=`${artifacts}/ranges-backup.turso`;writeFileSync(path,checkpoint.blob);
@@ -866,10 +870,10 @@ try {
     await eventually(()=>basinBackup(b),cp=>cp?.milestone===5n);
     assert.deepEqual(await flowBlob(b,"known",3n),bytes("fourth"));
     const stored=(await checkedStatus("known",true)).latest!;
-    assert.equal(stored.viewpoint,3n);assert.deepEqual(stored.headers,{});
+    assert.equal(stored.viewpoint,3n);assert.deepEqual(stored.headers,{"If-Match":"*"});
     assert(!reads.some(r=>r.method==="GET"&&r.url.pathname.includes("/timeline/")),"load the newer snapshot instead of replaying its prefix");
     assert.deepEqual(await latestBlob(stored),bytes("fourth"));
-    assert.deepEqual((await checkedStatus("known")).latest?.headers,{});
+    assert.deepEqual((await checkedStatus("known")).latest?.headers,{"If-Match":"*"});
     await status(await commit(copying.url,"known",bytes("suffix"),4n),201);
     const suffix=(await checkedStatus("known",true)).latest!;
     assert.equal(suffix.viewpoint,4n);assert.deepEqual(await latestBlob(suffix),bytes("suffix"));
@@ -928,6 +932,37 @@ try {
     await stop(writer.process);await stop(observer.process);
   }
   console.log("put of success: bounded probe freshness, causal-reverse detection across instances, and durable response positions for writes, status, and errors");
+  // Real conditional HEADs yield 304 for present keys. Exercise both missing-key
+  // responses, an endpoint ignoring conditions, and failures that must not look absent.
+  for(const mode of ["native","missing-412","ignored","denied","unavailable"]){
+    const b=await bucket();let present=0,absent=0;
+    const proxy=relay((request,response)=>{
+      const url=new URL(request.url),object=url.pathname.split("/").slice(2).join("/");
+      if(object&&["GET","HEAD"].includes(request.method))assert.equal(request.headers.get("if-match"),"*");
+      if(request.method!=="HEAD"||!object)return response;
+      const probe=url.pathname.includes("/timeline/");
+      if(probe){
+        assert.equal(request.headers.get("if-none-match"),"*");
+        if(mode==="denied")return new Response(null,{status:403});
+        if(mode==="unavailable")return new Response(null,{status:500});
+        if(response.status===304){present++;if(mode==="ignored")return new Response(null,{status:200});}
+      }
+      if(response.status===404){absent++;if(mode==="missing-412")return new Response(null,{status:412});}
+      return response;
+    });
+    const observer=await server(b,proxy.url);
+    const initial=await fetch(`${observer.url}/api/v0/epilogue/status?flow=conditional`);
+    if(mode==="denied"||mode==="unavailable"){
+      await status(initial,503);assert.equal(await timeout(observer.process.exited),1);continue;
+    }
+    await status(initial,200);
+    const writer=await server(b);await status(await commit(writer.url,"conditional",a,0n),201);
+    const found=await fullStatus(observer.url,"conditional");
+    assert.equal(found.latest?.viewpoint,0n);assert.deepEqual(await latestBlob(found.latest!),a);
+    assert(present>0&&absent>0,"exercise both branches of conditional existence search");
+    await stop(writer.process);await stop(observer.process);
+  }
+  console.log("put of success: conditional reads, 304/412/404 probe compatibility, and fail-closed authorization/service errors");
   console.log(`Integration passed. Logs: ${artifacts}`);
 } finally {
   await Promise.all(processes.map(stop));

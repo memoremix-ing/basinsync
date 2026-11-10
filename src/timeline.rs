@@ -452,18 +452,15 @@ where
 }
 
 pub async fn exists(bucket: &Bucket, milestone: &BigUint) -> Result<bool> {
-    let (_, status) = bucket.head_object(diffuse16::key(milestone)?).await?;
-    match status {
-        200 => Ok(true),
-        404 => Ok(false),
-        _ => anyhow::bail!("Timeline HEAD returned HTTP {status}"),
-    }
+    crate::object_read::exists(bucket, &diffuse16::key(milestone)?).await
 }
 
 async fn replay(bucket: &Bucket, state: &mut Basin, tail: BigUint) -> Result<()> {
     while state.milestone < tail {
         let milestone = &state.milestone + 1u8;
-        let response = bucket.get_object(diffuse16::key(&milestone)?).await?;
+        let response = crate::object_read::if_present(bucket)?
+            .get_object(diffuse16::key(&milestone)?)
+            .await?;
         ensure!(
             response.status_code() == 200,
             "Timeline GET at {milestone} returned HTTP {}",

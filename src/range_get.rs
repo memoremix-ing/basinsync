@@ -1,6 +1,6 @@
-//! Presigned GETs whose authentication binds the exact Range header.
+//! Presigned GETs binding If-Match and, for Timeline blobs, the exact Range.
 use anyhow::{Context, Result, ensure};
-use axum::http::HeaderMap;
+use axum::http::{HeaderMap, HeaderName};
 use hmac::Mac;
 use s3::{Bucket, signing};
 use std::collections::BTreeMap;
@@ -20,6 +20,28 @@ pub async fn presign(bucket: &Bucket, key: &str, offset: u64, length: u64) -> Re
         .checked_add(length - 1)
         .context("Range offset overflow")?;
     let range = format!("bytes={offset}-{end}");
+    signed_get(
+        bucket,
+        key,
+        BTreeMap::from([("If-Match".into(), "*".into()), ("Range".into(), range)]),
+    )
+    .await
+}
+
+pub async fn presign_whole(bucket: &Bucket, key: &str) -> Result<Access> {
+    signed_get(
+        bucket,
+        key,
+        BTreeMap::from([("If-Match".into(), "*".into())]),
+    )
+    .await
+}
+
+async fn signed_get(
+    bucket: &Bucket,
+    key: &str,
+    access_headers: BTreeMap<String, String>,
+) -> Result<Access> {
     // Preserve the SDK's endpoint/path/query encoding and credential refresh. Its
     // GET helper signs only Host, so re-sign through its public SigV4 primitives.
     let mut url = Url::parse(&bucket.presign_get(key, 300, None).await?)?;
@@ -41,18 +63,23 @@ pub async fn presign(bucket: &Bucket, key: &str, offset: u64, length: u64) -> Re
         format_description!("[year][month][day]T[hour][minute][second]Z"),
     )?
     .assume_utc();
-    url.query_pairs_mut()
-        .clear()
-        .extend_pairs(query.iter().filter(|(key, _)| {
-            key.as_str() != "X-Amz-Signature" && key.as_str() != "X-Amz-SignedHeaders"
-        }))
-        .append_pair("X-Amz-SignedHeaders", "host;range");
     let mut headers = HeaderMap::new();
     headers.insert(
         "host",
         url[Position::BeforeHost..Position::AfterPort].parse()?,
     );
-    headers.insert("range", range.parse()?);
+    for (name, value) in &access_headers {
+        headers.insert(HeaderName::from_bytes(name.as_bytes())?, value.parse()?);
+    }
+    let mut signed_headers: Vec<_> = headers.keys().map(|name| name.as_str()).collect();
+    signed_headers.sort_unstable();
+    let signed_headers = signed_headers.join(";");
+    url.query_pairs_mut()
+        .clear()
+        .extend_pairs(query.iter().filter(|(key, _)| {
+            key.as_str() != "X-Amz-Signature" && key.as_str() != "X-Amz-SignedHeaders"
+        }))
+        .append_pair("X-Amz-SignedHeaders", &signed_headers);
     let canonical = signing::canonical_request("GET", &url, &headers, "UNSIGNED-PAYLOAD")?;
     let region = bucket.region();
     let signing_key = signing::signing_key(
@@ -76,6 +103,6 @@ pub async fn presign(bucket: &Bucket, key: &str, offset: u64, length: u64) -> Re
         .append_pair("X-Amz-Signature", &signature);
     Ok(Access {
         url: url.into(),
-        headers: BTreeMap::from([("Range".into(), range)]),
+        headers: access_headers,
     })
 }

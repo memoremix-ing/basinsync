@@ -7,6 +7,7 @@ pub mod event;
 pub mod flexbuffer;
 pub mod json0;
 pub mod lexidecimal;
+pub mod object_read;
 pub mod range_get;
 pub mod timeline;
 

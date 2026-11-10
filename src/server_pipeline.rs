@@ -210,8 +210,9 @@ impl Preparation {
                         if location.is_none() {
                             let mut milestone = basin.milestone.clone();
                             while milestone > 0u8.into() {
-                                let bytes =
-                                    self.bucket.get_object(diffuse16::key(&milestone)?).await?;
+                                let bytes = basinsync::object_read::if_present(&self.bucket)?
+                                    .get_object(diffuse16::key(&milestone)?)
+                                    .await?;
                                 anyhow::ensure!(
                                     bytes.status_code() == 200,
                                     "missing historical marker event"
@@ -242,17 +243,13 @@ impl Preparation {
                         )
                         .await?
                         {
-                            Some(basinsync::range_get::Access {
-                                url: self
-                                    .bucket
-                                    .presign_get(
-                                        basinsync::epilogue::flow_key(&flow, &viewpoint)?,
-                                        300,
-                                        None,
-                                    )
-                                    .await?,
-                                headers: BTreeMap::new(),
-                            })
+                            Some(
+                                basinsync::range_get::presign_whole(
+                                    &self.bucket,
+                                    &basinsync::epilogue::flow_key(&flow, &viewpoint)?,
+                                )
+                                .await?,
+                            )
                         } else {
                             Some(
                                 basinsync::range_get::presign(

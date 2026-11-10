@@ -18,7 +18,9 @@ pub async fn publish(bucket: &Bucket, snapshot: &Snapshot) -> Result<()> {
     let mut parent = previous.as_ref().map(|cp| cp.digest.clone());
     while milestone < *snapshot.prefix.milestone() {
         let next = &milestone + 1u8;
-        let response = bucket.get_object(diffuse16::key(&next)?).await?;
+        let response = crate::object_read::if_present(bucket)?
+            .get_object(diffuse16::key(&next)?)
+            .await?;
         ensure!(
             response.status_code() == 200,
             "replication Timeline GET returned HTTP {}",
