@@ -2,12 +2,15 @@ import { createHash } from "node:crypto";
 import { parse, stringify } from "./json0";
 
 export type Position = { viewpoint: bigint };
+export type Timelines = { basin: { milestone: bigint } };
+export type ApiResponse<T> = T & { timelines: Timelines };
+export type CommitResponse = ApiResponse<Position>;
 export type LatestMarker = Position & { length: number; url?: string; headers?: Record<string,string> };
-export type EpilogueStatus = {
+export type EpilogueStatus = ApiResponse<{
   latest: LatestMarker | null;
-};
-export type ViewpointMismatch = { next: Position };
-export type ApiError = { error: string; message: string };
+}>;
+export type ViewpointMismatch = ApiResponse<{ next: Position }>;
+export type ApiError = ApiResponse<{ error: string; message: string }>;
 export async function parseResponse<T>(response: Response): Promise<T> {
   return parse<T>(await response.text());
 }

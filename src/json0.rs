@@ -23,6 +23,10 @@ pub fn serialize_viewpoint<S: Serializer>(
     serializer.serialize_str(&format!("0x{}", value.hexadecimal()))
 }
 
+pub fn serialize_biguint<S: Serializer>(value: &BigUint, serializer: S) -> Result<S::Ok, S::Error> {
+    serializer.serialize_str(&format!("0x{value:x}"))
+}
+
 pub fn deserialize_text<'de, D: Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
     let wire = String::deserialize(deserializer)?;
     if let Some(value) = wire.strip_prefix("00") {

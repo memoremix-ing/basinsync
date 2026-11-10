@@ -30,6 +30,7 @@ mod server_pipeline;
 struct App {
     queue: mpsc::Sender<Message>,
     admission: Arc<Semaphore>,
+    published: watch::Receiver<timeline::Prefix>,
 }
 
 type Shared = Arc<App>;
@@ -67,12 +68,70 @@ impl Failure {
         Self::new(StatusCode::BAD_REQUEST, "invalid_request", message)
     }
 }
-impl IntoResponse for Failure {
+#[derive(Clone, Serialize)]
+struct TimelinePosition {
+    #[serde(serialize_with = "basinsync::json0::serialize_biguint")]
+    milestone: num_bigint::BigUint,
+}
+
+#[derive(Clone, Serialize)]
+struct Timelines {
+    basin: TimelinePosition,
+}
+
+#[derive(Serialize)]
+struct ApiResponse<T> {
+    #[serde(flatten)]
+    body: T,
+    timelines: Timelines,
+}
+
+struct ApiFailure {
+    failure: Failure,
+    timelines: Timelines,
+}
+type ApiReply<T> = Result<ApiResponse<T>, ApiFailure>;
+
+fn observed<T>(result: Result<T, Failure>, prefix: &timeline::Prefix) -> ApiReply<T> {
+    let timelines = Timelines {
+        basin: TimelinePosition {
+            milestone: prefix.milestone().clone(),
+        },
+    };
+    match result {
+        Ok(body) => Ok(ApiResponse { body, timelines }),
+        Err(failure) => Err(ApiFailure { failure, timelines }),
+    }
+}
+
+impl IntoResponse for ApiFailure {
     fn into_response(self) -> Response {
-        match self {
-            Self::Error(status, body) => (status, Json(body)).into_response(),
-            Self::Mismatch(body) => (StatusCode::CONFLICT, Json(body)).into_response(),
+        let Self { failure, timelines } = self;
+        match failure {
+            Failure::Error(status, body) => {
+                (status, Json(ApiResponse { body, timelines })).into_response()
+            }
+            Failure::Mismatch(body) => {
+                (StatusCode::CONFLICT, Json(ApiResponse { body, timelines })).into_response()
+            }
         }
+    }
+}
+
+impl App {
+    fn respond<T: Serialize>(
+        &self,
+        status: StatusCode,
+        result: Result<ApiReply<T>, Failure>,
+    ) -> Response {
+        match result.unwrap_or_else(|failure| observed(Err(failure), &self.published.borrow())) {
+            Ok(body) => (status, Json(body)).into_response(),
+            Err(failure) => failure.into_response(),
+        }
+    }
+
+    fn failure(&self, failure: Failure) -> Response {
+        self.respond::<Position>(StatusCode::OK, Err(failure))
     }
 }
 
@@ -155,31 +214,35 @@ struct LatestMarker {
 async fn commit(
     State(app): State<Shared>,
     form: Result<Multipart, MultipartRejection>,
-) -> Result<impl IntoResponse, Failure> {
-    let form = form.map_err(|error| Failure::new(error.status(), "invalid_multipart", error))?;
-    let admission = app
-        .admission
-        .clone()
-        .acquire_owned()
-        .await
-        .map_err(|_| stopped())?;
-    let request = Commit::read(form).await?;
-    let (reply, result) = oneshot::channel();
-    let queued = tracing::enabled!(tracing::Level::DEBUG)
-        .then(|| (request.flow.clone(), request.viewpoint.decimal()));
-    app.queue
-        .send(Message::Commit(QueuedCommit {
-            request,
-            reply,
-            admission,
-        }))
-        .await
-        .map_err(|_| stopped())?;
-    if let Some((flow, viewpoint)) = queued {
-        tracing::debug!(%flow,%viewpoint,"commit queued");
+) -> Response {
+    let result = async {
+        let form =
+            form.map_err(|error| Failure::new(error.status(), "invalid_multipart", error))?;
+        let admission = app
+            .admission
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|_| stopped())?;
+        let request = Commit::read(form).await?;
+        let (reply, result) = oneshot::channel();
+        let queued = tracing::enabled!(tracing::Level::DEBUG)
+            .then(|| (request.flow.clone(), request.viewpoint.decimal()));
+        app.queue
+            .send(Message::Commit(QueuedCommit {
+                request,
+                reply,
+                admission,
+            }))
+            .await
+            .map_err(|_| stopped())?;
+        if let Some((flow, viewpoint)) = queued {
+            tracing::debug!(%flow,%viewpoint,"commit queued");
+        }
+        result.await.map_err(|_| stopped())
     }
-    let position = result.await.map_err(|_| stopped())??;
-    Ok((StatusCode::CREATED, Json(position)))
+    .await;
+    app.respond(StatusCode::CREATED, result)
 }
 
 fn stopped() -> Failure {
@@ -192,7 +255,7 @@ fn stopped() -> Failure {
 struct QueuedCommit {
     request: Commit,
     admission: OwnedSemaphorePermit,
-    reply: oneshot::Sender<Result<Position, Failure>>,
+    reply: oneshot::Sender<ApiReply<Position>>,
 }
 impl QueuedCommit {
     fn size(&self) -> usize {
@@ -206,17 +269,17 @@ enum Message {
     Commit(QueuedCommit),
     Status {
         flow: String,
-        reply: oneshot::Sender<Result<EpilogueStatus, Failure>>,
+        reply: oneshot::Sender<ApiReply<EpilogueStatus>>,
     },
 }
 impl Message {
-    fn reject(self) {
+    fn reject(self, prefix: &timeline::Prefix) {
         match self {
             Self::Commit(c) => {
-                let _ = c.reply.send(Err(stopped()));
+                let _ = c.reply.send(observed(Err(stopped()), prefix));
             }
             Self::Status { reply, .. } => {
-                let _ = reply.send(Err(stopped()));
+                let _ = reply.send(observed(Err(stopped()), prefix));
             }
         }
     }
@@ -238,20 +301,24 @@ struct FlowQuery {
 async fn epilogue_status(
     State(app): State<Shared>,
     query: Result<Query<FlowQuery>, QueryRejection>,
-) -> Result<Json<EpilogueStatus>, Failure> {
-    let Query(query) =
-        query.map_err(|error| Failure::new(error.status(), "invalid_query", error))?;
-    event::valid_flow(&query.flow).map_err(Failure::bad)?;
-    basinsync::epilogue::flow_key(&query.flow, &Viewpoint::zero()).map_err(Failure::bad)?;
-    let (reply, result) = oneshot::channel();
-    app.queue
-        .send(Message::Status {
-            flow: query.flow,
-            reply,
-        })
-        .await
-        .map_err(|_| stopped())?;
-    Ok(Json(result.await.map_err(|_| stopped())??))
+) -> Response {
+    let result = async {
+        let Query(query) =
+            query.map_err(|error| Failure::new(error.status(), "invalid_query", error))?;
+        event::valid_flow(&query.flow).map_err(Failure::bad)?;
+        basinsync::epilogue::flow_key(&query.flow, &Viewpoint::zero()).map_err(Failure::bad)?;
+        let (reply, result) = oneshot::channel();
+        app.queue
+            .send(Message::Status {
+                flow: query.flow,
+                reply,
+            })
+            .await
+            .map_err(|_| stopped())?;
+        result.await.map_err(|_| stopped())
+    }
+    .await;
+    app.respond(StatusCode::OK, result)
 }
 
 fn required(name: &str) -> Result<String> {
@@ -287,6 +354,7 @@ async fn main() -> Result<()> {
     let state = timeline::recover(&bucket)
         .await
         .context("recover Basin Timeline")?;
+    let (published, published_rx) = watch::channel(state.prefix());
     let next = &state.milestone + 1u8;
     diffuse16::key(&next)?;
     let (fatal_tx, mut fatal_rx) = watch::channel(false);
@@ -319,7 +387,7 @@ async fn main() -> Result<()> {
                 .parse()?,
         ),
     };
-    let job = tokio::spawn(worker.run(receiver));
+    let job = tokio::spawn(worker.run(receiver, published));
     tokio::spawn(async move {
         match job.await {
             Ok(Ok(())) => {}
@@ -332,17 +400,24 @@ async fn main() -> Result<()> {
     let app = Arc::new(App {
         queue,
         admission: Arc::new(Semaphore::new(capacity)),
+        published: published_rx,
     });
     let api = Router::new()
         .route("/epilogue", put(commit))
         .route("/epilogue/status", get(epilogue_status))
-        .fallback(|| async { Failure::new(StatusCode::NOT_FOUND, "not_found", "route not found") })
-        .method_not_allowed_fallback(|| async {
-            Failure::new(
+        .fallback(|State(app): State<Shared>| async move {
+            app.failure(Failure::new(
+                StatusCode::NOT_FOUND,
+                "not_found",
+                "route not found",
+            ))
+        })
+        .method_not_allowed_fallback(|State(app): State<Shared>| async move {
+            app.failure(Failure::new(
                 StatusCode::METHOD_NOT_ALLOWED,
                 "method_not_allowed",
                 "method not allowed",
-            )
+            ))
         });
     let router = Router::new()
         .nest("/api/v0", api)
@@ -380,26 +455,44 @@ mod tests {
     #[test]
     fn responses_use_json0_bigints_and_escape_literal_strings() {
         let viewpoint = Viewpoint::parse("340282366920938463463374607431768211456").unwrap();
-        let status = EpilogueStatus {
-            latest: Some(LatestMarker {
-                viewpoint,
-                length: 0,
-                access: None,
+        let prefix = timeline::Basin {
+            milestone: "340282366920938463463374607431768211457".parse().unwrap(),
+            ..Default::default()
+        }
+        .prefix();
+        let status = observed(
+            Ok(EpilogueStatus {
+                latest: Some(LatestMarker {
+                    viewpoint,
+                    length: 0,
+                    access: None,
+                }),
             }),
-        };
+            &prefix,
+        )
+        .ok()
+        .unwrap();
         assert_eq!(
             serde_json::to_value(status).unwrap(),
             serde_json::json!({
                 "latest": {"viewpoint": "0x100000000000000000000000000000000", "length": 0},
+                "timelines": {"basin": {"milestone": "0x100000000000000000000000000000001"}},
             })
         );
         assert_eq!(
-            serde_json::to_value(ApiError {
-                error: "0x_literal",
-                message: "0$message".into(),
-            })
+            serde_json::to_value(
+                observed(
+                    Ok(ApiError {
+                        error: "0x_literal",
+                        message: "0$message".into(),
+                    }),
+                    &prefix
+                )
+                .ok()
+                .unwrap()
+            )
             .unwrap(),
-            serde_json::json!({"error": "00x_literal", "message": "00$message"})
+            serde_json::json!({"error": "00x_literal", "message": "00$message", "timelines": {"basin": {"milestone": "0x100000000000000000000000000000001"}}})
         );
     }
 }

@@ -2,7 +2,7 @@ use super::*;
 use std::collections::BTreeMap;
 
 struct Reply {
-    channel: oneshot::Sender<Result<Position, Failure>>,
+    channel: oneshot::Sender<ApiReply<Position>>,
     result: Result<Position, Failure>,
     _admission: OwnedSemaphorePermit,
 }
@@ -13,14 +13,14 @@ struct Batch {
     _permit: OwnedSemaphorePermit,
 }
 impl Batch {
-    fn finish(self, published: bool) {
+    fn finish(self, published: bool, prefix: &timeline::Prefix) {
         for reply in self.replies {
             let result = if published {
                 reply.result
             } else {
                 Err(stopped())
             };
-            let _ = reply.channel.send(result);
+            let _ = reply.channel.send(observed(result, prefix));
         }
     }
 }
@@ -34,9 +34,9 @@ enum Publication {
     ),
 }
 impl Publication {
-    fn reject(self) {
+    fn reject(self, prefix: &timeline::Prefix) {
         match self {
-            Self::Batch(batch) => batch.finish(false),
+            Self::Batch(batch) => batch.finish(false, prefix),
             Self::Barrier(reply) | Self::Refresh(_, _, reply) => {
                 let _ = reply.send(Err(anyhow::anyhow!("publication stopped")));
             }
@@ -79,7 +79,7 @@ async fn publish(
             };
             let Some(message) = message else { return Ok(()); };
             if *halted.borrow() {
-                message.reject();
+                message.reject(&prefix);
                 bail!("preparation stopped");
             }
             match message {
@@ -89,7 +89,7 @@ async fn publish(
                         Some(prepared) => match prepared.publish(&bucket, &prefix).await {
                             Ok(next) => next,
                             Err(error) => {
-                                batch.finish(false);
+                                batch.finish(false, &prefix);
                                 return Err(error);
                             }
                         },
@@ -105,7 +105,7 @@ async fn publish(
                     if advanced {
                         tracing::info!(milestone=%prefix.milestone(), requests=batch.replies.iter().filter(|r|r.result.is_ok()).count(), "put of success");
                     }
-                    batch.finish(true);
+                    batch.finish(true, &prefix);
                 }
                 Publication::Barrier(reply) => {
                     let _ = reply.send(Ok(prefix.clone()));
@@ -127,7 +127,7 @@ async fn publish(
         stop.stop();
         queue.close();
         while let Ok(message) = queue.try_recv() {
-            message.reject();
+            message.reject(&prefix);
         }
     }
     result
@@ -272,8 +272,9 @@ impl Preparation {
                     } else {
                         None
                     };
+                    let response = observed(Ok(EpilogueStatus { latest }), &basin.prefix());
                     self.stager = Some(basin.into_stager());
-                    let _ = reply.send(Ok(EpilogueStatus { latest }));
+                    let _ = reply.send(response);
                 }
                 Message::Commit(first) => {
                     let permit = self
@@ -389,7 +390,11 @@ fn prepare(
 }
 
 impl Worker {
-    pub(super) async fn run(mut self, mut queue: mpsc::Receiver<Message>) -> Result<()> {
+    pub(super) async fn run(
+        mut self,
+        mut queue: mpsc::Receiver<Message>,
+        published: watch::Sender<timeline::Prefix>,
+    ) -> Result<()> {
         self.state.enable_vfs()?;
         let backups = if self.backup_interval.is_zero() {
             None
@@ -403,7 +408,7 @@ impl Worker {
             Some(targets)
         };
         let (output, receiver) = mpsc::channel(PIPELINE_BATCHES - 1);
-        let (published, published_rx) = watch::channel(self.state.prefix());
+        let published_rx = published.subscribe();
         let (signal, halted) = watch::channel(false);
         let batches = Arc::new(Semaphore::new(PIPELINE_BATCHES));
         let stop = Stop {
@@ -436,7 +441,7 @@ impl Worker {
             stop.stop();
             queue.close();
             while let Ok(message) = queue.try_recv() {
-                message.reject();
+                message.reject(&preparation.published.borrow());
             }
         }
         drop(preparation);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { commit, epilogueStatus, type Position } from "./client";
+import { commit, epilogueStatus, type CommitResponse } from "./client";
 import { parse } from "./json0";
 
 // Safe against other clients advancing the same server. An external winner may
@@ -23,7 +23,9 @@ export async function stress(url: string, flow: string, count = 1025, workers = 
         if (response.status === 409) { await response.arrayBuffer(); conflicts++; continue; }
         const body = await response.text();
         assert.equal(response.status, 201, body);
-        assert.deepEqual(parse<Position>(body), { viewpoint });
+        const receipt=parse<CommitResponse>(body);
+        assert.equal(receipt.viewpoint,viewpoint);
+        assert(typeof receipt.timelines.basin.milestone==="bigint"&&receipt.timelines.basin.milestone>0n);
         assert(!accepted.has(viewpoint), "duplicate successful viewpoint");
         accepted.set(viewpoint, blob);
         break;

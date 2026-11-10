@@ -6,7 +6,7 @@ import { spawn } from "bun";
 import { CreateBucketCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client, paginateListObjectsV2, CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand } from "@aws-sdk/client-s3";
 import { encode as flexEncode } from "flatbuffers/js/flexbuffers.js";
 import { toObject, encode as extensionEncode } from "./flexbuffer";
-import { commit, form, epilogueStatus as fullStatus, latestBlob, sha384, sha384Bytes, type ApiError, type Position, type ViewpointMismatch } from "./client";
+import { commit, form, epilogueStatus as fullStatus, latestBlob, sha384, sha384Bytes, type ApiError, type CommitResponse, type Timelines, type ViewpointMismatch } from "./client";
 import { parse, stringify } from "./json0";
 import { key, fromKey } from "./diffuse16";
 import { key as epilogueKey, encode as lex } from "./lexidecimal";
@@ -17,7 +17,11 @@ import { stress } from "./stress";
 
 // Cursor cases below assert positions; full capability
 // responses and their byte ranges are exercised separately.
-function positions(value:Awaited<ReturnType<typeof fullStatus>>){return {...value,latest:value.latest?{viewpoint:value.latest.viewpoint}:null};}
+function payload<T extends {timelines:Timelines}>(value:T){
+  assert(typeof value.timelines?.basin?.milestone==="bigint"&&value.timelines.basin.milestone>=0n,"every API response carries its durable Basin prefix");
+  const {timelines,...body}=value;return body;
+}
+function positions(value:Awaited<ReturnType<typeof fullStatus>>){return {...payload(value),latest:value.latest?{viewpoint:value.latest.viewpoint}:null};}
 async function epilogueStatus(...args:Parameters<typeof fullStatus>){return positions(await fullStatus(...args));}
 
 const root = resolve(import.meta.dir, "..");
@@ -116,7 +120,8 @@ async function status(r: Response, expected: number) {
   assert.equal(r.status,expected,body);
   if (new URL(r.url).pathname.startsWith("/api/v0/")) {
     assert.match(r.headers.get("content-type") ?? "", /^application\/json/);
-    const decoded = parse<ApiError | Position | ViewpointMismatch>(body);
+    const decoded = parse<ApiError | CommitResponse | ViewpointMismatch>(body);
+    payload(decoded);
     if (expected === 409) {
       assert("next" in decoded && typeof decoded.next.viewpoint === "bigint");
     } else if (expected >= 400) {
@@ -128,8 +133,9 @@ async function status(r: Response, expected: number) {
 async function mismatch(r: Response, next: bigint) {
   assert.equal(r.status,409);
   const body = await r.text();
-  assert.deepEqual(JSON.parse(body),{next:{viewpoint:`0x${next.toString(16)}`}});
-  assert.deepEqual(parse<ViewpointMismatch>(body),{next:{viewpoint:next}});
+  const response=parse<ViewpointMismatch>(body);
+  assert.deepEqual(JSON.parse(body),{next:{viewpoint:`0x${next.toString(16)}`},timelines:{basin:{milestone:`0x${response.timelines.basin.milestone.toString(16)}`}}});
+  assert.deepEqual(payload(response),{next:{viewpoint:next}});
 }
 async function get(bucket: string, milestone: bigint) {
   const r = await s3.send(new GetObjectCommand({Bucket:bucket,Key:key(milestone)}));
@@ -240,7 +246,7 @@ try {
     const r = await commit(url,flow,blob,v);
     const body = await r.text();
     assert.equal(r.status,201,body);
-    assert.deepEqual(parse<Position>(body),{viewpoint:v});
+    assert.deepEqual(payload(parse<CommitResponse>(body)),{viewpoint:v});
     if(!receipts.has(flow))receipts.set(flow,new Map()); receipts.get(flow)!.set(v,blob);
   }
   await accepted(writer.url,flowA,a,0n);
@@ -366,7 +372,11 @@ try {
     await Bun.sleep(30);assert.equal(completed,0);assert.equal(statusFinished,false);
     gate.resolve();
     const results=await Promise.all(requests);
-    for(let i=0;i<results.length;i++)await status(results[i],fail?503:201);
+    for(let i=0;i<results.length;i++){
+      const receipt=parse<CommitResponse|ApiError>(await results[i].clone().text());
+      assert.equal(receipt.timelines.basin.milestone,fail?0n:(i<4?1n:2n),"stamp each batch only after its own publication");
+      await status(results[i],fail?503:201);
+    }
     assert.equal(peak,1,"Timeline uploads remain ordered");
     const stored=await get(batchBucket,1n),entries=entriesAt(stored);
     assert.deepEqual(entries.map(e=>e.marker.viewpoint),["0","1","2","3"]);
@@ -415,7 +425,11 @@ try {
     await assert.rejects(()=>get(pipelineBucket,2n));
     gate.resolve();
     const results=await Promise.all(requests);
-    for(const result of results)await status(result,fault==="none"?201:503);
+    for(let i=0;i<results.length;i++){
+      const receipt=parse<CommitResponse|ApiError>(await results[i].clone().text());
+      assert.equal(receipt.timelines.basin.milestone,fault==="none"?BigInt(i+1):0n,"never report a speculative or uncertain batch as durable");
+      await status(results[i],fault==="none"?201:503);
+    }
     assert.equal(peak,1,"only one conditional publication may be active");
     if(fault==="none"){
       assert.deepEqual(positions(parse(await (await latest).text())),{latest:{viewpoint:2n}});assert.equal(puts,3);
@@ -832,7 +846,7 @@ try {
         assert(lists.some(r=>r.url.searchParams.get("prefix")==="epilogue/"),"discover the latest Basin anchor after a positive probe");
         assert.equal(reads[0].method,"HEAD");assert(reads[0].url.pathname.includes("/timeline/"));
       }else assert.equal(lists.length,0,"an absent successor avoids all LIST operations");
-      return state;
+      return payload(state);
     }
     assert.deepEqual(await checkedStatus("absent"),{latest:null});
     const writer=await server(b);
@@ -871,32 +885,49 @@ try {
     const writer=await server(b);
     function probes(){return reads.filter(r=>r.method==="HEAD"&&r.url.pathname.includes("/timeline/"));}
     reads.length=0;
-    assert.deepEqual(await fullStatus(observer.url,"external"),{latest:null});
+    const initial=await fullStatus(observer.url,"external");
+    assert.equal(initial.timelines.basin.milestone,0n);assert.deepEqual(payload(initial),{latest:null});
     assert.equal(probes().length,1,"first status probes immediately");
-    await status(await commit(writer.url,"external",a,0n),201);
+    const written=await commit(writer.url,"external",a,0n);
+    const receipt=parse<CommitResponse>(await written.clone().text());
+    assert.equal(receipt.timelines.basin.milestone,1n);await status(written,201);
     reads.length=0;
-    assert.deepEqual(await fullStatus(observer.url,"external"),{latest:null});
-    assert.deepEqual(await fullStatus(observer.url,"another-flow"),{latest:null});
+    const stale=await fullStatus(observer.url,"external");
+    assert.deepEqual(payload(stale),{latest:null});
+    assert(stale.timelines.basin.milestone<receipt.timelines.basin.milestone,"a different instance exposes its older causal prefix");
+    assert.deepEqual(payload(await fullStatus(observer.url,"another-flow")),{latest:null});
     assert.equal(reads.length,0,"all Flows reuse the recent Basin check");
     await Bun.sleep(1600);
-    assert.deepEqual(await fullStatus(observer.url,"external"),{latest:null});
+    assert.deepEqual(payload(await fullStatus(observer.url,"external")),{latest:null});
     assert.equal(reads.length,0,"cache hits do not probe");
     await Bun.sleep(1600);
-    const caughtUp=(await fullStatus(observer.url,"external")).latest!;
+    const refreshed=await fullStatus(observer.url,"external");
+    assert.equal(refreshed.timelines.basin.milestone,1n);
+    const caughtUp=refreshed.latest!;
     assert.equal(caughtUp.viewpoint,0n);assert(probes().length>0,"expiry probes and refreshes despite intervening cache hits");
     assert.deepEqual(await latestBlob(caughtUp),a);
     await status(await commit(writer.url,"external",bytes("external next"),1n),201);
     // A write must refresh even while status would accept the old check.
     reads.length=0;
-    await status(await commit(observer.url,"local",a,0n),201);
+    const localWrite=await commit(observer.url,"local",a,0n);
+    assert.equal(parse<CommitResponse>(await localWrite.clone().text()).timelines.basin.milestone,3n);
+    await status(localWrite,201);
     assert(reads.some(r=>r.url.searchParams.get("prefix")==="epilogue/"),"writes always discover the Basin anchor");
     reads.length=0;
-    assert.equal((await fullStatus(observer.url,"local")).latest?.viewpoint,0n,"own acknowledged writes remain visible");
+    const local=await fullStatus(observer.url,"local");
+    assert.equal(local.timelines.basin.milestone,3n);
+    assert.equal(local.latest?.viewpoint,0n,"own acknowledged writes remain visible");
     assert.equal((await fullStatus(observer.url,"external")).latest?.viewpoint,1n,"write refresh also advances status state");
     assert.equal(probes().length,0,"a successful write refresh renews the check");
+    const conflict=await commit(observer.url,"local",a,0n);
+    assert.equal(parse<ViewpointMismatch>(await conflict.clone().text()).timelines.basin.milestone,3n);
+    await mismatch(conflict,1n);
+    const invalid=await fetch(`${observer.url}/api/v0/epilogue/status`);
+    assert.equal(parse<ApiError>(await invalid.clone().text()).timelines.basin.milestone,3n);
+    await status(invalid,400);
     await stop(writer.process);await stop(observer.process);
   }
-  console.log("put of success: bounded shared probe freshness, expiry, and fresh writes despite cached status checks");
+  console.log("put of success: bounded probe freshness, causal-reverse detection across instances, and durable response positions for writes, status, and errors");
   console.log(`Integration passed. Logs: ${artifacts}`);
 } finally {
   await Promise.all(processes.map(stop));
