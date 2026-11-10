@@ -3,6 +3,7 @@
 [0004-backup-overhead]: <../benchmarks/0004-backup-overhead.md>
 [basin]: <../glossary/basin.md>
 [basin-backup]: <../basin-backup.md>
+[basin-timeline]: <../basin-timeline.md>
 [commit-marker]: <../glossary/commit-marker.md>
 [conditional-write]: <../glossary/conditional-write.md>
 [development]: <../development.md>
@@ -57,8 +58,9 @@ Before writing the *Timeline*[^][timeline], read the latest
 all subsequent *DifferentialEvents*[^][differential-event]. Use that
 *Milestone*[^][milestone] as the exponential-search seed. With no backup, recover
 from the beginning. Preserve ordered publication across the two-batch pipeline.
-For status, probe the next *Milestone*[^][milestone] first; only discover a newer
-*Basin*[^][basin] backup and refresh when that successor exists.
+For status, honor the *probe freshness window*[^][basin-timeline]; when due,
+probe the next *Milestone*[^][milestone] first. Discover a newer
+*Basin*[^][basin] backup and refresh only when that successor exists.
 
 Test pinned-image equality against full frame replay, snapshot-plus-suffix
 recovery, delayed and multipart uploads, concurrent backup workers, interrupted copies, lost

@@ -142,6 +142,8 @@ struct Preparation {
     batches: Arc<Semaphore>,
     batch_max: usize,
     batch_wait: Duration,
+    status_probe_max_age: Duration,
+    last_probe: Option<tokio::time::Instant>,
 }
 impl Preparation {
     async fn next(&mut self, queue: &mut mpsc::Receiver<Message>) -> Result<Option<Message>> {
@@ -164,10 +166,17 @@ impl Preparation {
             .take()
             .context("missing preparation state")?
             .into_settled(&prefix)?;
+        // Count freshness from before the IO, so a slow probe cannot extend it.
+        let started = tokio::time::Instant::now();
         if before_write {
             timeline::refresh(&self.bucket, &mut basin).await?;
-        } else {
+            self.last_probe = Some(started);
+        } else if self
+            .last_probe
+            .is_none_or(|last| started.duration_since(last) >= self.status_probe_max_age)
+        {
             timeline::refresh_if_advanced(&self.bucket, &mut basin).await?;
+            self.last_probe = Some(started);
         }
         let (reply, complete) = oneshot::channel();
         let snapshot = basin.snapshot()?;
@@ -418,6 +427,8 @@ impl Worker {
             batches,
             batch_max: self.batch_max,
             batch_wait: self.batch_wait,
+            status_probe_max_age: self.status_probe_max_age,
+            last_probe: None,
         };
         let result = preparation.run(&mut queue).await;
         if let Err(error) = &result {

@@ -53,3 +53,8 @@ acknowledge a batch only after it and all predecessors are durable.
 `GET /api/v0/epilogue/status?flow=<id>` returns the *common status response*[^][epilogue-protocol].
 The `flow` query parameter is an ordinary URL-encoded string.
 Mismatches use the *common response*[^][epilogue-protocol].
+
+`BASINSYNC_STATUS_PROBE_MAX_AGE_MS` defaults to 3000; zero probes on every status
+request. Reuse a successful probe or refresh across *Flows*[^][flow] within that
+window, without extending it on cache hits. Status still waits for pending local
+uploads; writes always refresh independently of this allowance.

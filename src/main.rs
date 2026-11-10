@@ -227,6 +227,7 @@ struct Worker {
     batch_max: usize,
     batch_wait: Duration,
     backup_interval: Duration,
+    status_probe_max_age: Duration,
 }
 
 #[derive(Deserialize)]
@@ -310,6 +311,11 @@ async fn main() -> Result<()> {
         backup_interval: Duration::from_millis(
             env::var("BASINSYNC_BACKUP_INTERVAL_MS")
                 .unwrap_or_else(|_| "1000".into())
+                .parse()?,
+        ),
+        status_probe_max_age: Duration::from_millis(
+            env::var("BASINSYNC_STATUS_PROBE_MAX_AGE_MS")
+                .unwrap_or_else(|_| "3000".into())
                 .parse()?,
         ),
     };

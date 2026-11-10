@@ -70,7 +70,7 @@ function serverProcess(bucket: string, s3Endpoint: string, address: string, opti
   return launch([`${root}/target/debug/basinsync`],{
     S3_ENDPOINT:s3Endpoint,S3_BUCKET:bucket,AWS_REGION:"us-east-1",
     AWS_ACCESS_KEY_ID:credentials.accessKeyId,AWS_SECRET_ACCESS_KEY:credentials.secretAccessKey,
-    AWS_SESSION_TOKEN:"",BASINSYNC_LISTEN:address,BASINSYNC_BACKUP_INTERVAL_MS:"0",...options,
+    AWS_SESSION_TOKEN:"",BASINSYNC_LISTEN:address,BASINSYNC_BACKUP_INTERVAL_MS:"0",BASINSYNC_STATUS_PROBE_MAX_AGE_MS:"0",...options,
   });
 }
 async function server(bucket: string, s3Endpoint = endpoint, options:Record<string,string>={}) {
@@ -863,6 +863,40 @@ try {
     await stop(copying.process);await stop(observer.process);
   }
   console.log("put of success: latest-only status probes successors, discovers newer snapshots only when behind, and never lists Flow Epilogues");
+  // Probe freshness is Basin-wide; status cache hits never extend the window.
+  {
+    const b=await bucket(),reads:{method:string;url:URL}[]=[];
+    const proxy=relay((request,response)=>{reads.push({method:request.method,url:new URL(request.url)});return response;});
+    const observer=await server(b,proxy.url,{BASINSYNC_STATUS_PROBE_MAX_AGE_MS:"3000"});
+    const writer=await server(b);
+    function probes(){return reads.filter(r=>r.method==="HEAD"&&r.url.pathname.includes("/timeline/"));}
+    reads.length=0;
+    assert.deepEqual(await fullStatus(observer.url,"external"),{latest:null});
+    assert.equal(probes().length,1,"first status probes immediately");
+    await status(await commit(writer.url,"external",a,0n),201);
+    reads.length=0;
+    assert.deepEqual(await fullStatus(observer.url,"external"),{latest:null});
+    assert.deepEqual(await fullStatus(observer.url,"another-flow"),{latest:null});
+    assert.equal(reads.length,0,"all Flows reuse the recent Basin check");
+    await Bun.sleep(1600);
+    assert.deepEqual(await fullStatus(observer.url,"external"),{latest:null});
+    assert.equal(reads.length,0,"cache hits do not probe");
+    await Bun.sleep(1600);
+    const caughtUp=(await fullStatus(observer.url,"external")).latest!;
+    assert.equal(caughtUp.viewpoint,0n);assert(probes().length>0,"expiry probes and refreshes despite intervening cache hits");
+    assert.deepEqual(await latestBlob(caughtUp),a);
+    await status(await commit(writer.url,"external",bytes("external next"),1n),201);
+    // A write must refresh even while status would accept the old check.
+    reads.length=0;
+    await status(await commit(observer.url,"local",a,0n),201);
+    assert(reads.some(r=>r.url.searchParams.get("prefix")==="epilogue/"),"writes always discover the Basin anchor");
+    reads.length=0;
+    assert.equal((await fullStatus(observer.url,"local")).latest?.viewpoint,0n,"own acknowledged writes remain visible");
+    assert.equal((await fullStatus(observer.url,"external")).latest?.viewpoint,1n,"write refresh also advances status state");
+    assert.equal(probes().length,0,"a successful write refresh renews the check");
+    await stop(writer.process);await stop(observer.process);
+  }
+  console.log("put of success: bounded shared probe freshness, expiry, and fresh writes despite cached status checks");
   console.log(`Integration passed. Logs: ${artifacts}`);
 } finally {
   await Promise.all(processes.map(stop));

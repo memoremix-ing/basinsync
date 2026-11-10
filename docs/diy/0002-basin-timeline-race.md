@@ -36,8 +36,9 @@ and refresh.
 4. Refresh from subsequent *Timeline*[^][timeline] entries. In
    `GET /api/v0/epilogue/status?flow=<id>`, `latest` identifies the committed
    *marker*[^][commit-marker] and provides its *GET capability*[^][epilogue-protocol].
-   Probe the next *Milestone*[^][milestone] before refreshing; absence confirms
-   the materialized state is current.
+   When the *probe freshness window*[^][basin-timeline] expires, probe the next
+   *Milestone*[^][milestone] before refreshing; absence confirms the materialized
+   state is current.
 
 Start each *DifferentialEvent*[^][differential-event] with one
 *EnvBuf*[^][envbuf]-wrapped *FlexBuffers*[^][flexbuffers]
