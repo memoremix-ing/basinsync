@@ -315,6 +315,9 @@ impl Writer {
     pub fn latest(&self, flow: &str) -> Result<Option<Viewpoint>> {
         self.state.latest(flow)
     }
+    pub fn location(&self, flow: &str, viewpoint: &Viewpoint) -> Result<Option<super::Location>> {
+        self.state.location(flow, viewpoint)
+    }
     pub fn image(&self) -> Result<Vec<u8>> {
         self.state.native.image()
     }
@@ -326,6 +329,16 @@ impl Writer {
         base: &BigUint,
         parent: Option<&str>,
         commands: &[crate::event::FlowCommand],
+    ) -> Result<Delta> {
+        let chunks = crate::event::FlowChunks::new(commands)?;
+        self.prepare_with_ranges(base, parent, commands, chunks.ranges())
+    }
+    pub(crate) fn prepare_with_ranges(
+        &mut self,
+        base: &BigUint,
+        parent: Option<&str>,
+        commands: &[crate::event::FlowCommand],
+        ranges: &[crate::event::BlobRange],
     ) -> Result<Delta> {
         ensure!(&self.cursor == base, "unpublished database transaction");
         let mut positions: BTreeMap<&str, Viewpoint> = BTreeMap::new();
@@ -349,10 +362,11 @@ impl Writer {
             }
         }
         let milestone = base + 1u8;
-        State::transact_values(
+        State::transact_ranges(
             &self.state.native,
             &milestone.to_string(),
             values.into_iter(),
+            ranges,
         )?;
         self.capture(base, parent, milestone)
     }

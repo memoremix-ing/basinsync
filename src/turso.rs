@@ -24,7 +24,7 @@ pub mod cow;
 pub const ID: &str = "default.turso";
 pub const VERSION: &str = "0.9.0-pre.1+032f5bb2c7e74107f7ef9b66d576312379000a88";
 pub const PAGE_SIZE: usize = 16384;
-pub const SCHEMA: &str = "CREATE TABLE basin (id INTEGER PRIMARY KEY CHECK (id = 1), milestone TEXT NOT NULL); CREATE TABLE flows (flow TEXT PRIMARY KEY NOT NULL, viewpoint TEXT NOT NULL); INSERT INTO basin VALUES (1, '0');";
+pub const SCHEMA: &str = "CREATE TABLE basin (id INTEGER PRIMARY KEY CHECK (id = 1), milestone TEXT NOT NULL); CREATE TABLE flows (flow TEXT PRIMARY KEY NOT NULL, viewpoint TEXT NOT NULL); CREATE TABLE marker_ranges (flow TEXT NOT NULL, downstream TEXT NOT NULL, upstream TEXT NOT NULL, blob_offset INTEGER NOT NULL CHECK(blob_offset>=0), content_length INTEGER NOT NULL CHECK(content_length>=0), sha384 TEXT NOT NULL, PRIMARY KEY(flow, downstream)); CREATE INDEX marker_ranges_upstream ON marker_ranges(upstream); INSERT INTO basin VALUES (1, '0');";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Blob(#[serde(with = "serde_bytes")] pub Vec<u8>);
@@ -185,6 +185,14 @@ impl turso_core::mvcc::persistent_storage::DurableStorage for CapturedStorage {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Location {
+    pub upstream: num_bigint::BigUint,
+    pub offset: u64,
+    pub length: u64,
+    pub sha384: String,
+}
+
 pub struct State {
     native: Native,
     pub image: Vec<u8>,
@@ -256,14 +264,56 @@ impl State {
             NonZeroUsize::new(1).unwrap(),
             Value::build_text(flow.to_owned()),
         )?;
-        match query.step()? {
+        match ready_step(&*self.native.io, || query.step())? {
             StepResult::Row => {
                 let viewpoint = Viewpoint::parse(&query.row().unwrap().get::<String>(0)?)?;
-                ensure!(matches!(query.step()?, StepResult::Done), "duplicate Flow");
+                ensure!(
+                    matches!(
+                        ready_step(&*self.native.io, || query.step())?,
+                        StepResult::Done
+                    ),
+                    "duplicate Flow"
+                );
                 Ok(Some(viewpoint))
             }
             StepResult::Done => Ok(None),
             other => anyhow::bail!("unexpected in-memory query result: {other:?}"),
+        }
+    }
+
+    pub fn location(&self, flow: &str, viewpoint: &Viewpoint) -> Result<Option<Location>> {
+        let mut query = self.native.conn.prepare("SELECT upstream, blob_offset, content_length, sha384 FROM marker_ranges WHERE flow=?1 AND downstream=?2")?;
+        query.bind_at(
+            NonZeroUsize::new(1).unwrap(),
+            Value::build_text(flow.to_owned()),
+        )?;
+        query.bind_at(
+            NonZeroUsize::new(2).unwrap(),
+            Value::build_text(viewpoint.lexidecimal()),
+        )?;
+        match ready_step(&*self.native.io, || query.step())? {
+            StepResult::Done => Ok(None),
+            StepResult::Row => {
+                let row = query.row().unwrap();
+                let upstream = crate::lexidecimal::decode(&row.get::<String>(0)?)?
+                    .to_biguint()
+                    .ok_or_else(|| anyhow::anyhow!("negative upstream Milestone"))?;
+                let location = Location {
+                    upstream,
+                    offset: u64::try_from(row.get::<i64>(1)?)?,
+                    length: u64::try_from(row.get::<i64>(2)?)?,
+                    sha384: row.get(3)?,
+                };
+                ensure!(
+                    matches!(
+                        ready_step(&*self.native.io, || query.step())?,
+                        StepResult::Done
+                    ),
+                    "duplicate marker location"
+                );
+                Ok(Some(location))
+            }
+            other => anyhow::bail!("unexpected location query result: {other:?}"),
         }
     }
 
@@ -274,12 +324,18 @@ impl State {
             .query("SELECT milestone FROM basin WHERE id = 1")?
             .unwrap();
         ensure!(
-            matches!(query.step()?, StepResult::Row),
+            matches!(
+                ready_step(&*self.native.io, || query.step())?,
+                StepResult::Row
+            ),
             "missing Basin cursor"
         );
         let value = query.row().unwrap().get::<String>(0)?;
         ensure!(
-            matches!(query.step()?, StepResult::Done),
+            matches!(
+                ready_step(&*self.native.io, || query.step())?,
+                StepResult::Done
+            ),
             "duplicate Basin cursor"
         );
         Ok(value)
@@ -327,6 +383,15 @@ impl State {
         milestone: &str,
         values: impl IntoIterator<Item = (&'a str, &'a str)>,
     ) -> Result<()> {
+        Self::transact_ranges(native, milestone, values, &[])
+    }
+
+    fn transact_ranges<'a>(
+        native: &Native,
+        milestone: &str,
+        values: impl IntoIterator<Item = (&'a str, &'a str)>,
+        ranges: &[crate::event::BlobRange],
+    ) -> Result<()> {
         let conn = &native.conn;
         conn.set_portable_logical_changes_enabled(true);
         conn.execute("BEGIN CONCURRENT")?;
@@ -340,6 +405,27 @@ impl State {
                 NonZeroUsize::new(2).unwrap(),
                 Value::build_text(viewpoint.to_owned()),
             )?;
+            stmt.run_ignore_rows()?;
+        }
+        let upstream = crate::lexidecimal::encode(
+            &num_bigint::BigInt::parse_bytes(milestone.as_bytes(), 10)
+                .ok_or_else(|| anyhow::anyhow!("invalid Milestone"))?,
+        );
+        for range in ranges {
+            let mut stmt = conn.prepare("INSERT INTO marker_ranges(flow,downstream,upstream,blob_offset,content_length,sha384) VALUES(?1,?2,?3,?4,?5,?6)")?;
+            for (index, value) in [
+                Value::build_text(range.flow.clone()),
+                Value::build_text(range.viewpoint.lexidecimal()),
+                Value::build_text(upstream.clone()),
+                Value::from_i64(i64::try_from(range.offset)?),
+                Value::from_i64(i64::try_from(range.length)?),
+                Value::build_text(range.sha384.clone()),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                stmt.bind_at(NonZeroUsize::new(index + 1).unwrap(), value)?;
+            }
             stmt.run_ignore_rows()?;
         }
         let mut stmt = conn.prepare("UPDATE basin SET milestone = ?1 WHERE id = 1")?;
@@ -594,6 +680,17 @@ impl Native {
             &*self.io,
             &*self.io.open_file(&self.path, OpenFlags::default(), false)?,
         )
+    }
+}
+fn ready_step(
+    io: &dyn IO,
+    mut step: impl FnMut() -> turso_core::Result<StepResult>,
+) -> Result<StepResult> {
+    loop {
+        match step()? {
+            StepResult::IO => io.step()?,
+            result => return Ok(result),
+        }
     }
 }
 fn read_file(io: &dyn IO, file: &dyn File) -> Result<Vec<u8>> {

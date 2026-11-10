@@ -3,6 +3,7 @@
 [epilogue]: <glossary/epilogue.md>
 [json0]: <glossary/json0.md>
 [lexidecimal]: <glossary/lexidecimal.md>
+[range-get]: <glossary/range-get.md>
 [reservoir]: <glossary/reservoir.md>
 [sha384]: <glossary/sha384.md>
 [viewpoint]: <glossary/viewpoint.md>
@@ -29,11 +30,16 @@ A *viewpoint*[^][viewpoint] mismatch returns HTTP 409:
 
 `GET /api/v0/epilogue/status` reports the latest committed *viewpoint*[^][viewpoint]
 and the most recent *CommitMarker*[^][commit-marker] stored in the
-*Epilogue*[^][epilogue], with a presigned GET URL:
+*Epilogue*[^][epilogue]:
 
 ```json
-{"latest":{"viewpoint":"0x1"},"recent":{"viewpoint":"0x0","url":"<presigned GET>"}}
+{"latest":{"viewpoint":"0x1","length":10,"url":"<presigned GET>","headers":{"Range":"bytes=128-137"}},"recent":{"viewpoint":"0x0","url":"<presigned GET>"}}
 ```
 
-Either field is `null` when its corresponding value is absent; both are `null`
-when empty.
+For `latest`, send the returned `headers` with its URL. A
+*Range GET*[^][range-get] must be cryptographically restricted to the expected
+*marker*[^][commit-marker] bytes. When the matching stored
+*marker*[^][commit-marker] supplies the URL, `headers` is `{}`. For zero length,
+omit `url` and `headers` and use empty bytes without fetching.
+
+Either position is `null` when absent; both are `null` when empty.

@@ -125,6 +125,13 @@ fn wal_preserves_counters_above_machine_precision() -> Result<()> {
     let recovered = State::from_image(image)?;
     assert_eq!(recovered.milestone()?, next);
     assert_eq!(recovered.latest("f")?.unwrap().decimal(), next);
+    let location = recovered.location("f", &Viewpoint::parse(&next)?)?.unwrap();
+    assert_eq!(location.upstream, &huge + 1u8);
+    let bytes = event::encode_wal(inputs, delta)?;
+    assert_eq!(
+        &bytes[location.offset as usize..(location.offset + location.length) as usize],
+        &[0, 255, 128]
+    );
     Ok(())
 }
 

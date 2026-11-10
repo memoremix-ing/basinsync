@@ -6,7 +6,7 @@ a first-writer-wins Epilogue, a server, and TypeScript stress clients.
 
 [Run and verify](docs/development.md) · [Protocol and invariant](docs/epilogue-protocol.md)
 
-The current milestone is [0004 — Basin backup and recovery](docs/diy/0004-basin-backup-recovery.md):
-a file-backed copy-on-write VFS, background Flow replication and Basin snapshots,
-and recovery from the latest snapshot plus its Timeline suffix. The two-batch
-pipeline still acknowledges success after durable, ordered Timeline publication.
+The current milestone is [0005 — EnvBuf log formatting](docs/diy/0005-envbuf-log-formatting.md):
+append-only command envelopes, indexed marker locations, and signed byte-range
+GETs for latest markers awaiting Flow replication. The two-batch pipeline still
+acknowledges success after durable, ordered Timeline publication.

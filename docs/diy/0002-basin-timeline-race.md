@@ -1,3 +1,4 @@
+[0005-envbuf-log-formatting]: <0005-envbuf-log-formatting.md>
 [basin]: <../glossary/basin.md>
 [basin-timeline]: <../basin-timeline.md>
 [commit-marker]: <../glossary/commit-marker.md>
@@ -45,3 +46,6 @@ Use the *command and route contract*[^][basin-timeline] and
 *development checks*[^][development]. A separate thread will later copy
 *CommitMarkers*[^][commit-marker] from the *Timeline*[^][timeline] into
 *Flow*[^][flow] *Epilogues*[^][epilogue] and create recovery snapshots.
+
+Here `latest` contains only its *Viewpoint*[^][viewpoint]; retrieval capabilities
+are introduced in *0005*[^][0005-envbuf-log-formatting].

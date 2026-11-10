@@ -407,6 +407,22 @@ fn application_feed(
             1,
         );
     }
+    let ranges = schema.values().find(|t| t.name == "marker_ranges").unwrap();
+    let upstream = crate::lexidecimal::encode(&num_bigint::BigInt::from(&writer.cursor + 1u8));
+    for range in event::FlowChunks::new(commands)?.ranges() {
+        feed.add(
+            ranges,
+            vec![
+                Cell::Text(range.flow.clone()),
+                Cell::Text(range.viewpoint.lexidecimal()),
+                Cell::Text(upstream.clone()),
+                Cell::Integer(range.offset as i64),
+                Cell::Integer(range.length as i64),
+                Cell::Text(range.sha384.clone()),
+            ],
+            1,
+        );
+    }
     Ok(feed)
 }
 
@@ -568,44 +584,25 @@ struct Extra<'a, Z: Serialize> {
     zsets: Option<&'a Z>,
 }
 #[derive(Serialize)]
-#[serde(untagged)]
-enum Body<'a, Z: Serialize> {
-    Flow(&'a FlowCommand),
-    Ingest {
-        turso: BTreeMap<&'static str, Extra<'a, Z>>,
-    },
+struct IngestExtra<'a, Z: Serialize> {
+    turso: BTreeMap<&'static str, Extra<'a, Z>>,
 }
 fn encode<Z: Serialize>(
     commands: &[FlowCommand],
     delta: &Delta,
     feed: Option<&Z>,
 ) -> Result<Vec<u8>> {
-    let mut tuples = Vec::new();
-    for command in commands {
-        tuples.push((
-            b"#species".to_vec(),
-            event::NAMESPACE,
-            event::COMMIT_FLOW,
-            Body::Flow(command),
-        ));
-    }
-    tuples.push((
-        b"#species".to_vec(),
-        event::NAMESPACE,
-        event::INGEST_TURSO,
-        Body::Ingest {
-            turso: BTreeMap::from([(
-                ID,
-                Extra {
-                    version: &delta.version,
-                    logical: &delta.logical,
-                    physical: &delta.physical,
-                    zsets: feed,
-                },
-            )]),
-        },
-    ));
-    Ok(flexbuffers::to_vec(tuples)?)
+    event::FlowChunks::new(commands)?.finish_body(&IngestExtra {
+        turso: BTreeMap::from([(
+            ID,
+            Extra {
+                version: &delta.version,
+                logical: &delta.logical,
+                physical: &delta.physical,
+                zsets: feed,
+            },
+        )]),
+    })
 }
 
 fn seed(flows: usize, cdc: bool) -> Result<Vec<u8>> {
@@ -673,9 +670,9 @@ fn command_reads_and_hook_agree_for_repeated_flow_batches() -> Result<()> {
             consolidated(&snapshot(&writer.state.native, &schema)?)?
         );
         let bytes = encode(&commands, &delta, Some(&hook))?;
-        let feed = flexbuffers::Reader::get_root(bytes.as_slice())?
-            .get_vector()?
-            .index(commands.len())?
+        let manifest = crate::envbuf::before(&bytes, bytes.len())?;
+        let ingestion = crate::envbuf::before(&bytes, manifest.start)?;
+        let feed = flexbuffers::Reader::get_root(ingestion.content)?
             .get_vector()?
             .index(3)?
             .get_map()?

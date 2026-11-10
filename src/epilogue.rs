@@ -182,6 +182,23 @@ pub async fn replicate(bucket: &Bucket, flow: &str, marker: &event::Marker) -> R
     Ok(())
 }
 
+pub async fn matches_marker(
+    bucket: &Bucket,
+    flow: &str,
+    viewpoint: &Viewpoint,
+    location: &turso::Location,
+) -> Result<bool> {
+    let (head, status) = bucket.head_object(flow_key(flow, viewpoint)?).await?;
+    Ok(status == 200
+        && head.content_length.and_then(|n| u64::try_from(n).ok()) == Some(location.length)
+        && head
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get("sha384"))
+            .map(String::as_str)
+            == Some(location.sha384.as_str()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

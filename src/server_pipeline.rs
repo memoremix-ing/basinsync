@@ -203,7 +203,78 @@ impl Preparation {
                         None => None,
                     };
                     let basin = self.refreshed().await?;
-                    let latest = basin.latest(&flow)?.map(|viewpoint| Position { viewpoint });
+                    let latest = if let Some(viewpoint) = basin.latest(&flow)? {
+                        let mut location = basin.location(&flow, &viewpoint)?;
+                        // Only retained image-delta fixtures lack an indexed location.
+                        if location.is_none() {
+                            let mut milestone = basin.milestone.clone();
+                            while milestone > 0u8.into() {
+                                let bytes =
+                                    self.bucket.get_object(diffuse16::key(&milestone)?).await?;
+                                anyhow::ensure!(
+                                    bytes.status_code() == 200,
+                                    "missing historical marker event"
+                                );
+                                if let Some(range) = event::blob_ranges(bytes.as_slice())?
+                                    .into_iter()
+                                    .find(|r| r.flow == flow && r.viewpoint == viewpoint)
+                                {
+                                    location = Some(basinsync::turso::Location {
+                                        upstream: milestone,
+                                        offset: range.offset,
+                                        length: range.length,
+                                        sha384: range.sha384,
+                                    });
+                                    break;
+                                }
+                                milestone -= 1u8;
+                            }
+                        }
+                        let location = location.context("missing committed marker location")?;
+                        let stored = if let Some(stored) =
+                            recent.as_ref().filter(|r| r.viewpoint == viewpoint)
+                        {
+                            if basinsync::epilogue::matches_marker(
+                                &self.bucket,
+                                &flow,
+                                &viewpoint,
+                                &location,
+                            )
+                            .await?
+                            {
+                                Some(stored)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+                        let access = if location.length == 0 {
+                            None
+                        } else if let Some(stored) = stored {
+                            Some(basinsync::range_get::Access {
+                                url: stored.url.clone(),
+                                headers: BTreeMap::new(),
+                            })
+                        } else {
+                            Some(
+                                basinsync::range_get::presign(
+                                    &self.bucket,
+                                    &diffuse16::key(&location.upstream)?,
+                                    location.offset,
+                                    location.length,
+                                )
+                                .await?,
+                            )
+                        };
+                        Some(LatestMarker {
+                            viewpoint,
+                            length: location.length,
+                            access,
+                        })
+                    } else {
+                        None
+                    };
                     self.stager = Some(basin.into_stager());
                     let _ = reply.send(Ok(EpilogueStatus { latest, recent }));
                 }

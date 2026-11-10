@@ -926,12 +926,17 @@ fn make_capture(
 }
 
 fn decoded_event(bytes: &[u8]) -> Result<(Vec<FlowCommand>, Delta, Option<Feed>)> {
-    let root = flexbuffers::Reader::get_root(bytes)?.get_vector()?;
+    let envelopes = crate::envbuf::all(bytes)?;
+    let root = envelopes
+        .iter()
+        .take(envelopes.len() - 1)
+        .map(|frame| flexbuffers::Reader::get_root(frame.content)?.get_vector())
+        .collect::<std::result::Result<Vec<_>, _>>()?;
     let mut commands = Vec::new();
     let mut delta = None;
     let mut feed = None;
     for n in 0..root.len() {
-        let tuple = root.index(n)?.get_vector()?;
+        let tuple = root[n].clone();
         ensure!(
             tuple.len() == 4
                 && crate::flexbuffer::read(tuple.index(0)?)?

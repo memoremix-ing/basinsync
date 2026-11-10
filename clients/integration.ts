@@ -6,13 +6,19 @@ import { spawn } from "bun";
 import { CreateBucketCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client, paginateListObjectsV2, CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand } from "@aws-sdk/client-s3";
 import { encode as flexEncode } from "flatbuffers/js/flexbuffers.js";
 import { toObject, encode as extensionEncode } from "./flexbuffer";
-import { commit, form, epilogueStatus, sha384, sha384Bytes, type ApiError, type Position, type ViewpointMismatch } from "./client";
+import { commit, form, epilogueStatus as fullStatus, latestBlob, sha384, sha384Bytes, type ApiError, type Position, type ViewpointMismatch } from "./client";
 import { parse, stringify } from "./json0";
 import { key, fromKey } from "./diffuse16";
-import { key as epilogueKey } from "./lexidecimal";
-import { encodeEvent, markerAt, deltasAt, legacyDeltasAt, entriesAt, encodeWalEvent, type WalDelta, type Marker } from "./events";
+import { key as epilogueKey, encode as lex } from "./lexidecimal";
+import { encodeEvent, markerAt, deltasAt, legacyDeltasAt, entriesAt, rangesAt, eventTuples, encodeTuples, encodeWalEvent, type WalDelta, type Marker } from "./events";
 import { ingestWal } from "./wal";
+import { all as envelopes, before as previousEnvelope } from "./envbuf";
 import { stress } from "./stress";
+
+// Historical cases below assert cursor/replication positions; full capability
+// responses and their byte ranges are exercised separately.
+function positions(value:Awaited<ReturnType<typeof fullStatus>>){return {...value,latest:value.latest?{viewpoint:value.latest.viewpoint}:null};}
+async function epilogueStatus(...args:Parameters<typeof fullStatus>){return positions(await fullStatus(...args));}
 
 const root = resolve(import.meta.dir, "..");
 mkdirSync(`${root}/.local`, { recursive: true });
@@ -403,7 +409,7 @@ try {
     for(const result of results)await status(result,fault==="none"?201:503);
     assert.equal(peak,1,"only one conditional publication may be active");
     if(fault==="none"){
-      assert.deepEqual(parse(await (await latest).text()),{latest:{viewpoint:2n},recent:null});assert.equal(puts,3);
+      assert.deepEqual(positions(parse(await (await latest).text())),{latest:{viewpoint:2n},recent:null});assert.equal(puts,3);
       for(let n=1;n<=3;n++)assert.equal(markerAt(await get(pipelineBucket,BigInt(n)),flow).viewpoint,String(n-1));
       await stop(app.process);
     }else{
@@ -430,7 +436,7 @@ try {
     await Bun.sleep(30);assert.equal(conflictDone,false);assert.equal(statusDone,false);
     second.resolve();await status(await next,fail?503:201);
     if(fail){await status(await conflict,503);await status(await latest,503);assert.equal(await timeout(app.process.exited),1);}
-    else{await mismatch(await conflict,2n);assert.deepEqual(parse(await (await latest).text()),{latest:{viewpoint:1n},recent:null});await stop(app.process);}
+    else{await mismatch(await conflict,2n);assert.deepEqual(positions(parse(await (await latest).text())),{latest:{viewpoint:1n},recent:null});await stop(app.process);}
     assert.equal(puts,2,"mismatch-only work must not create an event");await proxy.service.stop(true);
   }
   {
@@ -476,7 +482,7 @@ try {
   }
   assert(modernRoot);
   for(const fault of ["version","format","parent","bootstrap","wal","logical","command-order"]){
-    const vector=toObject(modernRoot) as any[];
+    const vector=eventTuples(modernRoot) as any[];
     const delta=vector.at(-1)[3].turso["default.turso"];
     if(fault==="version")delta.version="incompatible";
     if(fault==="format")delta.physical.format="unknown";
@@ -485,7 +491,7 @@ try {
     if(fault==="wal")delta.physical.segments[0][56]^=1;
     if(fault==="logical")delta.logical.frames[0][0]^=1;
     if(fault==="command-order")vector.reverse();
-    const fixture=await bucket();await seed(fixture,1n,extensionEncode(vector));await badStartup(fixture);
+    const fixture=await bucket();await seed(fixture,1n,encodeTuples(vector));await badStartup(fixture);
   }
   console.log("put of success: real-route ordered batches, durable status, count/byte bounds, slow bodies, disconnects, queued failure rejection, and WAL startup integrity");
 
@@ -642,7 +648,7 @@ try {
       assert.equal((await epilogueStatus(restarted.url,"copy")).recent?.viewpoint,1n);await stop(restarted.process);
     }else if(fault==="conflict"){
       await Bun.sleep(80);assert.equal(backups,0);assert.equal(await basinBackup(b),null);
-      assert.equal((await epilogueStatus(app.url,"copy")).latest?.viewpoint,0n);await stop(app.process);
+      assert.equal((await epilogueStatus(app.url,"copy")).latest?.viewpoint,0n);assert.deepEqual(await latestBlob((await fullStatus(app.url,"copy")).latest!),a,"a conflicting stored marker must not replace latest contents");await stop(app.process);
     }else{
       const checkpoint=await eventually(()=>basinBackup(b),cp=>cp?.milestone===1n);assert(checkpoint);
       await Bun.sleep(50);assert.equal(checkpoint.key,epilogueKey(0n));assert.equal(copies,1);assert.equal(backups,1);
@@ -741,6 +747,62 @@ try {
     const restored=await server(b);assert.equal((await epilogueStatus(restored.url,"large")).latest?.viewpoint,1n);await stop(restored.process);
   }
   console.log("put of success: multipart snapshots preserve metadata, conditional creation, and suffix recovery");
+  // A GET capability exposes precisely one marker, even while its event also
+  // contains other Flows, older markers, and database pages.
+  {
+    const b=await bucket();
+    const app=await server(b,endpoint,{BASINSYNC_BATCH_MAX:"4",BASINSYNC_BATCH_WAIT_MS:"1000",RUST_LOG:"basinsync=debug"});
+    const target=new Uint8Array(65536);for(let n=0;n<target.length;n++)target[n]=n%251;
+    const inputs:[string,Uint8Array,bigint][]=[["public",bytes("old public marker"),0n],["private",bytes("PRIVATE: must never escape through the public capability"),0n],["public",target,1n],["empty",new Uint8Array(),0n]];
+    const requests:Promise<Response>[]=[];for(const [flow,blob,vp] of inputs){requests.push(commit(app.url,flow,blob,vp));await queued(app.log,flow,Number(vp));}
+    for(const response of await Promise.all(requests))await status(response,201);
+    const stored=await get(b,1n),ranges=rangesAt(stored),range=ranges.find(r=>r.flow==="public"&&r.marker.viewpoint==="1")!;
+    const footer=await s3.send(new GetObjectCommand({Bucket:b,Key:key(1n),Range:"bytes=-8"}));
+    const tailBytes=await footer.Body!.transformToByteArray();assert.equal(tailBytes.length,8);
+    const contentLength=new DataView(tailBytes.buffer,tailBytes.byteOffset,tailBytes.byteLength).getUint32(0,true);
+    const span=16+Math.ceil(contentLength/8)*8;
+    const last=await s3.send(new GetObjectCommand({Bucket:b,Key:key(1n),Range:`bytes=-${span}`}));
+    const manifestBytes=await last.Body!.transformToByteArray(),manifest=previousEnvelope(manifestBytes,manifestBytes.length);
+    const query=toObject(new Uint8Array(manifest.content)) as any[];
+    assert.equal(query[2],"sts/0/databasin/rangemanifest");
+    assert.deepEqual(Object.keys(query[3].envelopes),envelopes(stored).slice(0,-1).map(e=>lex(BigInt(e.end))));
+    const current=(await fullStatus(app.url,"public")).latest!;
+    assert.equal(current.viewpoint,1n);assert.equal(current.length,target.length);
+    assert.equal(current.headers?.Range,`bytes=${range.offset}-${range.offset+range.length-1}`);
+    assert.equal(new URL(current.url!).searchParams.get("X-Amz-SignedHeaders"),"host;range");
+    assert.deepEqual(await latestBlob(current),target);
+    const direct=await fetch(current.url!,{headers:current.headers});assert.equal(direct.status,206);
+    assert.equal(direct.headers.get("content-range"),`bytes ${range.offset}-${range.offset+range.length-1}/${stored.length}`);await direct.arrayBuffer();
+    for(const headers of [undefined,{Range:`bytes=0-${stored.length-1}`},{Range:`bytes=${range.offset}-${range.offset}`},{Range:`bytes=${range.offset}-${range.offset+range.length-1},0-7`}]){
+      const refused=await fetch(current.url!,{headers});assert(refused.status>=400,"an omitted, changed, or expanded Range must fail authentication");
+      const body=await refused.text();assert(!body.includes("PRIVATE:"));
+    }
+    const empty=(await fullStatus(app.url,"empty")).latest!;assert.equal(empty.length,0);assert(!("url" in empty));assert.deepEqual(await latestBlob(empty),new Uint8Array());
+    await stop(app.process);
+    const restarted=await server(b);assert.deepEqual(await latestBlob((await fullStatus(restarted.url,"public")).latest!),target);await stop(restarted.process);
+    // Hold downstream copying: the URL must stay range-bound until the exact
+    // marker is stored, then it may reuse recent's whole-object URL.
+    const gate=Promise.withResolvers<void>(),entered=Promise.withResolvers<void>();
+    const proxy=relay((_,response)=>response,async request=>{if(request.method==="PUT"&&new URL(request.url).pathname.includes("/flows/")){entered.resolve();await gate.promise;}});
+    const copying=await server(b,proxy.url,{BASINSYNC_BACKUP_INTERVAL_MS:"10"});await timeout(entered.promise);
+    assert.deepEqual(await latestBlob((await fullStatus(copying.url,"public")).latest!),target);
+    gate.resolve();
+    const complete=await eventually(()=>fullStatus(copying.url,"public"),s=>s.recent?.viewpoint===1n&&s.latest?.url===s.recent.url);
+    assert.deepEqual(complete.latest!.headers,{});assert.deepEqual(await latestBlob(complete.latest!),target);
+    assert(!("url" in (await fullStatus(copying.url,"empty")).latest!));
+    const checkpoint=await eventually(()=>basinBackup(b),cp=>cp?.milestone===1n);assert(checkpoint);
+    const path=`${artifacts}/ranges-backup.turso`;writeFileSync(path,checkpoint.blob);
+    for(const item of ranges){
+      const inspect=spawn([`${root}/target/debug/examples/frame-fixture`,"--locate",path,item.flow,item.marker.viewpoint],{cwd:root,stdout:"pipe",stderr:"inherit"});
+      const row=await new Response(inspect.stdout).json();assert.equal(await inspect.exited,0);
+      assert.deepEqual(row,{upstream:lex(1n),downstream:lex(BigInt(item.marker.viewpoint)),offset:item.offset,length:item.length,sha384:item.marker.sha384});
+    }
+    await stop(copying.process);
+    const tail=await server(b);await status(await commit(tail.url,"public",bytes("after checkpoint"),2n),201);await stop(tail.process);
+    const anchored=await server(b);const latest=(await fullStatus(anchored.url,"public")).latest!;
+    assert.equal(latest.viewpoint,2n);assert(new URL(latest.url!).pathname.endsWith(`/${key(2n)}`));assert.deepEqual(await latestBlob(latest),bytes("after checkpoint"));await stop(anchored.process);
+  }
+  console.log("put of success: signed blob-only Range capabilities, empty markers, downstream URL reuse, persistent locations, and snapshot-plus-suffix recovery");
   console.log(`Integration passed. Logs: ${artifacts}`);
 } finally {
   await Promise.all(processes.map(stop));

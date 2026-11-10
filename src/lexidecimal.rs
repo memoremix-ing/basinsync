@@ -74,6 +74,10 @@ impl Viewpoint {
         Ok(Self(value))
     }
 
+    pub fn lexidecimal(&self) -> String {
+        encode(&BigInt::from(self.0.clone()))
+    }
+
     pub fn hexadecimal(&self) -> String {
         self.0.to_str_radix(16)
     }

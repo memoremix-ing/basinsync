@@ -2,8 +2,9 @@ import { createHash } from "node:crypto";
 import { parse, stringify } from "./json0";
 
 export type Position = { viewpoint: bigint };
+export type LatestMarker = Position & { length: number; url?: string; headers?: Record<string,string> };
 export type EpilogueStatus = {
-  latest: Position | null;
+  latest: LatestMarker | null;
   recent: (Position & { url: string }) | null;
 };
 export type ViewpointMismatch = { next: Position };
@@ -33,4 +34,14 @@ export async function epilogueStatus(url: string, flow: string): Promise<Epilogu
   const response = await fetch(`${url}/api/v0/epilogue/status?${new URLSearchParams({ flow })}`, { cache: "no-store", signal: AbortSignal.timeout(30_000) });
   if (!response.ok) throw new Error(`status: ${response.status} ${await response.text()}`);
   return parseResponse<EpilogueStatus>(response);
+}
+
+export async function latestBlob(marker:LatestMarker):Promise<Uint8Array>{
+  if(marker.length===0)return new Uint8Array();
+  if(!marker.url||!marker.headers)throw new Error("missing marker GET capability");
+  const response=await fetch(marker.url,{headers:marker.headers,signal:AbortSignal.timeout(30_000)});
+  if(response.status!==(marker.headers.Range?206:200))throw new Error(`marker GET: ${response.status}`);
+  const blob=new Uint8Array(await response.arrayBuffer());
+  if(blob.length!==marker.length)throw new Error("marker GET length mismatch");
+  return blob;
 }

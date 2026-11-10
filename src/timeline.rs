@@ -28,6 +28,24 @@ impl Basin {
         }
     }
 
+    pub fn location(
+        &self,
+        flow: &str,
+        viewpoint: &Viewpoint,
+    ) -> Result<Option<crate::turso::Location>> {
+        if let Some(writer) = &self.writer {
+            ensure!(
+                writer.cursor() == &self.milestone,
+                "unpublished database state"
+            );
+            writer.location(flow, viewpoint)
+        } else {
+            self.database
+                .as_ref()
+                .map_or(Ok(None), |state| state.location(flow, viewpoint))
+        }
+    }
+
     pub fn expected(&self, flow: &str) -> Result<Viewpoint> {
         Ok(self
             .latest(flow)?
@@ -70,8 +88,21 @@ impl Basin {
     }
 
     pub fn apply(&mut self, milestone: BigUint, command: event::CommitFlow) -> Result<()> {
+        let candidate = self.legacy_candidate(&milestone, command)?;
+        self.database = Some(candidate);
+        self.milestone = milestone;
+        Ok(())
+    }
+    fn legacy_candidate(
+        &mut self,
+        milestone: &BigUint,
+        command: event::CommitFlow,
+    ) -> Result<crate::turso::State> {
         self.freeze_writer()?;
-        ensure!(milestone == &self.milestone + 1u8, "Timeline Milestone gap");
+        ensure!(
+            *milestone == &self.milestone + 1u8,
+            "Timeline Milestone gap"
+        );
         self.validate(&command.markers)?;
         ensure!(
             command.deltas.turso.len() == 1,
@@ -111,9 +142,7 @@ impl Basin {
             candidate.flows()? == flows && candidate.milestone()? == milestone.to_string(),
             "frame state disagrees with command"
         );
-        self.database = Some(candidate);
-        self.milestone = milestone;
-        Ok(())
+        Ok(candidate)
     }
 }
 
@@ -279,12 +308,14 @@ impl Basin {
             "missing predecessor event digest"
         );
         self.enable_vfs()?;
-        let delta = self.writer.as_mut().unwrap().prepare(
+        let chunks = event::FlowChunks::new(&commands)?;
+        let delta = self.writer.as_mut().unwrap().prepare_with_ranges(
             &self.milestone,
             self.head.as_deref(),
             &commands,
+            chunks.ranges(),
         )?;
-        let bytes = event::encode_wal(commands, delta)?;
+        let bytes = chunks.finish(delta)?;
         let digest = event::digest(&bytes);
         Ok(Prepared {
             bytes,
@@ -302,8 +333,15 @@ impl Basin {
     }
     pub fn apply_entry(&mut self, milestone: BigUint, bytes: &[u8]) -> Result<()> {
         ensure!(milestone == &self.milestone + 1u8, "Timeline Milestone gap");
+        let enveloped = bytes.starts_with(b"enV");
+        let ranges = event::blob_ranges(bytes)?;
         match event::decode_entry(bytes)? {
-            event::Entry::Legacy(command) => self.apply(milestone, command)?,
+            event::Entry::Legacy(command) => {
+                let next = self.legacy_candidate(&milestone, command)?;
+                validate_locations(&next, &milestone, &ranges, false)?;
+                self.database = Some(next);
+                self.milestone = milestone;
+            }
             event::Entry::Wal { commands, delta } => {
                 delta.validate_version()?;
                 delta
@@ -352,6 +390,7 @@ impl Basin {
                         "recovered Viewpoint mismatch"
                     );
                 }
+                validate_locations(&next, &milestone, &ranges, enveloped)?;
                 self.database = Some(next);
                 self.writer = None;
                 self.milestone = milestone;
@@ -360,6 +399,30 @@ impl Basin {
         self.head = Some(event::digest(bytes));
         Ok(())
     }
+}
+
+fn validate_locations(
+    state: &crate::turso::State,
+    milestone: &BigUint,
+    ranges: &[event::BlobRange],
+    required: bool,
+) -> Result<()> {
+    for range in ranges {
+        let stored = state.location(&range.flow, &range.viewpoint)?;
+        if required || stored.is_some() {
+            ensure!(
+                stored
+                    == Some(crate::turso::Location {
+                        upstream: milestone.clone(),
+                        offset: range.offset,
+                        length: range.length,
+                        sha384: range.sha384.clone()
+                    }),
+                "recovered marker location disagrees with encoded blob"
+            );
+        }
+    }
+    Ok(())
 }
 
 // The seed exists. Exponential probes bracket the tail, then binary search

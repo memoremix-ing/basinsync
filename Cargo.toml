@@ -6,6 +6,9 @@ rust-version = "1.92"
 
 [dependencies]
 anyhow = "1"
+hmac = "0.12"
+url = "2"
+time = { version = "0.3", features = ["parsing", "macros"] }
 tempfile = "3"
 turso_core = { path = "../../../jcmoore/turso.git/sts-0/core", default-features = false, features = ["fs", "conn_raw_api"] }
 base64 = "0.22"

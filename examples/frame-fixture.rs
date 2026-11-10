@@ -10,11 +10,31 @@ use std::{
 
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().collect();
-    if args.get(1).is_some_and(|arg| arg == "--inspect") {
+    if args
+        .get(1)
+        .is_some_and(|arg| arg == "--inspect" || arg == "--locate")
+    {
         let state = basinsync::turso::State::from_image(std::fs::read(
             args.get(2)
                 .ok_or_else(|| anyhow::anyhow!("missing database path"))?,
         )?)?;
+        if args[1] == "--locate" {
+            let flow = args
+                .get(3)
+                .ok_or_else(|| anyhow::anyhow!("missing Flow id"))?;
+            let viewpoint = basinsync::lexidecimal::Viewpoint::parse(
+                args.get(4)
+                    .ok_or_else(|| anyhow::anyhow!("missing Viewpoint"))?,
+            )?;
+            let row = state
+                .location(flow, &viewpoint)?
+                .ok_or_else(|| anyhow::anyhow!("missing marker location"))?;
+            serde_json::to_writer(
+                io::stdout(),
+                &serde_json::json!({"upstream":basinsync::lexidecimal::encode(&num_bigint::BigInt::from(row.upstream)),"downstream":viewpoint.lexidecimal(),"offset":row.offset,"length":row.length,"sha384":row.sha384}),
+            )?;
+            return Ok(());
+        }
         let flows: BTreeMap<_, _> = state
             .flows()?
             .into_iter()

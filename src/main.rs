@@ -140,8 +140,17 @@ struct Position {
 
 #[derive(Serialize)]
 struct EpilogueStatus {
-    latest: Option<Position>,
+    latest: Option<LatestMarker>,
     recent: Option<RecentMarker>,
+}
+
+#[derive(Serialize)]
+struct LatestMarker {
+    #[serde(serialize_with = "basinsync::json0::serialize_viewpoint")]
+    viewpoint: Viewpoint,
+    length: u64,
+    #[serde(flatten)]
+    access: Option<basinsync::range_get::Access>,
 }
 
 #[derive(Serialize)]
@@ -375,7 +384,11 @@ mod tests {
     fn responses_use_json0_bigints_and_escape_literal_strings() {
         let viewpoint = Viewpoint::parse("340282366920938463463374607431768211456").unwrap();
         let status = EpilogueStatus {
-            latest: Some(Position { viewpoint }),
+            latest: Some(LatestMarker {
+                viewpoint,
+                length: 0,
+                access: None,
+            }),
             recent: Some(RecentMarker {
                 viewpoint: Viewpoint::zero(),
                 url: "0x/literal".into(),
@@ -384,7 +397,7 @@ mod tests {
         assert_eq!(
             serde_json::to_value(status).unwrap(),
             serde_json::json!({
-                "latest": {"viewpoint": "0x100000000000000000000000000000000"},
+                "latest": {"viewpoint": "0x100000000000000000000000000000000", "length": 0},
                 "recent": {"viewpoint": "0x0", "url": "00x/literal"},
             })
         );

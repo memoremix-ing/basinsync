@@ -1,3 +1,4 @@
+[0005-envbuf-log-formatting]: <0005-envbuf-log-formatting.md>
 [commit-marker]: <../glossary/commit-marker.md>
 [conditional-write]: <../glossary/conditional-write.md>
 [development]: <../development.md>
@@ -31,3 +32,6 @@ Start with an *Epilogue*[^][epilogue] of opaque blobs.
 Use the *wire protocol*[^][epilogue-protocol] and
 *development checks*[^][development]; leave richer *markers*[^][commit-marker]
 and graceful race recovery for later milestones.
+
+Here `latest` contains only its *Viewpoint*[^][viewpoint]; retrieval capabilities
+are introduced in *0005*[^][0005-envbuf-log-formatting].
