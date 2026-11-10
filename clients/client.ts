@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { parse, stringify } from "./json0";
 
 export type Position = { viewpoint: bigint };
-export type Timelines = { basin: { milestone: bigint } };
+export type Timelines = { watershed: { milestone: bigint } };
 export type ApiResponse<T> = T & { timelines: Timelines };
 export type CommitResponse = ApiResponse<Position>;
 export type LatestMarker = Position & { length: number; url?: string; headers?: Record<string,string> };

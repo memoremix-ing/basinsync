@@ -10,7 +10,6 @@
 [epilogue-protocol]: <../epilogue-protocol.md>
 [flexbuffers]: <../glossary/flexbuffers.md>
 [flow]: <../glossary/flow.md>
-[jet]: <../glossary/jet.md>
 [lexidecimal]: <../glossary/lexidecimal.md>
 [milestone]: <../glossary/milestone.md>
 [range-get]: <../glossary/range-get.md>
@@ -36,7 +35,7 @@ and refresh.
 4. Refresh from subsequent *Timeline*[^][timeline] entries. In
    `GET /api/v0/epilogue/status?flow=<id>`, `latest` identifies the committed
    *marker*[^][commit-marker] and provides its *GET capability*[^][epilogue-protocol].
-   Include `timelines.basin.milestone` in API responses so clients can detect an
+   Include `timelines.watershed.milestone` in API responses so clients can detect an
    older materialized prefix when switching servers.
    When the *probe freshness window*[^][basin-timeline] expires, probe the next
    *Milestone*[^][milestone] before refreshing; absence confirms the materialized
@@ -65,9 +64,6 @@ Track each *Flow*[^][flow] and *downstream*[^][downstream]
 absolute blob offset, content length, and hexadecimal *SHA-384*[^][sha384].
 Encode both positions as positive *Lexidecimal*[^][lexidecimal] text for indexing;
 derive object keys from *Milestones*[^][milestone] using *Diffuse16*[^][diffuse16].
-The terminology also fits a later *Jet*[^][jet], which arranges
-*DifferentialEvents*[^][differential-event] in *Flow*[^][flow]
-*Timeline*[^][timeline] *Milestones*[^][milestone].
 
 Return `latest`'s length and a signed *Range GET*[^][range-get] for its bytes in
 the *Basin*[^][basin] *Timeline*[^][timeline]. Every successful GET must expose

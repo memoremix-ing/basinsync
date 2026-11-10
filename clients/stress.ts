@@ -25,7 +25,7 @@ export async function stress(url: string, flow: string, count = 1025, workers = 
         assert.equal(response.status, 201, body);
         const receipt=parse<CommitResponse>(body);
         assert.equal(receipt.viewpoint,viewpoint);
-        assert(typeof receipt.timelines.basin.milestone==="bigint"&&receipt.timelines.basin.milestone>0n);
+        assert(typeof receipt.timelines.watershed.milestone==="bigint"&&receipt.timelines.watershed.milestone>0n);
         assert(!accepted.has(viewpoint), "duplicate successful viewpoint");
         accepted.set(viewpoint, blob);
         break;

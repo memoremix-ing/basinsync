@@ -18,7 +18,7 @@ import { stress } from "./stress";
 // Cursor cases below assert positions; full capability
 // responses and their byte ranges are exercised separately.
 function payload<T extends {timelines:Timelines}>(value:T){
-  assert(typeof value.timelines?.basin?.milestone==="bigint"&&value.timelines.basin.milestone>=0n,"every API response carries its durable Basin prefix");
+  assert(typeof value.timelines?.watershed?.milestone==="bigint"&&value.timelines.watershed.milestone>=0n,"every API response carries its durable Basin prefix");
   const {timelines,...body}=value;return body;
 }
 function positions(value:Awaited<ReturnType<typeof fullStatus>>){return {...payload(value),latest:value.latest?{viewpoint:value.latest.viewpoint}:null};}
@@ -134,7 +134,7 @@ async function mismatch(r: Response, next: bigint) {
   assert.equal(r.status,409);
   const body = await r.text();
   const response=parse<ViewpointMismatch>(body);
-  assert.deepEqual(JSON.parse(body),{next:{viewpoint:`0x${next.toString(16)}`},timelines:{basin:{milestone:`0x${response.timelines.basin.milestone.toString(16)}`}}});
+  assert.deepEqual(JSON.parse(body),{next:{viewpoint:`0x${next.toString(16)}`},timelines:{watershed:{milestone:`0x${response.timelines.watershed.milestone.toString(16)}`}}});
   assert.deepEqual(payload(response),{next:{viewpoint:next}});
 }
 async function get(bucket: string, milestone: bigint) {
@@ -374,7 +374,7 @@ try {
     const results=await Promise.all(requests);
     for(let i=0;i<results.length;i++){
       const receipt=parse<CommitResponse|ApiError>(await results[i].clone().text());
-      assert.equal(receipt.timelines.basin.milestone,fail?0n:(i<4?1n:2n),"stamp each batch only after its own publication");
+      assert.equal(receipt.timelines.watershed.milestone,fail?0n:(i<4?1n:2n),"stamp each batch only after its own publication");
       await status(results[i],fail?503:201);
     }
     assert.equal(peak,1,"Timeline uploads remain ordered");
@@ -427,7 +427,7 @@ try {
     const results=await Promise.all(requests);
     for(let i=0;i<results.length;i++){
       const receipt=parse<CommitResponse|ApiError>(await results[i].clone().text());
-      assert.equal(receipt.timelines.basin.milestone,fault==="none"?BigInt(i+1):0n,"never report a speculative or uncertain batch as durable");
+      assert.equal(receipt.timelines.watershed.milestone,fault==="none"?BigInt(i+1):0n,"never report a speculative or uncertain batch as durable");
       await status(results[i],fault==="none"?201:503);
     }
     assert.equal(peak,1,"only one conditional publication may be active");
@@ -886,15 +886,15 @@ try {
     function probes(){return reads.filter(r=>r.method==="HEAD"&&r.url.pathname.includes("/timeline/"));}
     reads.length=0;
     const initial=await fullStatus(observer.url,"external");
-    assert.equal(initial.timelines.basin.milestone,0n);assert.deepEqual(payload(initial),{latest:null});
+    assert.equal(initial.timelines.watershed.milestone,0n);assert.deepEqual(payload(initial),{latest:null});
     assert.equal(probes().length,1,"first status probes immediately");
     const written=await commit(writer.url,"external",a,0n);
     const receipt=parse<CommitResponse>(await written.clone().text());
-    assert.equal(receipt.timelines.basin.milestone,1n);await status(written,201);
+    assert.equal(receipt.timelines.watershed.milestone,1n);await status(written,201);
     reads.length=0;
     const stale=await fullStatus(observer.url,"external");
     assert.deepEqual(payload(stale),{latest:null});
-    assert(stale.timelines.basin.milestone<receipt.timelines.basin.milestone,"a different instance exposes its older causal prefix");
+    assert(stale.timelines.watershed.milestone<receipt.timelines.watershed.milestone,"a different instance exposes its older causal prefix");
     assert.deepEqual(payload(await fullStatus(observer.url,"another-flow")),{latest:null});
     assert.equal(reads.length,0,"all Flows reuse the recent Basin check");
     await Bun.sleep(1600);
@@ -902,7 +902,7 @@ try {
     assert.equal(reads.length,0,"cache hits do not probe");
     await Bun.sleep(1600);
     const refreshed=await fullStatus(observer.url,"external");
-    assert.equal(refreshed.timelines.basin.milestone,1n);
+    assert.equal(refreshed.timelines.watershed.milestone,1n);
     const caughtUp=refreshed.latest!;
     assert.equal(caughtUp.viewpoint,0n);assert(probes().length>0,"expiry probes and refreshes despite intervening cache hits");
     assert.deepEqual(await latestBlob(caughtUp),a);
@@ -910,20 +910,20 @@ try {
     // A write must refresh even while status would accept the old check.
     reads.length=0;
     const localWrite=await commit(observer.url,"local",a,0n);
-    assert.equal(parse<CommitResponse>(await localWrite.clone().text()).timelines.basin.milestone,3n);
+    assert.equal(parse<CommitResponse>(await localWrite.clone().text()).timelines.watershed.milestone,3n);
     await status(localWrite,201);
     assert(reads.some(r=>r.url.searchParams.get("prefix")==="epilogue/"),"writes always discover the Basin anchor");
     reads.length=0;
     const local=await fullStatus(observer.url,"local");
-    assert.equal(local.timelines.basin.milestone,3n);
+    assert.equal(local.timelines.watershed.milestone,3n);
     assert.equal(local.latest?.viewpoint,0n,"own acknowledged writes remain visible");
     assert.equal((await fullStatus(observer.url,"external")).latest?.viewpoint,1n,"write refresh also advances status state");
     assert.equal(probes().length,0,"a successful write refresh renews the check");
     const conflict=await commit(observer.url,"local",a,0n);
-    assert.equal(parse<ViewpointMismatch>(await conflict.clone().text()).timelines.basin.milestone,3n);
+    assert.equal(parse<ViewpointMismatch>(await conflict.clone().text()).timelines.watershed.milestone,3n);
     await mismatch(conflict,1n);
     const invalid=await fetch(`${observer.url}/api/v0/epilogue/status`);
-    assert.equal(parse<ApiError>(await invalid.clone().text()).timelines.basin.milestone,3n);
+    assert.equal(parse<ApiError>(await invalid.clone().text()).timelines.watershed.milestone,3n);
     await status(invalid,400);
     await stop(writer.process);await stop(observer.process);
   }

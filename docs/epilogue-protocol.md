@@ -10,6 +10,7 @@
 [reservoir]: <glossary/reservoir.md>
 [sha384]: <glossary/sha384.md>
 [viewpoint]: <glossary/viewpoint.md>
+[watershed]: <glossary/watershed.md>
 
 # Epilogue protocol
 
@@ -25,8 +26,8 @@ within each *Reservoir*[^][reservoir] namespace; see the *key layout*[^][basin-b
 commit. Rejection must not advance the sequence.
 
 Responses use *JSON0*[^][json0] with bigint *viewpoints*[^][viewpoint].
-All `/api/v0` responses include `timelines.basin.milestone`, a bigint identifying
-their known durable *Milestone*[^][milestone] (zero before the first
+All `/api/v0` responses include `timelines.watershed.milestone`, a bigint identifying
+their known durable *watershed*[^][watershed] *Milestone*[^][milestone] (zero before the first
 *DifferentialEvent*[^][differential-event]).
 Successful commits report their published batch; status reports its materialized
 prefix, including when cached. A lower value than a client has already observed
@@ -34,14 +35,14 @@ reveals a *causal reverse*[^][causal-consistency] across server instances.
 A *viewpoint*[^][viewpoint] mismatch returns HTTP 409:
 
 ```json
-{"next":{"viewpoint":"0x1"},"timelines":{"basin":{"milestone":"0x2"}}}
+{"next":{"viewpoint":"0x1"},"timelines":{"watershed":{"milestone":"0x2"}}}
 ```
 
 `GET /api/v0/epilogue/status` reports the latest committed
 *CommitMarker*[^][commit-marker]:
 
 ```json
-{"latest":{"viewpoint":"0x1","length":10,"url":"<presigned GET>","headers":{"Range":"bytes=128-137"}},"timelines":{"basin":{"milestone":"0x2"}}}
+{"latest":{"viewpoint":"0x1","length":10,"url":"<presigned GET>","headers":{"Range":"bytes=128-137"}},"timelines":{"watershed":{"milestone":"0x2"}}}
 ```
 
 For `latest`, send the returned `headers` with its URL. A

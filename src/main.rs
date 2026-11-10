@@ -76,7 +76,7 @@ struct TimelinePosition {
 
 #[derive(Clone, Serialize)]
 struct Timelines {
-    basin: TimelinePosition,
+    watershed: TimelinePosition,
 }
 
 #[derive(Serialize)]
@@ -94,7 +94,7 @@ type ApiReply<T> = Result<ApiResponse<T>, ApiFailure>;
 
 fn observed<T>(result: Result<T, Failure>, prefix: &timeline::Prefix) -> ApiReply<T> {
     let timelines = Timelines {
-        basin: TimelinePosition {
+        watershed: TimelinePosition {
             milestone: prefix.milestone().clone(),
         },
     };
@@ -476,7 +476,7 @@ mod tests {
             serde_json::to_value(status).unwrap(),
             serde_json::json!({
                 "latest": {"viewpoint": "0x100000000000000000000000000000000", "length": 0},
-                "timelines": {"basin": {"milestone": "0x100000000000000000000000000000001"}},
+                "timelines": {"watershed": {"milestone": "0x100000000000000000000000000000001"}},
             })
         );
         assert_eq!(
@@ -492,7 +492,7 @@ mod tests {
                 .unwrap()
             )
             .unwrap(),
-            serde_json::json!({"error": "00x_literal", "message": "00$message", "timelines": {"basin": {"milestone": "0x100000000000000000000000000000001"}}})
+            serde_json::json!({"error": "00x_literal", "message": "00$message", "timelines": {"watershed": {"milestone": "0x100000000000000000000000000000001"}}})
         );
     }
 }
