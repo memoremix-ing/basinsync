@@ -17,3 +17,7 @@ exclusive end offset in the containing object, encoded as positive
 
 Each value is a command prefix without its query payload. The manifest omits
 itself; locate it by reading backward from the object's final footer.
+
+*FlexBuffers*[^][flexbuffers] sorts these keys lexicographically, so neighboring
+decoded offsets bound a complete *EnvBuf*[^][envbuf]: `[previous, current)`, with
+zero preceding the first key. Its HTTP Range is `bytes=previous-(current - 1)`.
