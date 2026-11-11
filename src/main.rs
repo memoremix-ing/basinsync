@@ -1,18 +1,20 @@
 use anyhow::{Context, Result, bail};
 use axum::{
     Json, Router,
+    body::Bytes,
     extract::{
-        DefaultBodyLimit, Multipart, Query, State, multipart::MultipartRejection,
+        DefaultBodyLimit, FromRequest, Multipart, Query, State, multipart::MultipartRejection,
         rejection::QueryRejection,
     },
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, put},
+    routing::{get, post, put},
 };
 use basinsync::{
     details::CommitDetails,
     diffuse16,
     event::{self, Marker},
+    heap,
     lexidecimal::Viewpoint,
     timeline,
 };
@@ -31,6 +33,8 @@ struct App {
     queue: mpsc::Sender<Message>,
     admission: Arc<Semaphore>,
     published: watch::Receiver<timeline::Prefix>,
+    bucket: Box<Bucket>,
+    heap_limits: heap::Limits,
 }
 
 type Shared = Arc<App>;
@@ -257,6 +261,11 @@ struct QueuedCommit {
     admission: OwnedSemaphorePermit,
     reply: oneshot::Sender<ApiReply<Position>>,
 }
+struct QueuedReservation {
+    request: heap::Request,
+    admission: OwnedSemaphorePermit,
+    reply: oneshot::Sender<ApiReply<heap::Outcome>>,
+}
 impl QueuedCommit {
     fn size(&self) -> usize {
         self.request.flow.len()
@@ -267,6 +276,7 @@ impl QueuedCommit {
 }
 enum Message {
     Commit(QueuedCommit),
+    Reserve(QueuedReservation),
     Status {
         flow: String,
         reply: oneshot::Sender<ApiReply<EpilogueStatus>>,
@@ -277,6 +287,9 @@ impl Message {
         match self {
             Self::Commit(c) => {
                 let _ = c.reply.send(observed(Err(stopped()), prefix));
+            }
+            Self::Reserve(r) => {
+                let _ = r.reply.send(observed(Err(stopped()), prefix));
             }
             Self::Status { reply, .. } => {
                 let _ = reply.send(observed(Err(stopped()), prefix));
@@ -316,6 +329,51 @@ async fn epilogue_status(
             .await
             .map_err(|_| stopped())?;
         result.await.map_err(|_| stopped())
+    }
+    .await;
+    app.respond(StatusCode::OK, result)
+}
+
+async fn heap_reserve(State(app): State<Shared>, body: axum::extract::Request) -> Response {
+    let result = async {
+        let admission = app
+            .admission
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|_| stopped())?;
+        let body = Bytes::from_request(body, &app).await.map_err(|e| {
+            Failure::new(e.status(), "invalid_request", "invalid heap request body")
+        })?;
+        let request = heap::Request::parse(&body, &app.heap_limits)
+            .map_err(|_| Failure::bad("invalid heap request"))?;
+        let (reply, result) = oneshot::channel();
+        app.queue
+            .send(Message::Reserve(QueuedReservation {
+                request,
+                admission,
+                reply,
+            }))
+            .await
+            .map_err(|_| stopped())?;
+        let result = result.await.map_err(|_| stopped())?;
+        Ok(match result {
+            Ok(response) => match response.body.actions(&app.bucket).await {
+                Ok(body) => Ok(ApiResponse {
+                    body,
+                    timelines: response.timelines,
+                }),
+                Err(_) => Err(ApiFailure {
+                    failure: Failure::new(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "signing_failed",
+                        "unable to sign heap actions; reservation may already be durable",
+                    ),
+                    timelines: response.timelines,
+                }),
+            },
+            Err(error) => Err(error),
+        })
     }
     .await;
     app.respond(StatusCode::OK, result)
@@ -371,6 +429,15 @@ async fn main() -> Result<()> {
     );
     let capacity = (batch_max * PIPELINE_BATCHES).max(32);
     let (queue, receiver) = mpsc::channel(capacity);
+    let heap_limits = heap::Limits {
+        max_height: env::var("BASINSYNC_HEAP_MAX_HEIGHT")
+            .unwrap_or_else(|_| "128".into())
+            .parse()?,
+        max_token_bytes: env::var("BASINSYNC_HEAP_MAX_TOKEN_BYTES")
+            .unwrap_or_else(|_| "64".into())
+            .parse()?,
+    };
+    let signing_bucket = bucket.clone();
     let worker = Worker {
         bucket,
         state,
@@ -401,10 +468,13 @@ async fn main() -> Result<()> {
         queue,
         admission: Arc::new(Semaphore::new(capacity)),
         published: published_rx,
+        bucket: signing_bucket,
+        heap_limits,
     });
     let api = Router::new()
         .route("/epilogue", put(commit))
         .route("/epilogue/status", get(epilogue_status))
+        .route("/heap/reserve", post(heap_reserve))
         .fallback(|State(app): State<Shared>| async move {
             app.failure(Failure::new(
                 StatusCode::NOT_FOUND,

@@ -8,6 +8,7 @@
 [epilogue-protocol]: <epilogue-protocol.md>
 [flexbuffers]: <glossary/flexbuffers.md>
 [flow]: <glossary/flow.md>
+[heap-protocol]: <heap-protocol.md>
 [milestone]: <glossary/milestone.md>
 [physical-frame]: <glossary/physical-frame.md>
 [range-manifest]: <glossary/range-manifest.md>
@@ -38,7 +39,8 @@ Each entry contains decimal `viewpoint`, hexadecimal *SHA-384*[^][sha384] in
 `sha384`, and binary `blob`. *Conditional creation*[^][conditional-write] of a
 *DifferentialEvent*[^][differential-event] at the next *Milestone*[^][milestone]
 arbitrates competing writers. Concatenate *EnvBuf*[^][envbuf]-wrapped
-commitflow tuples, one `sts/0/databasin/ingestturso` tuple, then a
+state commands (commitflow or *reserveheap*[^][heap-protocol]),
+one `sts/0/databasin/ingestturso` tuple, then a
 *range manifest*[^][range-manifest]. Each tuple is its own
 *FlexBuffers*[^][flexbuffers] document. The ingestion command's
 *Turso deltas*[^][turso-state] carry the *physical frames*[^][physical-frame]

@@ -11,6 +11,15 @@ export type EpilogueStatus = ApiResponse<{
 }>;
 export type ViewpointMismatch = ApiResponse<{ next: Position }>;
 export type ApiError = ApiResponse<{ error: string; message: string }>;
+export type Action = {url:string;headers:Record<string,string>};
+export type HeapNode = {auth:[height:number,version:number,token:Uint8Array];length:number;edges:unknown[]};
+export type HeapResponse = ApiResponse<{
+  errors:Record<number,{code:string;message:string}>|null;
+  results:Record<number,{actions:{write:Action|null;preview:Action|null;read:Action}}>|null;
+}>;
+export async function reserveHeap(url:string,flow:string,viewpoint:bigint,nodes:HeapNode[]):Promise<Response>{
+  return fetch(`${url}/api/v0/heap/reserve`,{method:"POST",headers:{"content-type":"application/json"},body:stringify({flow,viewpoint,nodes}),signal:AbortSignal.timeout(30_000)});
+}
 export async function parseResponse<T>(response: Response): Promise<T> {
   return parse<T>(await response.text());
 }

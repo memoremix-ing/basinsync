@@ -42,9 +42,36 @@ async fn signed_get(
     key: &str,
     access_headers: BTreeMap<String, String>,
 ) -> Result<Access> {
+    signed_request(bucket, key, "GET", access_headers).await
+}
+
+pub async fn presign_write(bucket: &Bucket, key: &str, length: u64) -> Result<Access> {
+    signed_request(
+        bucket,
+        key,
+        "PUT",
+        BTreeMap::from([
+            ("If-None-Match".into(), "*".into()),
+            ("Content-Length".into(), length.to_string()),
+        ]),
+    )
+    .await
+}
+
+async fn signed_request(
+    bucket: &Bucket,
+    key: &str,
+    method: &str,
+    access_headers: BTreeMap<String, String>,
+) -> Result<Access> {
     // Preserve the SDK's endpoint/path/query encoding and credential refresh. Its
     // GET helper signs only Host, so re-sign through its public SigV4 primitives.
-    let mut url = Url::parse(&bucket.presign_get(key, 300, None).await?)?;
+    let url = if method == "PUT" {
+        bucket.presign_put(key, 300, None, None).await?
+    } else {
+        bucket.presign_get(key, 300, None).await?
+    };
+    let mut url = Url::parse(&url)?;
     let credentials = bucket.credentials().await?;
     let query: BTreeMap<_, _> = url
         .query_pairs()
@@ -80,7 +107,7 @@ async fn signed_get(
             key.as_str() != "X-Amz-Signature" && key.as_str() != "X-Amz-SignedHeaders"
         }))
         .append_pair("X-Amz-SignedHeaders", &signed_headers);
-    let canonical = signing::canonical_request("GET", &url, &headers, "UNSIGNED-PAYLOAD")?;
+    let canonical = signing::canonical_request(method, &url, &headers, "UNSIGNED-PAYLOAD")?;
     let region = bucket.region();
     let signing_key = signing::signing_key(
         &datetime,

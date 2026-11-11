@@ -12,12 +12,28 @@ fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().collect();
     if args
         .get(1)
-        .is_some_and(|arg| arg == "--inspect" || arg == "--locate")
+        .is_some_and(|arg| arg == "--inspect" || arg == "--locate" || arg == "--heap")
     {
         let state = basinsync::turso::State::from_image(std::fs::read(
             args.get(2)
                 .ok_or_else(|| anyhow::anyhow!("missing database path"))?,
         )?)?;
+        if args[1] == "--heap" {
+            let id = args
+                .get(3)
+                .ok_or_else(|| anyhow::anyhow!("missing node id"))?;
+            let node = state
+                .heap_node(id)?
+                .ok_or_else(|| anyhow::anyhow!("missing heap node"))?;
+            let owner = args
+                .get(4)
+                .ok_or_else(|| anyhow::anyhow!("missing retainer"))?;
+            serde_json::to_writer(
+                io::stdout(),
+                &serde_json::json!({"id":id,"length":node.length,"reserved":node.reserved,"etag":node.etag,"promoted":node.promoted,"retained":state.heap_edge(id,owner)?}),
+            )?;
+            return Ok(());
+        }
         if args[1] == "--locate" {
             let flow = args
                 .get(3)

@@ -8,6 +8,7 @@ export type FlowMarker={flow:string;marker:Marker};
 export type BlobRange=FlowMarker&{offset:number;length:number};
 const namespace="sync.memoremix.com",command="sts/0/databasin/commitflow",ingest="sts/0/databasin/ingestturso";
 export const manifestPath="sts/0/databasin/rangemanifest";
+export const reservePath="sts/0/databasin/reserveheap";
 export type LogicalFrames={base:Uint8Array|null;header:Uint8Array;frames:Uint8Array[]};
 export type TursoDelta={version:string;logical:LogicalFrames;physical:{before:string;after:string;size:number;pages:{number:number;data:Uint8Array}[]}};
 export type WalDelta={version:string;logical:LogicalFrames;physical:{format:"sqlite-wal/1";base:string;milestone:string;parent:string|null;base_sha384:string|null;segments:Uint8Array[]}};
@@ -44,11 +45,12 @@ function tuples(bytes:Uint8Array):{tuple:Reference;base:number}[] {
     const root=toReference(new Uint8Array(bytes).buffer);assert(root.isVector()&&root.length()>0);
     commands=Array.from({length:root.length()},(_,n)=>({tuple:root.get(n),base:0}));
   }
-  commands.forEach(({tuple},n)=>{assert(tuple.isVector()&&tuple.length()===4);assert.equal(tuple.get(0).symbolValue(),Symbol.species);assert.equal(tuple.get(1).stringValue(),namespace);assert.equal(tuple.get(2).stringValue(),n+1===commands.length&&commands.length>1?ingest:command);});return commands;
+  commands.forEach(({tuple},n)=>{assert(tuple.isVector()&&tuple.length()===4);assert.equal(tuple.get(0).symbolValue(),Symbol.species);assert.equal(tuple.get(1).stringValue(),namespace);const path=tuple.get(2).stringValue();if(n+1===commands.length&&commands.length>1)assert.equal(path,ingest);else assert(path===command||path===reservePath);});return commands;
 }
 export function rangesAt(bytes:Uint8Array):BlobRange[] {
   const commands=tuples(bytes);if(commands.length>1)commands.pop();const entries:BlobRange[]=[];
   for(const {tuple,base} of commands){
+    if(tuple.get(2).stringValue()!==command)continue;
     const markers=tuple.get(3).get("markers");assert(markers.isMap());
     for(const flow of Object.keys(markers.toObject() as object)){
       const marker=markers.get(flow),viewpoint=marker.get("viewpoint").stringValue(),sha384=marker.get("sha384").stringValue(),blob=marker.get("blob").blobValue();

@@ -324,6 +324,30 @@ impl Writer {
     pub fn cursor(&self) -> &BigUint {
         &self.cursor
     }
+    pub(crate) fn prepare_heap(
+        &mut self,
+        base: &BigUint,
+        parent: Option<&str>,
+        request: &crate::heap::Request,
+    ) -> Result<(Option<(crate::heap::Command, Delta)>, crate::heap::Outcome)> {
+        ensure!(&self.cursor == base, "unpublished database transaction");
+        let expected = self
+            .latest(&request.flow)?
+            .map_or_else(Viewpoint::zero, |v| v.next());
+        ensure!(
+            request.viewpoint == expected,
+            "heap reservation Viewpoint mismatch"
+        );
+        let (command, outcome) = self.state.plan_heap(request)?;
+        let captured = if let Some(command) = command {
+            let milestone = base + 1u8;
+            self.state.transact_heap(&milestone.to_string(), &command)?;
+            Some((command, self.capture(base, parent, milestone)?))
+        } else {
+            None
+        };
+        Ok((captured, outcome))
+    }
     pub fn prepare(
         &mut self,
         base: &BigUint,

@@ -33,6 +33,7 @@ fn unpublished_state_is_not_readable_and_bootstrap_is_verified() -> Result<()> {
     let event::Entry::Wal {
         commands,
         mut delta,
+        ..
     } = event::decode_entry(&bytes)?
     else {
         panic!()

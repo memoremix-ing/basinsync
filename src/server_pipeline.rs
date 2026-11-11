@@ -1,10 +1,18 @@
 use super::*;
 use std::collections::BTreeMap;
 
-struct Reply {
+struct CommitReply {
     channel: oneshot::Sender<ApiReply<Position>>,
     result: Result<Position, Failure>,
     _admission: OwnedSemaphorePermit,
+}
+enum Reply {
+    Commit(CommitReply),
+    Reserve {
+        channel: oneshot::Sender<ApiReply<heap::Outcome>>,
+        result: Result<heap::Outcome, Failure>,
+        _admission: OwnedSemaphorePermit,
+    },
 }
 struct Batch {
     prepared: Option<timeline::Prepared>,
@@ -15,12 +23,24 @@ struct Batch {
 impl Batch {
     fn finish(self, published: bool, prefix: &timeline::Prefix) {
         for reply in self.replies {
-            let result = if published {
-                reply.result
-            } else {
-                Err(stopped())
-            };
-            let _ = reply.channel.send(observed(result, prefix));
+            match reply {
+                Reply::Commit(reply) => {
+                    let result = if published {
+                        reply.result
+                    } else {
+                        Err(stopped())
+                    };
+                    let _ = reply.channel.send(observed(result, prefix));
+                }
+                Reply::Reserve {
+                    channel,
+                    result,
+                    _admission,
+                } => {
+                    let result = if published { result } else { Err(stopped()) };
+                    let _ = channel.send(observed(result, prefix));
+                }
+            }
         }
     }
 }
@@ -103,7 +123,7 @@ async fn publish(
                         backups.send_replace(Some(snapshot));
                     }
                     if advanced {
-                        tracing::info!(milestone=%prefix.milestone(), requests=batch.replies.iter().filter(|r|r.result.is_ok()).count(), "put of success");
+                        tracing::info!(milestone=%prefix.milestone(), requests=batch.replies.iter().filter(|r|matches!(r,Reply::Commit(CommitReply {result:Ok(_),..})|Reply::Reserve {result:Ok(_),..})).count(), "put of success");
                     }
                     batch.finish(true, &prefix);
                 }
@@ -190,6 +210,19 @@ impl Preparation {
         );
         Ok(watershed)
     }
+    async fn write_stager(&mut self) -> Result<timeline::Stager> {
+        let settled = self
+            .stager
+            .as_ref()
+            .context("missing preparation state")?
+            .prefix()
+            == *self.published.borrow();
+        if settled {
+            let watershed = self.refreshed(true).await?;
+            self.stager = Some(watershed.into_stager());
+        }
+        self.stager.take().context("missing preparation state")
+    }
     async fn run(&mut self, queue: &mut mpsc::Receiver<Message>) -> Result<()> {
         let mut pending = None;
         loop {
@@ -202,6 +235,26 @@ impl Preparation {
                 return Ok(());
             };
             match message {
+                Message::Reserve(reservation) => {
+                    let permit = self
+                        .batches
+                        .clone()
+                        .acquire_owned()
+                        .await
+                        .context("publication stopped")?;
+                    let stager = self.write_stager().await?;
+                    let (stager, batch) = tokio::task::spawn_blocking(move || {
+                        prepare_reservation(stager, reservation, permit)
+                    })
+                    .await
+                    .context("reservation preparation panicked")??;
+                    self.stager = Some(stager);
+                    anyhow::ensure!(!*self.halted.borrow(), "publication stopped");
+                    self.output
+                        .send(Publication::Batch(batch))
+                        .await
+                        .map_err(|_| anyhow::anyhow!("publication stopped"))?;
+                }
                 Message::Status { flow, reply } => {
                     let watershed = self.refreshed(false).await?;
                     let latest = if let Some(viewpoint) = watershed.latest(&flow)? {
@@ -306,13 +359,7 @@ impl Preparation {
                             None => break,
                         }
                     }
-                    let settled =
-                        self.stager.as_ref().unwrap().prefix() == *self.published.borrow();
-                    if settled {
-                        let watershed = self.refreshed(true).await?;
-                        self.stager = Some(watershed.into_stager());
-                    }
-                    let stager = self.stager.take().context("missing preparation state")?;
+                    let stager = self.write_stager().await?;
                     let (stager, batch) =
                         tokio::task::spawn_blocking(move || prepare(stager, batch, permit))
                             .await
@@ -358,11 +405,11 @@ fn prepare(
             });
             Ok(Position { viewpoint })
         };
-        replies.push(Reply {
+        replies.push(Reply::Commit(CommitReply {
             channel: queued.reply,
             result,
             _admission: queued.admission,
-        });
+        }));
     }
     let prepared = if commands.is_empty() {
         None
@@ -381,6 +428,41 @@ fn prepare(
             prepared,
             prefix,
             replies,
+            _permit: permit,
+        },
+    ))
+}
+
+fn prepare_reservation(
+    mut stager: timeline::Stager,
+    reservation: QueuedReservation,
+    permit: OwnedSemaphorePermit,
+) -> Result<(timeline::Stager, Batch)> {
+    let expected = stager.expected(&reservation.request.flow)?;
+    let (prepared, result) = if reservation.request.viewpoint != expected {
+        (
+            None,
+            Err(Failure::Mismatch(ViewpointMismatch {
+                next: Position {
+                    viewpoint: expected,
+                },
+            })),
+        )
+    } else {
+        let (prepared, outcome) = stager.prepare_heap(&reservation.request)?;
+        (prepared, Ok(outcome))
+    };
+    let prefix = stager.prefix();
+    Ok((
+        stager,
+        Batch {
+            prepared,
+            prefix,
+            replies: vec![Reply::Reserve {
+                channel: reservation.reply,
+                result,
+                _admission: reservation.admission,
+            }],
             _permit: permit,
         },
     ))

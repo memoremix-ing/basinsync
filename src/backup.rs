@@ -31,7 +31,9 @@ pub async fn publish(bucket: &Bucket, snapshot: &Snapshot) -> Result<()> {
             event::Entry::Legacy(command) => vec![event::FlowCommand {
                 markers: command.markers,
             }],
-            event::Entry::Wal { commands, delta } => {
+            event::Entry::Wal {
+                commands, delta, ..
+            } => {
                 delta.validate_version()?;
                 delta
                     .physical

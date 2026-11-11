@@ -190,6 +190,33 @@ impl Stager {
         self.state.head = Some(prepared.digest.clone());
         Ok(prepared)
     }
+    pub fn prepare_heap(
+        &mut self,
+        request: &crate::heap::Request,
+    ) -> Result<(Option<Prepared>, crate::heap::Outcome)> {
+        self.state.enable_vfs()?;
+        let (captured, outcome) = self.state.writer.as_mut().unwrap().prepare_heap(
+            &self.state.milestone,
+            self.state.head.as_deref(),
+            request,
+        )?;
+        let prepared = if let Some((command, delta)) = captured {
+            let bytes = event::FlowChunks::heap(&command)?.finish(delta)?;
+            let prepared = Prepared {
+                digest: event::digest(&bytes),
+                bytes,
+                milestone: &self.state.milestone + 1u8,
+                parent: self.state.head.clone(),
+                view: self.state.writer.as_ref().unwrap().snapshot()?,
+            };
+            self.state.milestone = prepared.milestone.clone();
+            self.state.head = Some(prepared.digest.clone());
+            Some(prepared)
+        } else {
+            None
+        };
+        Ok((prepared, outcome))
+    }
     pub fn into_settled(self, published: &Prefix) -> Result<Watershed> {
         ensure!(
             self.prefix() == *published,
@@ -342,7 +369,11 @@ impl Watershed {
                 self.database = Some(next);
                 self.milestone = milestone;
             }
-            event::Entry::Wal { commands, delta } => {
+            event::Entry::Wal {
+                commands,
+                heap,
+                delta,
+            } => {
                 delta.validate_version()?;
                 delta
                     .physical
@@ -391,6 +422,9 @@ impl Watershed {
                     );
                 }
                 validate_locations(&next, &milestone, &ranges, enveloped)?;
+                for command in &heap {
+                    next.verify_heap(self.database.as_ref(), command)?;
+                }
                 self.database = Some(next);
                 self.writer = None;
                 self.milestone = milestone;

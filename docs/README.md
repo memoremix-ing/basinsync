@@ -2,6 +2,7 @@
 [0002-watershed-timeline-race]: <diy/0002-watershed-timeline-race.md>
 [0003-turso-reservoir-vfs]: <diy/0003-turso-reservoir-vfs.md>
 [0004-watershed-backup-recovery]: <diy/0004-watershed-backup-recovery.md>
+[0005-shallow-heap-management]: <diy/0005-shallow-heap-management.md>
 
 # basinsync
 
@@ -19,4 +20,6 @@ Coordinate writes and locate payloads with
 Then materialize *0003 — Turso Reservoir VFS*[^][0003-turso-reservoir-vfs].
 
 Recover from snapshots with *0004 — Watershed backup and recovery*[^][0004-watershed-backup-recovery].
+
+Stage uploads with *0005 — Shallow heap management*[^][0005-shallow-heap-management].
 
