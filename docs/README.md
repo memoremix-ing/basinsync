@@ -3,6 +3,7 @@
 [0003-turso-reservoir-vfs]: <diy/0003-turso-reservoir-vfs.md>
 [0004-watershed-backup-recovery]: <diy/0004-watershed-backup-recovery.md>
 [0005-shallow-heap-management]: <diy/0005-shallow-heap-management.md>
+[0006-async-shallow-cleanup]: <diy/0006-async-shallow-cleanup.md>
 
 # basinsync
 
@@ -23,3 +24,5 @@ Recover from snapshots with *0004 — Watershed backup and recovery*[^][0004-wat
 
 Stage uploads with *0005 — Shallow heap management*[^][0005-shallow-heap-management].
 
+
+Reclaim staged objects with *0006 — Async shallow cleanup*[^][0006-async-shallow-cleanup].

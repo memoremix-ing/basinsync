@@ -183,13 +183,43 @@ impl Node {
     }
 }
 
+pub fn valid_revision(revision: &str) -> Result<()> {
+    let uuid = uuid::Uuid::parse_str(revision)?;
+    ensure!(
+        uuid.get_version_num() == 4
+            && uuid.get_variant() == uuid::Variant::RFC4122
+            && uuid.to_string() == revision,
+        "invalid node revision"
+    );
+    Ok(())
+}
+pub fn key(generation: &str, id: &str, revision: &str) -> String {
+    format!("{generation}{id}/{revision}")
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Allocation {
+    pub id: String,
+    pub length: u64,
+    pub revision: String,
+}
+impl Allocation {
+    fn validate(&self) -> Result<()> {
+        Node {
+            id: self.id.clone(),
+            length: self.length,
+        }
+        .validate()?;
+        valid_revision(&self.revision)
+    }
+}
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Command {
     pub flow: String,
     pub viewpoint: String,
     pub reserved: String,
-    pub nodes: Vec<Node>,
+    pub nodes: Vec<Allocation>,
 }
 impl Command {
     pub fn validate(&self) -> Result<Viewpoint> {
@@ -210,6 +240,7 @@ impl Command {
 
 pub struct Reserved {
     pub id: String,
+    pub revision: String,
     pub length: u64,
     pub write: bool,
     pub preview: bool,
@@ -238,7 +269,7 @@ impl Outcome {
     pub async fn actions(self, bucket: &s3::Bucket) -> Result<Response> {
         let mut results = BTreeMap::new();
         for (index, node) in self.results {
-            let young = format!("{YOUNG}{}", node.id);
+            let young = key(YOUNG, &node.id, &node.revision);
             let actions = Actions {
                 write: if node.write {
                     Some(range_get::presign_write(bucket, &young, node.length).await?)
@@ -250,7 +281,7 @@ impl Outcome {
                 } else {
                     None
                 },
-                read: range_get::presign_whole(bucket, &format!("{OLD}{}", node.id)).await?,
+                read: range_get::presign_whole(bucket, &key(OLD, &node.id, &node.revision)).await?,
             };
             results.insert(index, NodeResult { actions });
         }

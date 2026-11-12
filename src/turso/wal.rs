@@ -348,6 +348,21 @@ impl Writer {
         };
         Ok((captured, outcome))
     }
+    pub(crate) fn prepare_cleanup(
+        &mut self,
+        base: &BigUint,
+        parent: Option<&str>,
+        command: crate::cleanup::Command,
+    ) -> Result<Option<(crate::cleanup::Command, Delta)>> {
+        ensure!(&self.cursor == base, "unpublished database transaction");
+        let Some(command) = self.state.plan_cleanup(command)? else {
+            return Ok(None);
+        };
+        let milestone = base + 1u8;
+        self.state
+            .transact_cleanup(&milestone.to_string(), &command)?;
+        Ok(Some((command, self.capture(base, parent, milestone)?)))
+    }
     pub fn prepare(
         &mut self,
         base: &BigUint,

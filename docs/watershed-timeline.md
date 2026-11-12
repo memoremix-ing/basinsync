@@ -13,6 +13,7 @@
 [physical-frame]: <glossary/physical-frame.md>
 [range-manifest]: <glossary/range-manifest.md>
 [sha384]: <glossary/sha384.md>
+[sweeping-task]: <glossary/sweeping-task.md>
 [timeline]: <glossary/timeline.md>
 [turso-state]: <turso-state.md>
 [viewpoint]: <glossary/viewpoint.md>
@@ -39,7 +40,8 @@ Each entry contains decimal `viewpoint`, hexadecimal *SHA-384*[^][sha384] in
 `sha384`, and binary `blob`. *Conditional creation*[^][conditional-write] of a
 *DifferentialEvent*[^][differential-event] at the next *Milestone*[^][milestone]
 arbitrates competing writers. Concatenate *EnvBuf-wrapped*[^][envbuf]
-state commands (commitflow or *reserveheap*[^][heap-protocol]),
+state commands (commitflow, *reserveheap*[^][heap-protocol], or
+*sweepheap*[^][sweeping-task]),
 one `sts/0/databasin/ingestturso` tuple, then a
 *range manifest*[^][range-manifest]. Each tuple is its own
 *FlexBuffers*[^][flexbuffers] document. The ingestion command's

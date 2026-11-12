@@ -11,6 +11,7 @@ use axum::{
     routing::{get, post, put},
 };
 use basinsync::{
+    cleanup,
     details::CommitDetails,
     diffuse16,
     event::{self, Marker},
@@ -277,6 +278,10 @@ impl QueuedCommit {
 enum Message {
     Commit(QueuedCommit),
     Reserve(QueuedReservation),
+    Cleanup {
+        command: cleanup::Command,
+        reply: oneshot::Sender<Result<()>>,
+    },
     Status {
         flow: String,
         reply: oneshot::Sender<ApiReply<EpilogueStatus>>,
@@ -291,6 +296,9 @@ impl Message {
             Self::Reserve(r) => {
                 let _ = r.reply.send(observed(Err(stopped()), prefix));
             }
+            Self::Cleanup { reply, .. } => {
+                let _ = reply.send(Err(anyhow::anyhow!("publication stopped")));
+            }
             Self::Status { reply, .. } => {
                 let _ = reply.send(observed(Err(stopped()), prefix));
             }
@@ -298,6 +306,8 @@ impl Message {
     }
 }
 struct Worker {
+    maintenance: mpsc::Sender<Message>,
+    cleanup: server_pipeline::CleanupConfig,
     bucket: Box<Bucket>,
     state: timeline::Watershed,
     batch_max: usize,
@@ -438,7 +448,35 @@ async fn main() -> Result<()> {
             .parse()?,
     };
     let signing_bucket = bucket.clone();
+    let cleanup = server_pipeline::CleanupConfig {
+        interval: Duration::from_millis(
+            env::var("BASINSYNC_CLEANUP_INTERVAL_MS")
+                .unwrap_or_else(|_| "1000".into())
+                .parse()?,
+        ),
+        tasks: env::var("BASINSYNC_SWEEP_BATCH_SIZE")
+            .unwrap_or_else(|_| "16".into())
+            .parse()?,
+        edges: env::var("BASINSYNC_SWEEP_EDGE_BATCH_SIZE")
+            .unwrap_or_else(|_| "256".into())
+            .parse()?,
+        nodes: env::var("BASINSYNC_ERASE_BATCH_SIZE")
+            .unwrap_or_else(|_| "32".into())
+            .parse()?,
+        concurrency: env::var("BASINSYNC_ERASE_CONCURRENCY")
+            .unwrap_or_else(|_| "4".into())
+            .parse()?,
+    };
+    anyhow::ensure!(
+        (1..=4096).contains(&cleanup.tasks)
+            && (1..=4096).contains(&cleanup.edges)
+            && (1..=4096).contains(&cleanup.nodes)
+            && (1..=32).contains(&cleanup.concurrency),
+        "invalid cleanup limits"
+    );
     let worker = Worker {
+        maintenance: queue.clone(),
+        cleanup,
         bucket,
         state,
         batch_max,

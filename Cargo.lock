@@ -305,6 +305,7 @@ dependencies = [
  "tracing-subscriber",
  "turso_core",
  "url",
+ "uuid",
 ]
 
 [[package]]

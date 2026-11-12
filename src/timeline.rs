@@ -217,6 +217,31 @@ impl Stager {
         };
         Ok((prepared, outcome))
     }
+    pub fn prepare_cleanup(
+        &mut self,
+        command: crate::cleanup::Command,
+    ) -> Result<Option<Prepared>> {
+        self.state.enable_vfs()?;
+        let captured = self.state.writer.as_mut().unwrap().prepare_cleanup(
+            &self.state.milestone,
+            self.state.head.as_deref(),
+            command,
+        )?;
+        let Some((command, delta)) = captured else {
+            return Ok(None);
+        };
+        let bytes = event::FlowChunks::cleanup(&command)?.finish(delta)?;
+        let prepared = Prepared {
+            digest: event::digest(&bytes),
+            bytes,
+            milestone: &self.state.milestone + 1u8,
+            parent: self.state.head.clone(),
+            view: self.state.writer.as_ref().unwrap().snapshot()?,
+        };
+        self.state.milestone = prepared.milestone.clone();
+        self.state.head = Some(prepared.digest.clone());
+        Ok(Some(prepared))
+    }
     pub fn into_settled(self, published: &Prefix) -> Result<Watershed> {
         ensure!(
             self.prefix() == *published,
@@ -372,6 +397,7 @@ impl Watershed {
             event::Entry::Wal {
                 commands,
                 heap,
+                cleanup,
                 delta,
             } => {
                 delta.validate_version()?;
@@ -424,6 +450,9 @@ impl Watershed {
                 validate_locations(&next, &milestone, &ranges, enveloped)?;
                 for command in &heap {
                     next.verify_heap(self.database.as_ref(), command)?;
+                }
+                for command in &cleanup {
+                    next.verify_cleanup(self.database.as_ref(), command)?;
                 }
                 self.database = Some(next);
                 self.writer = None;

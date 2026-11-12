@@ -30,7 +30,7 @@ fn main() -> Result<()> {
                 .ok_or_else(|| anyhow::anyhow!("missing retainer"))?;
             serde_json::to_writer(
                 io::stdout(),
-                &serde_json::json!({"id":id,"length":node.length,"reserved":node.reserved,"etag":node.etag,"promoted":node.promoted,"retained":state.heap_edge(id,owner)?}),
+                &serde_json::json!({"id":id,"length":node.length,"reserved":node.reserved,"etag":node.etag,"promoted":node.promoted,"revision":node.revision,"freed":node.freed,"retained":state.heap_edge(id,owner)?}),
             )?;
             return Ok(());
         }

@@ -426,6 +426,51 @@ fn application_feed(
     Ok(feed)
 }
 
+fn append_sweeping_feed(
+    writer: &Writer,
+    commands: &[FlowCommand],
+    schema: &Tables,
+    feed: &mut Feed,
+) -> Result<()> {
+    let table = schema
+        .values()
+        .find(|t| t.name == "sweeping_tasks")
+        .unwrap();
+    let mut seen = std::collections::BTreeSet::new();
+    for command in commands {
+        for (flow, marker) in &command.markers {
+            if !seen.insert((flow, &marker.viewpoint)) {
+                continue;
+            }
+            let mut query =
+                writer.state.native.conn.prepare(
+                    "SELECT prioritized FROM sweeping_tasks WHERE flow=?1 AND viewpoint=?2",
+                )?;
+            query.bind_at(
+                NonZeroUsize::new(1).unwrap(),
+                Value::build_text(flow.clone()),
+            )?;
+            query.bind_at(
+                NonZeroUsize::new(2).unwrap(),
+                Value::build_text(marker.viewpoint.clone()),
+            )?;
+            query.run_with_row_callback(|row| {
+                feed.add(
+                    table,
+                    vec![
+                        Cell::Text(flow.clone()),
+                        Cell::Text(marker.viewpoint.clone()),
+                        Cell::Text(row.get(0)?),
+                    ],
+                    1,
+                );
+                Ok(())
+            })?;
+        }
+    }
+    Ok(())
+}
+
 fn snapshot(native: &Native, schema: &Tables) -> Result<Feed> {
     snapshot_conn(&native.conn, schema)
 }
@@ -523,10 +568,11 @@ fn hook_alone_misses_checkpointed_upsert_retractions() -> Result<()> {
     let mut writer = Writer::open(&seed(8, false)?)?;
     let schema = tables(&writer.state.native)?;
     let commands = input(0, 8, 8, &[]);
-    let expected = application_feed(&writer, &commands, &schema, true)?;
+    let mut expected = application_feed(&writer, &commands, &schema, true)?;
     enable(&writer.state.native);
     let mut index = RowIndex::load(&writer.state.native, &schema)?;
     writer.prepare(&1u8.into(), Some("seed"), &commands)?;
+    append_sweeping_feed(&writer, &commands, &schema, &mut expected)?;
     let versions = take(&writer.state.native);
     let bare = from_versions(&versions, &schema)?;
     assert!(!bare.tables["flows"].rows.iter().any(|row| row.weight < 0));
@@ -654,11 +700,13 @@ fn command_reads_and_hook_agree_for_repeated_flow_batches() -> Result<()> {
     let mut parent = Some("seed".into());
     for n in 0..5 {
         let commands = input(n * 32, 32, 8, &[0, 255]);
-        let app = application_feed(&writer, &commands, &schema, false)?;
-        let reads = application_feed(&writer, &commands, &schema, true)?;
+        let mut app = application_feed(&writer, &commands, &schema, false)?;
+        let mut reads = application_feed(&writer, &commands, &schema, true)?;
         let base = writer.cursor.clone();
         let before = writer.image()?;
         let delta = writer.prepare(&base, parent.as_deref(), &commands)?;
+        append_sweeping_feed(&writer, &commands, &schema, &mut app)?;
+        append_sweeping_feed(&writer, &commands, &schema, &mut reads)?;
         let versions = take(&writer.state.native);
         let hook = decoded(&row_index.apply(&versions, &schema))?;
         assert_eq!(consolidated(&app)?, consolidated(&hook)?);
@@ -850,6 +898,9 @@ fn measure() -> Result<()> {
         } else {
             writer.prepare(&base, parent.as_deref(), &commands)?
         };
+        if variant == "app-reuse" || variant == "point-read" {
+            append_sweeping_feed(&writer, &commands, &schema, feed.as_mut().unwrap())?;
+        }
         let versions = if variant.starts_with("hook-") {
             take(&writer.state.native)
         } else {

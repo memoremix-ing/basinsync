@@ -1,8 +1,10 @@
 use super::*;
-use crate::heap::{Command, Node, NodeError, Outcome, Request, Reserved, retainer};
+use crate::heap::{Allocation, Command, NodeError, Outcome, Request, Reserved, retainer};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HeapNode {
+    pub revision: String,
+    pub freed: String,
     pub length: u64,
     pub reserved: String,
     pub etag: String,
@@ -13,7 +15,7 @@ pub struct HeapNode {
 
 impl State {
     pub fn heap_node(&self, id: &str) -> Result<Option<HeapNode>> {
-        let mut query=self.native.conn.prepare("SELECT content_length,reserved,etag,promoted,julianday(promoted) IS NOT NULL,EXISTS(SELECT 1 FROM graph_edges WHERE node=?1 AND retainer>='n-' AND retainer<'n.') FROM graph_nodes WHERE id=?1")?;
+        let mut query=self.native.conn.prepare("SELECT content_length,reserved,etag,promoted,julianday(promoted) IS NOT NULL,EXISTS(SELECT 1 FROM graph_edges WHERE node=?1 AND retainer>='n-' AND retainer<'n.'),revision,freed FROM graph_nodes WHERE id=?1")?;
         query.bind_at(
             NonZeroUsize::new(1).unwrap(),
             Value::build_text(id.to_owned()),
@@ -23,6 +25,8 @@ impl State {
                 let row = query.row().unwrap();
                 Ok(Some(HeapNode {
                     length: u64::try_from(row.get::<i64>(0)?)?,
+                    revision: row.get(6)?,
+                    freed: row.get(7)?,
                     reserved: row.get(1)?,
                     etag: row.get(2)?,
                     promoted: row.get(3)?,
@@ -57,7 +61,7 @@ impl State {
             .format(&time::format_description::well_known::Rfc3339)?;
         let mut outcome = Outcome::default();
         let mut planned = BTreeMap::<String, HeapNode>::new();
-        let mut nodes = BTreeMap::<String, Node>::new();
+        let mut nodes = BTreeMap::<String, Allocation>::new();
         for (index, node) in request.nodes.iter().enumerate() {
             let node = match node {
                 Ok(node) => node,
@@ -72,7 +76,12 @@ impl State {
                 self.heap_node(&node.id)?
             };
             if let Some(current) = &current {
-                let error = if current.length != node.length {
+                let error = if !current.freed.is_empty() {
+                    Some(NodeError {
+                        code: "node_freed",
+                        message: "node is awaiting cleanup; retry after reclamation",
+                    })
+                } else if current.length != node.length {
                     Some(NodeError {
                         code: "length_collision",
                         message: "node already has a different content length",
@@ -91,6 +100,8 @@ impl State {
                 }
             }
             let current = current.unwrap_or_else(|| HeapNode {
+                revision: uuid::Uuid::new_v4().to_string(),
+                freed: String::new(),
                 length: node.length,
                 reserved: reserved.clone(),
                 etag: String::new(),
@@ -102,13 +113,21 @@ impl State {
                 index,
                 Reserved {
                     id: node.id.clone(),
+                    revision: current.revision.clone(),
                     length: node.length,
                     write: current.etag.is_empty(),
                     preview: !current.promoted_valid,
                 },
             );
+            nodes.insert(
+                node.id.clone(),
+                Allocation {
+                    id: node.id.clone(),
+                    length: node.length,
+                    revision: current.revision.clone(),
+                },
+            );
             planned.insert(node.id.clone(), current);
-            nodes.insert(node.id.clone(), node.clone());
         }
         let command = (!nodes.is_empty()).then(|| Command {
             flow: request.flow.clone(),
@@ -125,11 +144,12 @@ impl State {
         conn.execute("BEGIN CONCURRENT")?;
         let owner = retainer(&command.flow, &Viewpoint::parse(&command.viewpoint)?);
         for node in &command.nodes {
-            let mut insert=conn.prepare("INSERT INTO graph_nodes(id,content_length,reserved,etag,promoted) VALUES(?1,?2,?3,'','') ON CONFLICT(id) DO NOTHING")?;
+            let mut insert=conn.prepare("INSERT INTO graph_nodes(id,content_length,reserved,etag,promoted,revision) VALUES(?1,?2,?3,'','',?4) ON CONFLICT(id) DO NOTHING")?;
             for (i, value) in [
                 Value::build_text(node.id.clone()),
                 Value::from_i64(node.length as i64),
                 Value::build_text(command.reserved.clone()),
+                Value::build_text(node.revision.clone()),
             ]
             .into_iter()
             .enumerate()
@@ -179,6 +199,8 @@ impl State {
                 .transpose()?
                 .flatten();
             let expected = previous.unwrap_or_else(|| HeapNode {
+                revision: node.revision.clone(),
+                freed: String::new(),
                 length: node.length,
                 reserved: command.reserved.clone(),
                 etag: String::new(),
@@ -187,7 +209,10 @@ impl State {
                 incoming: false,
             });
             ensure!(
-                expected.length == node.length && !expected.incoming,
+                expected.length == node.length
+                    && expected.revision == node.revision
+                    && expected.freed.is_empty()
+                    && !expected.incoming,
                 "invalid heap collision"
             );
             ensure!(

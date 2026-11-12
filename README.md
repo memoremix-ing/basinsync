@@ -6,7 +6,6 @@ a first-writer-wins Epilogue, a server, and TypeScript stress clients.
 
 [Run and verify](docs/development.md) · [Protocol and invariant](docs/epilogue-protocol.md)
 
-The current milestone is [0005 — Shallow heap management](docs/diy/0005-shallow-heap-management.md):
-durable reservations for opaque height-zero nodes, with conditional upload and
-read actions. Access tokens never enter persistent state. The two-batch pipeline
-acknowledges success after durable, ordered Timeline publication.
+The current milestone is [0006 — Async shallow cleanup](docs/diy/0006-async-shallow-cleanup.md):
+durable, bounded reclamation queues and background object deletion. UUIDv4
+revisions keep delayed deletions scoped to earlier allocations of a reusable node id.

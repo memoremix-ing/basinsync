@@ -6,6 +6,7 @@
 [json0]: <glossary/json0.md>
 [node]: <glossary/node.md>
 [old-generation]: <glossary/old-generation.md>
+[revision]: <glossary/revision.md>
 [viewpoint]: <glossary/viewpoint.md>
 [young-generation]: <glossary/young-generation.md>
 
@@ -46,13 +47,14 @@ Successful *reservations*[^][heap-reservation] are durable before returning.
 specified `Content-Length`. `preview` and `read` are
 *conditional GETs*[^][conditional-read] for that *node*[^][node] in the
 *young*[^][young-generation] and *old*[^][old-generation] generations respectively.
-Send each action's headers. A nonempty stored etag makes `write` null; a valid
+Both object keys end in `${node_id}/${revision}`, sharing the stored UUIDv4
+*revision*[^][revision]. Send each action's headers. A nonempty stored etag makes `write` null; a valid
 promotion timestamp makes `preview` null.
 
 The token-free journal command uses decimal `viewpoint` and a UTC timestamp:
 
 ```ts
 [Symbol.species, "sync.memoremix.com", "sts/0/databasin/reserveheap", {
-  flow, viewpoint, reserved, nodes: [{ id, length }]
+  flow, viewpoint, reserved, nodes: [{ id, length, revision }]
 }]
 ```

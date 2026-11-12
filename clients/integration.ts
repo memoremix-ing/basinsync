@@ -74,7 +74,7 @@ function serverProcess(bucket: string, s3Endpoint: string, address: string, opti
   return launch([`${root}/target/debug/basinsync`],{
     S3_ENDPOINT:s3Endpoint,S3_BUCKET:bucket,AWS_REGION:"us-east-1",
     AWS_ACCESS_KEY_ID:credentials.accessKeyId,AWS_SECRET_ACCESS_KEY:credentials.secretAccessKey,
-    AWS_SESSION_TOKEN:"",BASINSYNC_LISTEN:address,BASINSYNC_BACKUP_INTERVAL_MS:"0",BASINSYNC_STATUS_PROBE_MAX_AGE_MS:"0",...options,
+    AWS_SESSION_TOKEN:"",BASINSYNC_LISTEN:address,BASINSYNC_CLEANUP_INTERVAL_MS:"0",BASINSYNC_BACKUP_INTERVAL_MS:"0",BASINSYNC_STATUS_PROBE_MAX_AGE_MS:"0",...options,
   });
 }
 async function server(bucket: string, s3Endpoint = endpoint, options:Record<string,string>={}) {
@@ -985,8 +985,10 @@ try {
     assert.deepEqual(Object.values(response.errors!).map(e=>e.code),["unsupported_height","unsupported_version","unsupported_edges","token_limit","length_collision"]);
     const actions=response.results![0].actions,zero=response.results![7].actions;
     assert(actions.write&&actions.preview&&zero.write&&zero.preview);
-    assert(new URL(actions.write.url).pathname.endsWith(`/heap/young/${id(secret)}`));
-    assert(new URL(actions.read.url).pathname.endsWith(`/heap/old/${id(secret)}`));
+    const revision = new URL(actions.write.url).pathname.split("/").at(-1)!;
+    assert.match(revision,/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    assert(new URL(actions.write.url).pathname.endsWith(`/heap/young/${id(secret)}/${revision}`));
+    assert(new URL(actions.read.url).pathname.endsWith(`/heap/old/${id(secret)}/${revision}`));
     assert.equal(new URL(actions.write.url).searchParams.get("X-Amz-SignedHeaders"),"content-length;host;if-none-match");
     assert.deepEqual(actions.write.headers,{"Content-Length":"7","If-None-Match":"*"});
     for(const action of [actions.preview,actions.read]){assert.equal(action.headers["If-Match"],"*");const r=await fetch(action.url,{headers:action.headers});assert([404,412].includes(r.status));await r.arrayBuffer();}
@@ -1006,7 +1008,7 @@ try {
     const preview=await fetch(actions.preview.url,{headers:actions.preview.headers});assert.equal(preview.status,200);assert.deepEqual(new Uint8Array(await preview.arrayBuffer()),bytes("payload"));
     const emptyPut=await fetch(zero.write.url,{method:"PUT",headers:zero.write.headers,body:new Uint8Array()});assert(emptyPut.ok,await emptyPut.text());
     const emptyGet=await fetch(zero.preview.url,{headers:zero.preview.headers});assert.equal(emptyGet.status,200);assert.equal((await emptyGet.arrayBuffer()).byteLength,0);
-    await s3.send(new PutObjectCommand({Bucket:b,Key:`heap/old/${id(secret)}`,Body:bytes("payload")}));
+    await s3.send(new PutObjectCommand({Bucket:b,Key:`heap/old/${id(secret)}/${revision}`,Body:bytes("payload")}));
     const old=await fetch(actions.read.url,{headers:actions.read.headers});assert.equal(old.status,200);assert.deepEqual(new Uint8Array(await old.arrayBuffer()),bytes("payload"));
     const retry=await reserved(await reserveHeap(app.url,flow,0n,[node(),node()]));assert.equal(retry.errors,null);assert.deepEqual(Object.keys(retry.results!),["0","1"]);
     const other=await reserved(await reserveHeap(app.url,"another-flow",0n,[node()]));assert.equal(other.errors,null);
@@ -1079,6 +1081,72 @@ try {
     assert.equal((await s3.send(new ListObjectsV2Command({Bucket:b,Prefix:"timeline/"}))).KeyCount,3);await stop(restored.process);
   }
   console.log("put of success: pipelined reservation/commit durability, ambiguous reservation recovery, and competing reservers");
+  // Independent workers may DELETE the same old revision; neither can erase its replacement.
+  {
+    const b=await bucket(),gate=Promise.withResolvers<void>(),entered=Promise.withResolvers<void>();let held=false;
+    const proxy=relay((_,response)=>response,async request=>{
+      if(request.method==="DELETE"&&new URL(request.url).pathname.includes("/heap/young/")){held=true;entered.resolve();await gate.promise;}
+    });
+    const options={BASINSYNC_CLEANUP_INTERVAL_MS:"15",BASINSYNC_SWEEP_BATCH_SIZE:"1",BASINSYNC_SWEEP_EDGE_BATCH_SIZE:"1",BASINSYNC_ERASE_BATCH_SIZE:"1",BASINSYNC_ERASE_CONCURRENCY:"1"};
+    const app=await server(b,proxy.url,options),secret=bytes("cleanup-reusable-token"),input:HeapNode={auth:[0,0,secret],length:4,edges:[]};
+    const reserve=async(url:string,flow:string)=>{const r=await reserveHeap(url,flow,0n,[input]);await status(r.clone(),200);return parse<HeapResponse>(await r.text());};
+    const initial=await reserve(app.url,"first"),actions=initial.results![0].actions;assert(actions.write&&actions.preview);
+    const oldKey=new URL(actions.write.url).pathname.slice(b.length+2);
+    const put=await fetch(actions.write.url,{method:"PUT",headers:actions.write.headers,body:bytes("same")});assert(put.ok,await put.text());
+    const shared=await reserve(app.url,"shared");assert.equal(new URL(shared.results![0].actions.preview!.url).pathname,new URL(actions.preview.url).pathname);
+    await status(await commit(app.url,"first",bytes("marker"),0n),201);
+    await eventually(async()=>{
+      const listed=await s3.send(new ListObjectsV2Command({Bucket:b,Prefix:"timeline/"}));
+      for(const object of listed.Contents??[]) { const r=await s3.send(new GetObjectCommand({Bucket:b,Key:object.Key!})); if(eventTuples(await r.Body!.transformToByteArray()).some(t=>t[2]==="sts/0/databasin/sweepheap"))return true; }
+      return false;
+    },Boolean);
+    assert(!held,"shared retainers keep the node live");
+    await status(await commit(app.url,"shared",bytes("marker"),0n),201);
+    await timeout(entered.promise);
+    const pending=await reserve(app.url,"reuse");assert.equal(pending.errors![0].code,"node_freed");
+    await timeout(status(await commit(app.url,"unrelated",bytes("foreground"),0n),201),3000);
+    const competing=await server(b,endpoint,options);
+    const replacement=await eventually(()=>reserve(competing.url,"reuse"),r=>r.results!==null);
+    const next=replacement.results![0].actions;assert(next.write&&next.preview);
+    assert.notEqual(new URL(next.write.url).pathname,new URL(actions.write.url).pathname);
+    const upload=await fetch(next.write.url,{method:"PUT",headers:next.write.headers,body:bytes("same")});assert(upload.ok,await upload.text());
+    gate.resolve();await Bun.sleep(100);
+    const live=await fetch(next.preview.url,{headers:next.preview.headers});assert.equal(live.status,200);assert.equal(await live.text(),"same");
+    await stop(app.process);await stop(competing.process);
+    // An old still-valid PUT can leave dust, without changing the current revision.
+    const late=await fetch(actions.write.url,{method:"PUT",headers:actions.write.headers,body:bytes("same")});assert(late.ok,await late.text());
+    const objects=await s3.send(new ListObjectsV2Command({Bucket:b,Prefix:"heap/young/"}));assert.equal(objects.KeyCount,2);assert(objects.Contents!.some(o=>o.Key===oldKey));
+    const restored=await server(b,endpoint,{BASINSYNC_BACKUP_INTERVAL_MS:"10"});
+    const again=await reserve(restored.url,"reuse");assert.equal(new URL(again.results![0].actions.preview!.url).pathname,new URL(next.preview.url).pathname);
+    const target=again.timelines.watershed.milestone;
+    const cp=await eventually(()=>watershedBackup(b),cp=>cp?.milestone===target);assert(cp);
+    let image:Uint8Array|undefined;
+    for(let m=1n;m<=target;m++){const delta=deltasAt(await get(b,m)).turso["default.turso"] as WalDelta;image=ingestWal(image??delta.logical.base!,delta.physical.segments);}
+    assert.deepEqual(cp.blob,image,"cleanup and revision reuse survive physical replay and snapshot recovery");
+    await stop(restored.process);
+  }
+  for(const fault of ["before","after"]){
+    const b=await bucket();let deletes=0,failed=false;const sweeps=new WeakSet<Request>();
+    const isSweep=async(request:Request)=>request.method==="PUT"&&new URL(request.url).pathname.includes("/timeline/")&&eventTuples(new Uint8Array(await request.clone().arrayBuffer())).some(t=>t[2]==="sts/0/databasin/sweepheap");
+    const proxy=relay(async(request,response)=>{
+      if(fault==="after"&&sweeps.has(request)){failed=true;await response.arrayBuffer();return new Response("lost sweep response",{status:503});}return response;
+    },async request=>{
+      if(request.method==="DELETE")deletes++;
+      if(await isSweep(request)){sweeps.add(request);if(fault==="before"){failed=true;return new Response("sweep not stored",{status:503});}}
+    });
+    const app=await server(b,proxy.url,{BASINSYNC_CLEANUP_INTERVAL_MS:"15"});
+    const input:HeapNode={auth:[0,0,bytes(`cleanup-durability-${fault}`)],length:0,edges:[]};
+    const reserved=await reserveHeap(app.url,"f",0n,[input]);await status(reserved.clone(),200);
+    const actions=parse<HeapResponse>(await reserved.text()).results![0].actions;assert(actions.write);
+    const upload=await fetch(actions.write.url,{method:"PUT",headers:actions.write.headers,body:new Uint8Array()});assert(upload.ok);
+    await status(await commit(app.url,"f",bytes("marker"),0n),201);
+    assert.equal(await timeout(app.process.exited),1);assert(failed);assert.equal(deletes,0,"no object erasure before acknowledged durable freeing");
+    const retry=await server(b,endpoint,{BASINSYNC_CLEANUP_INTERVAL_MS:"15"});
+    await eventually(async()=>{const r=await fetch(actions.preview!.url,{headers:actions.preview!.headers});await r.arrayBuffer();return r.status;},n=>n===404||n===412);
+    await stop(retry.process);
+  }
+  console.log("put of success: bounded deferred cleanup, shared retainers, foreground progress during DELETE, revision-safe reuse, late-upload dust, and durable restart recovery");
+
   console.log(`Integration passed. Logs: ${artifacts}`);
 } finally {
   await Promise.all(processes.map(stop));

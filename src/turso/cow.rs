@@ -202,7 +202,6 @@ impl View {
         let digest = self.copy_to(&mut file)?;
         Ok((file, digest))
     }
-    #[cfg(test)]
     pub(crate) fn connect(self: &Arc<Self>) -> Result<Arc<Connection>> {
         let path = format!("{}.snapshot-{}", self.store.path, self.generation);
         let io: Arc<dyn IO> = Arc::new(ViewIO {
@@ -299,13 +298,11 @@ impl File for CowFile {
         Ok(done)
     }
 }
-#[cfg(test)]
 struct ViewIO {
     view: Arc<View>,
     path: String,
     sidecars: Arc<MemoryIO>,
 }
-#[cfg(test)]
 impl Clock for ViewIO {
     fn current_time_monotonic(&self) -> MonotonicInstant {
         self.sidecars.current_time_monotonic()
@@ -314,7 +311,6 @@ impl Clock for ViewIO {
         self.sidecars.current_time_wall_clock()
     }
 }
-#[cfg(test)]
 impl IO for ViewIO {
     fn open_file(
         &self,

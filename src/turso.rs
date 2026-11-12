@@ -19,13 +19,15 @@ use turso_core::{
     },
 };
 
+mod cleanup;
 pub mod cow;
 mod heap;
+use cleanup::enqueue_sweeping;
 
 pub const ID: &str = "default.turso";
 pub const VERSION: &str = "0.9.0-pre.1+032f5bb2c7e74107f7ef9b66d576312379000a88";
 pub const PAGE_SIZE: usize = 16384;
-pub const SCHEMA: &str = "CREATE TABLE watershed (id INTEGER PRIMARY KEY CHECK (id = 1), milestone TEXT NOT NULL); CREATE TABLE flows (id TEXT PRIMARY KEY NOT NULL, viewpoint TEXT NOT NULL); CREATE TABLE marker_ranges (flow TEXT NOT NULL, downstream TEXT NOT NULL, upstream TEXT NOT NULL, blob_offset INTEGER NOT NULL CHECK(blob_offset>=0), content_length INTEGER NOT NULL CHECK(content_length>=0), sha384 TEXT NOT NULL, PRIMARY KEY(flow, downstream)); CREATE INDEX marker_ranges_upstream ON marker_ranges(upstream); CREATE TABLE graph_nodes (id TEXT PRIMARY KEY NOT NULL, content_length INTEGER NOT NULL CHECK(content_length>=0), reserved DATETIME NOT NULL, etag TEXT NOT NULL, promoted DATETIME NOT NULL); CREATE TABLE graph_edges (node TEXT NOT NULL, retainer TEXT NOT NULL, PRIMARY KEY(node, retainer), CHECK(retainer<node)); CREATE INDEX graph_edges_retainer ON graph_edges(retainer, node); INSERT INTO watershed VALUES (1, '0');";
+pub const SCHEMA: &str = "CREATE TABLE watershed (id INTEGER PRIMARY KEY CHECK (id = 1), milestone TEXT NOT NULL); CREATE TABLE flows (id TEXT PRIMARY KEY NOT NULL, viewpoint TEXT NOT NULL); CREATE TABLE marker_ranges (flow TEXT NOT NULL, downstream TEXT NOT NULL, upstream TEXT NOT NULL, blob_offset INTEGER NOT NULL CHECK(blob_offset>=0), content_length INTEGER NOT NULL CHECK(content_length>=0), sha384 TEXT NOT NULL, PRIMARY KEY(flow, downstream)); CREATE INDEX marker_ranges_upstream ON marker_ranges(upstream); CREATE TABLE graph_nodes (id TEXT PRIMARY KEY NOT NULL, content_length INTEGER NOT NULL CHECK(content_length>=0), reserved DATETIME NOT NULL, etag TEXT NOT NULL, promoted DATETIME NOT NULL, revision TEXT NOT NULL, freed DATETIME NOT NULL DEFAULT ''); CREATE INDEX graph_nodes_freed ON graph_nodes(freed,id); CREATE TABLE sweeping_tasks (flow TEXT NOT NULL, viewpoint TEXT NOT NULL, prioritized DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(flow,viewpoint)); CREATE INDEX sweeping_tasks_prioritized ON sweeping_tasks(prioritized,flow,viewpoint); CREATE TABLE graph_edges (node TEXT NOT NULL, retainer TEXT NOT NULL, PRIMARY KEY(node, retainer), CHECK(retainer<node)); CREATE INDEX graph_edges_retainer ON graph_edges(retainer, node); INSERT INTO watershed VALUES (1, '0');";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Blob(#[serde(with = "serde_bytes")] pub Vec<u8>);
@@ -407,12 +409,14 @@ impl State {
                 Value::build_text(viewpoint.to_owned()),
             )?;
             stmt.run_ignore_rows()?;
+            enqueue_sweeping(conn, flow, &Viewpoint::parse(viewpoint)?)?;
         }
         let upstream = crate::lexidecimal::encode(
             &num_bigint::BigInt::parse_bytes(milestone.as_bytes(), 10)
                 .ok_or_else(|| anyhow::anyhow!("invalid Milestone"))?,
         );
         for range in ranges {
+            enqueue_sweeping(conn, &range.flow, &range.viewpoint)?;
             let mut stmt = conn.prepare("INSERT INTO marker_ranges(flow,downstream,upstream,blob_offset,content_length,sha384) VALUES(?1,?2,?3,?4,?5,?6)")?;
             for (index, value) in [
                 Value::build_text(range.flow.clone()),

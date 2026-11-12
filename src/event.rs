@@ -152,6 +152,7 @@ pub enum Entry {
     Wal {
         commands: Vec<FlowCommand>,
         heap: Vec<crate::heap::Command>,
+        cleanup: Vec<crate::cleanup::Command>,
         delta: Box<crate::turso::wal::Delta>,
     },
 }
@@ -226,6 +227,7 @@ fn decode_vector_entry(bytes: &[u8]) -> Result<Entry> {
     Ok(Entry::Wal {
         commands,
         heap: vec![],
+        cleanup: vec![],
         delta: Box::new(delta.unwrap()),
     })
 }
@@ -259,6 +261,16 @@ pub struct FlowChunks {
     envelopes: BTreeMap<String, CommandPrefix>,
 }
 impl FlowChunks {
+    pub fn cleanup(command: &crate::cleanup::Command) -> Result<Self> {
+        command.validate()?;
+        let mut chunks = Self {
+            bytes: vec![],
+            ranges: vec![],
+            envelopes: BTreeMap::new(),
+        };
+        chunks.append(crate::cleanup::SWEEP_HEAP, command)?;
+        Ok(chunks)
+    }
     pub fn heap(command: &crate::heap::Command) -> Result<Self> {
         command.validate()?;
         let mut chunks = Self {
@@ -402,6 +414,7 @@ fn decode_envelopes(bytes: &[u8]) -> Result<(Entry, Vec<BlobRange>)> {
     );
     let mut commands = Vec::new();
     let mut heap = Vec::new();
+    let mut cleanup = Vec::new();
     let mut delta = None;
     let mut ranges = Vec::new();
     let mut previous = String::new();
@@ -456,18 +469,25 @@ fn decode_envelopes(bytes: &[u8]) -> Result<(Entry, Vec<BlobRange>)> {
                     command.validate()?;
                     heap.push(command);
                 }
+                crate::cleanup::SWEEP_HEAP => {
+                    let command = crate::cleanup::Command::deserialize(command.index(3)?)?;
+                    command.validate()?;
+                    cleanup.push(command);
+                }
                 _ => anyhow::bail!("unknown command envelope"),
             }
         }
     }
     ensure!(
-        heap.is_empty() || (heap.len() == 1 && commands.is_empty()),
+        (heap.is_empty() && cleanup.is_empty())
+            || (heap.len() + cleanup.len() == 1 && commands.is_empty()),
         "heap reservations must occupy their own event"
     );
     Ok((
         Entry::Wal {
             commands,
             heap,
+            cleanup,
             delta: Box::new(delta.context("missing Turso ingestion")?),
         },
         ranges,

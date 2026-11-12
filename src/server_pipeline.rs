@@ -7,6 +7,7 @@ struct CommitReply {
     _admission: OwnedSemaphorePermit,
 }
 enum Reply {
+    Cleanup(oneshot::Sender<Result<()>>),
     Commit(CommitReply),
     Reserve {
         channel: oneshot::Sender<ApiReply<heap::Outcome>>,
@@ -24,6 +25,13 @@ impl Batch {
     fn finish(self, published: bool, prefix: &timeline::Prefix) {
         for reply in self.replies {
             match reply {
+                Reply::Cleanup(reply) => {
+                    let _ = reply.send(if published {
+                        Ok(())
+                    } else {
+                        Err(anyhow::anyhow!("publication stopped"))
+                    });
+                }
                 Reply::Commit(reply) => {
                     let result = if published {
                         reply.result
@@ -235,6 +243,32 @@ impl Preparation {
                 return Ok(());
             };
             match message {
+                Message::Cleanup { command, reply } => {
+                    let permit = self
+                        .batches
+                        .clone()
+                        .acquire_owned()
+                        .await
+                        .context("publication stopped")?;
+                    let mut stager = self.write_stager().await?;
+                    let (stager, batch) = tokio::task::spawn_blocking(move || {
+                        let prepared = stager.prepare_cleanup(command)?;
+                        let batch = Batch {
+                            prefix: stager.prefix(),
+                            prepared,
+                            replies: vec![Reply::Cleanup(reply)],
+                            _permit: permit,
+                        };
+                        Ok::<_, anyhow::Error>((stager, batch))
+                    })
+                    .await
+                    .context("cleanup preparation panicked")??;
+                    self.stager = Some(stager);
+                    self.output
+                        .send(Publication::Batch(batch))
+                        .await
+                        .map_err(|_| anyhow::anyhow!("publication stopped"))?;
+                }
                 Message::Reserve(reservation) => {
                     let permit = self
                         .batches
@@ -475,17 +509,16 @@ impl Worker {
         published: watch::Sender<timeline::Prefix>,
     ) -> Result<()> {
         self.state.enable_vfs()?;
-        let backups = if self.backup_interval.is_zero() {
-            None
-        } else {
-            let (targets, receiver) = watch::channel(self.state.snapshot()?);
+        let (targets, snapshots) = watch::channel(self.state.snapshot()?);
+        if !self.backup_interval.is_zero() {
             tokio::spawn(basinsync::backup::run(
                 self.bucket.clone(),
-                receiver,
+                snapshots.clone(),
                 self.backup_interval,
             ));
-            Some(targets)
-        };
+        }
+        let snapshots = (!self.cleanup.interval.is_zero()).then_some(snapshots);
+        let backups = Some(targets);
         let (output, receiver) = mpsc::channel(PIPELINE_BATCHES - 1);
         let published_rx = published.subscribe();
         let (signal, halted) = watch::channel(false);
@@ -502,6 +535,15 @@ impl Worker {
             halted.clone(),
             backups,
         ));
+        let cleanup_job = snapshots.map(|snapshots| {
+            tokio::spawn(cleanup_loop(
+                self.bucket.clone(),
+                snapshots,
+                self.maintenance,
+                self.cleanup,
+                halted.clone(),
+            ))
+        });
         let mut preparation = Preparation {
             bucket: self.bucket,
             stager: Some(self.state.into_stager()),
@@ -523,8 +565,76 @@ impl Worker {
                 message.reject(&preparation.published.borrow());
             }
         }
+        if let Some(job) = cleanup_job {
+            job.abort();
+        }
         drop(preparation);
         let publication = publisher.await.context("publication task panicked")?;
         result.and(publication)
+    }
+}
+
+pub(super) struct CleanupConfig {
+    pub interval: Duration,
+    pub tasks: usize,
+    pub edges: usize,
+    pub nodes: usize,
+    pub concurrency: usize,
+}
+async fn maintenance(queue: &mpsc::Sender<Message>, command: cleanup::Command) -> Result<()> {
+    let slot = queue.try_reserve().context("request queue busy")?;
+    let (reply, complete) = oneshot::channel();
+    slot.send(Message::Cleanup { command, reply });
+    complete.await.context("cleanup publication stopped")?
+}
+async fn cleanup_loop(
+    bucket: Box<Bucket>,
+    snapshots: watch::Receiver<Option<timeline::Snapshot>>,
+    queue: mpsc::Sender<Message>,
+    config: CleanupConfig,
+    mut halted: watch::Receiver<bool>,
+) {
+    loop {
+        tokio::select! { _ = halted.changed() => return, _ = tokio::time::sleep(config.interval) => {} }
+        let Some(snapshot) = snapshots.borrow().clone() else {
+            continue;
+        };
+        let tasks = config.tasks;
+        let nodes = config.nodes;
+        let cycle = async {
+            let work = tokio::task::spawn_blocking(move || cleanup::scan(&snapshot, tasks, nodes))
+                .await
+                .context("cleanup scan panicked")??;
+            if !work.tasks.is_empty() {
+                maintenance(
+                    &queue,
+                    cleanup::Command {
+                        tasks: work.tasks,
+                        erased: vec![],
+                        freed_at: cleanup::now()?,
+                        edge_limit: config.edges,
+                    },
+                )
+                .await?;
+            }
+            let erased = cleanup::erase(&bucket, work.freed, config.concurrency).await;
+            if !erased.is_empty() {
+                maintenance(
+                    &queue,
+                    cleanup::Command {
+                        tasks: vec![],
+                        erased,
+                        freed_at: cleanup::now()?,
+                        edge_limit: config.edges,
+                    },
+                )
+                .await?;
+            }
+            Ok::<_, anyhow::Error>(())
+        };
+        tokio::select! {
+            _ = halted.changed() => return,
+            result = cycle => if let Err(error) = result { tracing::warn!(%error,"cleanup deferred"); }
+        }
     }
 }

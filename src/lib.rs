@@ -1,4 +1,5 @@
 pub mod backup;
+pub mod cleanup;
 pub mod details;
 pub mod diffuse16;
 pub mod envbuf;
