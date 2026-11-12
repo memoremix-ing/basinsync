@@ -42,7 +42,7 @@ and refresh.
    state is current.
 
 Start each *DifferentialEvent*[^][differential-event] with one
-*EnvBuf*[^][envbuf]-wrapped *FlexBuffers*[^][flexbuffers]
+*EnvBuf-wrapped*[^][envbuf] *FlexBuffers*[^][flexbuffers]
 *commitflow tuple*[^][watershed-timeline]:
 
 ```ts
@@ -54,13 +54,13 @@ Start each *DifferentialEvent*[^][differential-event] with one
 ```
 
 Use format `101` and eight-byte alignment. Compose append-only chunks, locating
-each *marker*[^][commit-marker]'s raw `blob` bytes in its finalized chunk.
+each *marker's*[^][commit-marker] raw `blob` bytes in its finalized chunk.
 Append a final *range manifest*[^][range-manifest] indexing preceding
 *envelopes*[^][envbuf]; locate the manifest through its final footer.
 Later appended commands must preserve earlier blob offsets.
 
 Track each *Flow*[^][flow] and *downstream*[^][downstream]
-*Viewpoint*[^][viewpoint]'s *upstream*[^][upstream] *Milestone*[^][milestone],
+*Viewpoint's*[^][viewpoint] *upstream*[^][upstream] *Milestone*[^][milestone],
 absolute blob offset, content length, and hexadecimal *SHA-384*[^][sha384].
 Encode both positions as positive *Lexidecimal*[^][lexidecimal] text for indexing;
 derive object keys from *Milestones*[^][milestone] using *Diffuse16*[^][diffuse16].

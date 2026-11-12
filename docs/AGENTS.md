@@ -25,6 +25,9 @@ every link definition at the top of its file, before the document body, using de
 stable labels (in sorted order), and angle-bracket destinations. This makes each document's
 relationships easy to inspect without searching its prose.
 
+Include possessives and attached compound suffixes inside the emphasized phrase
+(e.g. `*Viewpoint's*[^][viewpoint]`); audit both boundaries for stranded word fragments.
+
 Link introduced domain terms wherever they occur in prose, including lowercase,
 plural, and synonymous forms, using the corresponding glossary entry. During
 audits, check for missing term links as well as broken links; omit self-links in

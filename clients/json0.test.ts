@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { parse, stringify } from "./json0";
 
 describe("JSON0", () => {
-  test.each(["", "0", "00", "0x1", "0~f", "0*AA", "0$shared", "0#iterator", "ordinary 🌎"])(
+  test.each(["", "0", "00", "0x1", "0~f", "0*AA", "0$shared", "0#iterator", "0.1e1000", "0w1z", "0yfff", "0z000", "0X1", "0_custom", "ordinary 🌎"])(
     "round-trips the literal string %s", (value) => {
       expect(parse<typeof value>(stringify(value))).toBe(value);
     },
@@ -39,8 +39,8 @@ describe("JSON0", () => {
     }
   });
 
-  test.each(["0?unknown", "0#unknown", "0~", "0x", "0~not-hex"])(
-    "rejects the invalid extension %s", (value) => {
+  test.each(["0?unknown", "0#unknown", "0~", "0x", "0~not-hex", "0.1e1000", "0w1z", "0yfff", "0z000", "0_custom", ...Array.from({length: 26}, (_, i) => `0${String.fromCharCode(65 + i)}payload`)])(
+    "rejects the invalid or unsupported extension %s", (value) => {
       expect(() => parse(JSON.stringify(value))).toThrow();
     },
   );

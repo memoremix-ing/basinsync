@@ -5,5 +5,5 @@
 
 # Heap reservation
 
-A durable staging *retainer*[^][retainer] edge from a *Flow*[^][flow]'s next
+A durable staging *retainer*[^][retainer] edge from a *Flow's*[^][flow] next
 *Viewpoint*[^][viewpoint] to a *node*[^][node], established before upload.

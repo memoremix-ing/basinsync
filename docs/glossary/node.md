@@ -17,5 +17,5 @@ n-${lex(~height)}/v.${lex(version)}/t.${lex(token.length)}/d_${sha384(token)}
 
 Complemented *heights*[^][node-height] put higher nodes first in S3 listings.
 *Height*[^][node-height] zero suits
-media and attachments; higher nodes commonly contain *EnvBuf*[^][envbuf]-wrapped
+media and attachments; higher nodes commonly contain *EnvBuf-wrapped*[^][envbuf]
 *FlexBuffers*[^][flexbuffers], but all contents may be encrypted end to end.

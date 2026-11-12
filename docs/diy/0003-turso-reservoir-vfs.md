@@ -35,9 +35,9 @@
 
 # 0003 — Turso Reservoir VFS
 
-Materialize the *Watershed*[^][watershed]'s *Timeline*[^][timeline] in *Turso*[^][turso]
+Materialize the *Watershed's*[^][watershed] *Timeline*[^][timeline] in *Turso*[^][turso]
 with 16 KiB pages, *MVCC*[^][mvcc], and portable logical changes. Store the applied
-*Milestone*[^][milestone] and each *Flow*[^][flow]'s latest
+*Milestone*[^][milestone] and each *Flow's*[^][flow] latest
 *Viewpoint*[^][viewpoint] as decimal text:
 
 ```sql
@@ -64,7 +64,7 @@ CREATE INDEX marker_ranges_upstream ON marker_ranges(upstream);
 INSERT INTO watershed VALUES (1, '0');
 ```
 
-Materialize *0002*[^][0002-watershed-timeline-race]'s blob locations in `marker_ranges`
+Materialize *0002's*[^][0002-watershed-timeline-race] blob locations in `marker_ranges`
 in the commit transaction. Its *upstream*[^][upstream] *Milestones*[^][milestone]
 and *downstream*[^][downstream] *Viewpoints*[^][viewpoint] use positive
 *Lexidecimal*[^][lexidecimal] text. Preserve locations for intermediate

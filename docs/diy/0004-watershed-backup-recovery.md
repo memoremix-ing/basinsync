@@ -31,7 +31,7 @@ an *Epilogue*[^][epilogue], *Timeline (Chronologue)*[^][timeline], and
 *Epilogue*[^][epilogue]. Revisit *Prologues*[^][prologue] and the third
 *Reservoir*[^][reservoir] type, the *Jet*[^][jet], later.
 
-Promote *0003*[^][0003-turso-reservoir-vfs]'s file-backed copy-on-write
+Promote *0003's*[^][0003-turso-reservoir-vfs] file-backed copy-on-write
 *VFS*[^][virtual-file-system] into the server. Pin a consistent, checkpointed
 *Milestone*[^][milestone] through backup publication while request preparation
 continues. Use the entire `default.turso` database file as the

@@ -26,7 +26,7 @@ primary SQL + frame capture → shadow/cache + zsets → encode + ordered S3 PUT
 ```
 
 The primary can prepare later batches while earlier ones pass through capture
-and publication. A request succeeds only after its combined *event*[^][differential-event]'s
+and publication. A request succeeds only after its combined *event's*[^][differential-event]
 *conditional PUT*[^][conditional-write]. Compare admission windows of one
 (serial) and four batches; queues hold at most one batch per boundary. A slow
 stage eventually applies backpressure. Separate databases avoid shared primary
@@ -45,7 +45,7 @@ Compare three capture strategies:
 
 Both capture strategies emit the same decoded *Z-sets*[^][z-set]. They consult
 stored rows rather than infer previous *Flow*[^][flow] cursors. Bind the final
-predecessor digest in the ordered uploader, after each preceding *event*[^][differential-event]'s bytes
+predecessor digest in the ordered uploader, after each preceding *event's*[^][differential-event] bytes
 are known. The *Milestone*[^][milestone] identifies one atomic feed batch.
 
 Also measure reduced durability for the derived stores, keeping the primary
@@ -92,7 +92,7 @@ The 144-run default-flush exploration remains in the raw archive; its local
 round 2 overlapped regression tests and is excluded from performance summaries.
 
 Use matched macOS flush policies for engine comparisons. The exploratory grid
-used *Turso*[^][turso]'s default plain `fsync`, while
+used *Turso's*[^][turso] default plain `fsync`, while
 *Rust file synchronization*[^][rust-file-sync] used by *redb*[^][redb] requests
 `F_FULLFSYNC`. The matched grid enables `fullfsync=ON` for the primary and full
 shadow too. It measures the default batch size of 32 requests; the earlier

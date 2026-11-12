@@ -45,7 +45,7 @@ Compare the existing persistent *WAL*[^][wal] path with:
 The hook alone is insufficient: some upserts of checkpointed rows expose only
 the replacement. Explicit updates and deletes can expose old records, but a
 missing retraction cannot safely be interpreted as a new insertion.
-*CDC*[^][change-data-capture]'s `AUTOINCREMENT` allocator also emits separate
+*CDC's*[^][change-data-capture] `AUTOINCREMENT` allocator also emits separate
 internal transactions; its prototype captures and verifies multiple
 *logical frames*[^][logical-frame],
 including internal-only frames. The server currently expects one.

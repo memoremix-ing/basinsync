@@ -21,7 +21,7 @@ Start with an *Epilogue*[^][epilogue] of opaque blobs.
    its *marker*[^][commit-marker]. Advance after success; return an error and
    terminate after write failure.
 3. Offer `GET /api/v0/epilogue/status`. Return `latest` with the committed
-   *marker*[^][commit-marker]'s *viewpoint*[^][viewpoint], length, and presigned
+   *marker's*[^][commit-marker] *viewpoint*[^][viewpoint], length, and presigned
    GET URL with *conditional read headers*[^][conditional-read]. For length zero,
    omit the URL and headers;
    when empty, return `latest: null`.

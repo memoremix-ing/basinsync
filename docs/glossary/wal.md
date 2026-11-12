@@ -4,7 +4,7 @@
 
 # Physical WAL
 
-*Turso*[^][turso]'s physical write-ahead log contains numbered page images and
+*Turso's*[^][turso] physical write-ahead log contains numbered page images and
 transaction commit boundaries. *MVCC*[^][mvcc] checkpointing writes pages to this
 log before backfilling the main database.
 

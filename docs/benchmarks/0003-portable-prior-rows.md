@@ -71,7 +71,7 @@ and in the serial suite. This remains an investigation limitation.
 
 ## VFS alternative
 
-Our physical *WAL*[^][wal] recorder already wraps *Turso*[^][turso]'s file-I/O
+Our physical *WAL*[^][wal] recorder already wraps *Turso's*[^][turso] file-I/O
 interface, the *VFS*[^][virtual-file-system] boundary. An observation test commits
 two transactions: each produces a *logical frame*[^][logical-frame], while the
 database file and physical recorder remain unchanged until checkpointing.

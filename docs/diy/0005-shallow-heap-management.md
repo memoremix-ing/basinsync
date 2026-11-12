@@ -22,7 +22,7 @@ with a *DAG*[^][dag] of opaque *nodes*[^][node]. Introduce *heap reservations*[^
 so clients can upload before publication, while the *Watershed*[^][watershed]
 counts incoming edges for eventual collection.
 
-Implement the *staging endpoint*[^][heap-protocol]. Require the *Flow*[^][flow]'s
+Implement the *staging endpoint*[^][heap-protocol]. Require the *Flow's*[^][flow]
 singular expected next *Viewpoint*[^][viewpoint]. Accept only *height*[^][node-height]
 zero, version zero, and empty edge lists. Configure `BASINSYNC_HEAP_MAX_HEIGHT`
 (128) and `BASINSYNC_HEAP_MAX_TOKEN_BYTES` (64).

@@ -12,7 +12,7 @@
 # Heap staging protocol
 
 `POST /api/v0/heap/reserve` accepts *JSON0*[^][json0] for the
-*Flow*[^][flow]'s expected next *Viewpoint*[^][viewpoint]:
+*Flow's*[^][flow] expected next *Viewpoint*[^][viewpoint]:
 
 ```ts
 {

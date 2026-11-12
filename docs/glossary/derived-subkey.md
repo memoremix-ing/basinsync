@@ -4,5 +4,5 @@
 
 # Derived subkey
 
-The lowercase hexadecimal *SHA-384*[^][sha384] of a *node*[^][node]'s
+The lowercase hexadecimal *SHA-384*[^][sha384] of a *node's*[^][node]
 *access token*[^][access-token], included in its id.

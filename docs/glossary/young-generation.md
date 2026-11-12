@@ -3,5 +3,5 @@
 
 # Young generation
 
-The *heap*[^][heap]'s upload staging keyspace, `heap/young/`, suffixed by a
+The *heap's*[^][heap] upload staging keyspace, `heap/young/`, suffixed by a
 *node*[^][node] id.

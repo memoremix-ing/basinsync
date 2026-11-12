@@ -5,5 +5,5 @@
 
 # Heap
 
-The *Watershed*[^][watershed]'s object storage for *nodes*[^][node], divided into
+The *Watershed's*[^][watershed] object storage for *nodes*[^][node], divided into
 *young*[^][young-generation] and *old*[^][old-generation] generations.

@@ -21,7 +21,7 @@
 
 # Watershed Timeline
 
-The *Watershed*[^][watershed]'s shared *Timeline*[^][timeline] records state changes at
+The *Watershed's*[^][watershed] shared *Timeline*[^][timeline] records state changes at
 `timeline/Diffuse16(milestone)`. *Milestones*[^][milestone] start at one and increase
 without gaps. Before writing, read the latest *Watershed*[^][watershed] *recovery anchor*[^][watershed-backup]
 and ingest every subsequent *DifferentialEvent*[^][differential-event]. Its
@@ -38,7 +38,7 @@ keyed by *Flow*[^][flow] id.
 Each entry contains decimal `viewpoint`, hexadecimal *SHA-384*[^][sha384] in
 `sha384`, and binary `blob`. *Conditional creation*[^][conditional-write] of a
 *DifferentialEvent*[^][differential-event] at the next *Milestone*[^][milestone]
-arbitrates competing writers. Concatenate *EnvBuf*[^][envbuf]-wrapped
+arbitrates competing writers. Concatenate *EnvBuf-wrapped*[^][envbuf]
 state commands (commitflow or *reserveheap*[^][heap-protocol]),
 one `sts/0/databasin/ingestturso` tuple, then a
 *range manifest*[^][range-manifest]. Each tuple is its own
@@ -53,7 +53,7 @@ acknowledge a batch only after it and all predecessors are durable.
 
 `PUT /api/v0/epilogue` adds a `flow` string to the
 *commit details*[^][epilogue-protocol] and validates against that
-*Flow*[^][flow]'s expected *Viewpoint*[^][viewpoint].
+*Flow's*[^][flow] expected *Viewpoint*[^][viewpoint].
 `GET /api/v0/epilogue/status?flow=<id>` returns the *common status response*[^][epilogue-protocol].
 The `flow` query parameter is an ordinary URL-encoded string.
 Mismatches use the *common response*[^][epilogue-protocol].
