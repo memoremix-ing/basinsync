@@ -25,7 +25,7 @@ mod heap;
 pub const ID: &str = "default.turso";
 pub const VERSION: &str = "0.9.0-pre.1+032f5bb2c7e74107f7ef9b66d576312379000a88";
 pub const PAGE_SIZE: usize = 16384;
-pub const SCHEMA: &str = "CREATE TABLE watershed (id INTEGER PRIMARY KEY CHECK (id = 1), milestone TEXT NOT NULL); CREATE TABLE flows (flow TEXT PRIMARY KEY NOT NULL, viewpoint TEXT NOT NULL); CREATE TABLE marker_ranges (flow TEXT NOT NULL, downstream TEXT NOT NULL, upstream TEXT NOT NULL, blob_offset INTEGER NOT NULL CHECK(blob_offset>=0), content_length INTEGER NOT NULL CHECK(content_length>=0), sha384 TEXT NOT NULL, PRIMARY KEY(flow, downstream)); CREATE INDEX marker_ranges_upstream ON marker_ranges(upstream); CREATE TABLE graph_nodes (id TEXT PRIMARY KEY NOT NULL, content_length INTEGER NOT NULL CHECK(content_length>=0), reserved DATETIME NOT NULL, etag TEXT NOT NULL, promoted DATETIME NOT NULL); CREATE TABLE graph_edges (node TEXT NOT NULL, retainer TEXT NOT NULL, PRIMARY KEY(node, retainer), CHECK(retainer<node)); CREATE INDEX graph_edges_retainer ON graph_edges(retainer, node); INSERT INTO watershed VALUES (1, '0');";
+pub const SCHEMA: &str = "CREATE TABLE watershed (id INTEGER PRIMARY KEY CHECK (id = 1), milestone TEXT NOT NULL); CREATE TABLE flows (id TEXT PRIMARY KEY NOT NULL, viewpoint TEXT NOT NULL); CREATE TABLE marker_ranges (flow TEXT NOT NULL, downstream TEXT NOT NULL, upstream TEXT NOT NULL, blob_offset INTEGER NOT NULL CHECK(blob_offset>=0), content_length INTEGER NOT NULL CHECK(content_length>=0), sha384 TEXT NOT NULL, PRIMARY KEY(flow, downstream)); CREATE INDEX marker_ranges_upstream ON marker_ranges(upstream); CREATE TABLE graph_nodes (id TEXT PRIMARY KEY NOT NULL, content_length INTEGER NOT NULL CHECK(content_length>=0), reserved DATETIME NOT NULL, etag TEXT NOT NULL, promoted DATETIME NOT NULL); CREATE TABLE graph_edges (node TEXT NOT NULL, retainer TEXT NOT NULL, PRIMARY KEY(node, retainer), CHECK(retainer<node)); CREATE INDEX graph_edges_retainer ON graph_edges(retainer, node); INSERT INTO watershed VALUES (1, '0');";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Blob(#[serde(with = "serde_bytes")] pub Vec<u8>);
@@ -236,7 +236,7 @@ impl State {
         let mut query = self
             .native
             .conn
-            .query("SELECT flow, viewpoint FROM flows ORDER BY flow")?
+            .query("SELECT id, viewpoint FROM flows ORDER BY id")?
             .unwrap();
         let mut result = BTreeMap::new();
         loop {
@@ -260,7 +260,7 @@ impl State {
         let mut query = self
             .native
             .conn
-            .prepare("SELECT viewpoint FROM flows WHERE flow = ?1")?;
+            .prepare("SELECT viewpoint FROM flows WHERE id = ?1")?;
         query.bind_at(
             NonZeroUsize::new(1).unwrap(),
             Value::build_text(flow.to_owned()),
@@ -397,7 +397,7 @@ impl State {
         conn.set_portable_logical_changes_enabled(true);
         conn.execute("BEGIN CONCURRENT")?;
         for (flow, viewpoint) in values {
-            let mut stmt = conn.prepare("INSERT INTO flows (flow, viewpoint) VALUES (?1, ?2) ON CONFLICT (flow) DO UPDATE SET viewpoint = excluded.viewpoint")?;
+            let mut stmt = conn.prepare("INSERT INTO flows (id, viewpoint) VALUES (?1, ?2) ON CONFLICT (id) DO UPDATE SET viewpoint = excluded.viewpoint")?;
             stmt.bind_at(
                 NonZeroUsize::new(1).unwrap(),
                 Value::build_text(flow.to_owned()),

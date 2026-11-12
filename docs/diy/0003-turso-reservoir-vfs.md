@@ -48,7 +48,7 @@ CREATE TABLE watershed (
   milestone TEXT NOT NULL
 );
 CREATE TABLE flows (
-  flow TEXT PRIMARY KEY NOT NULL,
+  id TEXT PRIMARY KEY NOT NULL,
   viewpoint TEXT NOT NULL
 );
 CREATE TABLE marker_ranges (
