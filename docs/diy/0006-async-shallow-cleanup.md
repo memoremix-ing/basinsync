@@ -51,18 +51,8 @@ For a bounded task batch, transactionally remove the tasks and their `A_` stagin
 when no *retainers*[^][retainer] remain. Bound edges processed too; retain unfinished tasks.
 Reject *reservations*[^][heap-reservation] of freed *nodes*[^][node] until reclamation completes.
 
-Journal these *Turso*[^][turso] mutations through the ordered *Timeline*[^][timeline],
-using commands of this shape followed by captured frames (one phase per command):
-
-```ts
-[Symbol.species, "sync.memoremix.com", "sts/0/databasin/sweepheap", {
-  tasks: Array<{ flow: string; viewpoint: string }>,
-  erased: Array<{ id: string; revision: string; freed: string }>,
-  freed_at: string, // UTC timestamp
-  edge_limit: number
-}]
-```
-
+Journal these *Turso*[^][turso] mutations as captured frames in `ingestturso`
+through the ordered *Timeline*[^][timeline].
 Only after freeing is durable,
 DELETE a bounded batch of exact young-generation keys. Remove their database rows
 in another durable transaction only on confirmed deletion and matching *revision*[^][revision];

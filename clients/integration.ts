@@ -10,7 +10,7 @@ import { commit, form, epilogueStatus as fullStatus, latestBlob, sha384, sha384B
 import { parse, stringify } from "./json0";
 import { key, fromKey } from "./diffuse16";
 import { key as epilogueKey, encode as lex } from "./lexidecimal";
-import { encodeEvent, markerAt, deltasAt, legacyDeltasAt, entriesAt, rangesAt, eventTuples, encodeTuples, encodeWalEvent, type WalDelta, type Marker, reservePath } from "./events";
+import { encodeEvent, markerAt, deltasAt, legacyDeltasAt, entriesAt, rangesAt, eventTuples, encodeTuples, encodeWalEvent, type WalDelta, type Marker } from "./events";
 import { ingestWal } from "./wal";
 import { all as envelopes, before as previousEnvelope } from "./envbuf";
 import { stress } from "./stress";
@@ -992,9 +992,9 @@ try {
     assert.equal(new URL(actions.write.url).searchParams.get("X-Amz-SignedHeaders"),"content-length;host;if-none-match");
     assert.deepEqual(actions.write.headers,{"Content-Length":"7","If-None-Match":"*"});
     for(const action of [actions.preview,actions.read]){assert.equal(action.headers["If-Match"],"*");const r=await fetch(action.url,{headers:action.headers});assert([404,412].includes(r.status));await r.arrayBuffer();}
-    const first=await get(b,1n),tuples=eventTuples(first);assert.equal(tuples[0][2],reservePath);
-    const command=tuples[0][3] as {flow:string;viewpoint:string;nodes:{id:string;length:number}[]};
-    assert.equal(command.flow,flow);assert.equal(command.viewpoint,"0");assert.equal(command.nodes.length,2);
+    const first=await get(b,1n),tuples=eventTuples(first);
+    assert.equal(tuples.length,1);assert.equal(tuples[0][2],"sts/0/databasin/ingestturso");
+    assert.equal(envelopes(first).length,2);assert.deepEqual(rangesAt(first),[]);
     const delta=deltasAt(first).turso["default.turso"] as WalDelta;
     let image=ingestWal(delta.logical.base!,delta.physical.segments);
     const original=await inspectHeap(image,secret);assert.equal(original.length,7);assert.equal(original.etag,"");assert.equal(original.promoted,"");assert(original.retained);assert(Number.isFinite(Date.parse(original.reserved)));
@@ -1094,12 +1094,9 @@ try {
     const oldKey=new URL(actions.write.url).pathname.slice(b.length+2);
     const put=await fetch(actions.write.url,{method:"PUT",headers:actions.write.headers,body:bytes("same")});assert(put.ok,await put.text());
     const shared=await reserve(app.url,"shared");assert.equal(new URL(shared.results![0].actions.preview!.url).pathname,new URL(actions.preview.url).pathname);
-    await status(await commit(app.url,"first",bytes("marker"),0n),201);
-    await eventually(async()=>{
-      const listed=await s3.send(new ListObjectsV2Command({Bucket:b,Prefix:"timeline/"}));
-      for(const object of listed.Contents??[]) { const r=await s3.send(new GetObjectCommand({Bucket:b,Key:object.Key!})); if(eventTuples(await r.Body!.transformToByteArray()).some(t=>t[2]==="sts/0/databasin/sweepheap"))return true; }
-      return false;
-    },Boolean);
+    const firstCommit=await commit(app.url,"first",bytes("marker"),0n);await status(firstCommit.clone(),201);
+    const firstMilestone=parse<CommitResponse>(await firstCommit.text()).timelines.watershed.milestone;
+    await eventually(()=>fullStatus(app.url,"first"),response=>response.timelines.watershed.milestone>firstMilestone);
     assert(!held,"shared retainers keep the node live");
     await status(await commit(app.url,"shared",bytes("marker"),0n),201);
     await timeout(entered.promise);
@@ -1127,7 +1124,7 @@ try {
   }
   for(const fault of ["before","after"]){
     const b=await bucket();let deletes=0,failed=false;const sweeps=new WeakSet<Request>();
-    const isSweep=async(request:Request)=>request.method==="PUT"&&new URL(request.url).pathname.includes("/timeline/")&&eventTuples(new Uint8Array(await request.clone().arrayBuffer())).some(t=>t[2]==="sts/0/databasin/sweepheap");
+    const isSweep=(request:Request)=>request.method==="PUT"&&new URL(request.url).pathname.endsWith(`/${key(3n)}`);
     const proxy=relay(async(request,response)=>{
       if(fault==="after"&&sweeps.has(request)){failed=true;await response.arrayBuffer();return new Response("lost sweep response",{status:503});}return response;
     },async request=>{

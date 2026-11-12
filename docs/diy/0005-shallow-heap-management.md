@@ -53,10 +53,9 @@ staging edge idempotently. Report errors by input index while retaining valid
 entries in the same transaction.
 
 Derive ids before queuing work. Never persist *access tokens*[^][access-token],
-including in logs or the *Timeline*[^][timeline]. Journal the
-*reservation command*[^][heap-protocol], followed by the existing *Turso*[^][turso]
-frame-ingestion command. Return actions only after durable, ordered publication;
-recover through captured frames.
+including in logs or the *Timeline*[^][timeline]. Persist reservation changes
+through the existing *Turso*[^][turso] frame-ingestion command. Return actions
+only after durable, ordered publication; recover through captured frames.
 
 Test indexed errors, collisions, duplicate retainers, signed lengths and headers,
 first-writer uploads, zero lengths, races, pipeline failures, snapshot recovery,

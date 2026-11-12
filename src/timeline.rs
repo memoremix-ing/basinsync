@@ -200,8 +200,8 @@ impl Stager {
             self.state.head.as_deref(),
             request,
         )?;
-        let prepared = if let Some((command, delta)) = captured {
-            let bytes = event::FlowChunks::heap(&command)?.finish(delta)?;
+        let prepared = if let Some((_command, delta)) = captured {
+            let bytes = event::encode_wal(vec![], delta)?;
             let prepared = Prepared {
                 digest: event::digest(&bytes),
                 bytes,
@@ -227,10 +227,10 @@ impl Stager {
             self.state.head.as_deref(),
             command,
         )?;
-        let Some((command, delta)) = captured else {
+        let Some((_command, delta)) = captured else {
             return Ok(None);
         };
-        let bytes = event::FlowChunks::cleanup(&command)?.finish(delta)?;
+        let bytes = event::encode_wal(vec![], delta)?;
         let prepared = Prepared {
             digest: event::digest(&bytes),
             bytes,
@@ -394,12 +394,7 @@ impl Watershed {
                 self.database = Some(next);
                 self.milestone = milestone;
             }
-            event::Entry::Wal {
-                commands,
-                heap,
-                cleanup,
-                delta,
-            } => {
+            event::Entry::Wal { commands, delta } => {
                 delta.validate_version()?;
                 delta
                     .physical
@@ -448,12 +443,6 @@ impl Watershed {
                     );
                 }
                 validate_locations(&next, &milestone, &ranges, enveloped)?;
-                for command in &heap {
-                    next.verify_heap(self.database.as_ref(), command)?;
-                }
-                for command in &cleanup {
-                    next.verify_cleanup(self.database.as_ref(), command)?;
-                }
                 self.database = Some(next);
                 self.writer = None;
                 self.milestone = milestone;

@@ -51,10 +51,3 @@ Both object keys end in `${node_id}/${revision}`, sharing the stored UUIDv4
 *revision*[^][revision]. Send each action's headers. A nonempty stored etag makes `write` null; a valid
 promotion timestamp makes `preview` null.
 
-The token-free journal command uses decimal `viewpoint` and a UTC timestamp:
-
-```ts
-[Symbol.species, "sync.memoremix.com", "sts/0/databasin/reserveheap", {
-  flow, viewpoint, reserved, nodes: [{ id, length, revision }]
-}]
-```

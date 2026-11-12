@@ -151,8 +151,6 @@ pub enum Entry {
     Legacy(CommitFlow),
     Wal {
         commands: Vec<FlowCommand>,
-        heap: Vec<crate::heap::Command>,
-        cleanup: Vec<crate::cleanup::Command>,
         delta: Box<crate::turso::wal::Delta>,
     },
 }
@@ -226,8 +224,6 @@ fn decode_vector_entry(bytes: &[u8]) -> Result<Entry> {
     }
     Ok(Entry::Wal {
         commands,
-        heap: vec![],
-        cleanup: vec![],
         delta: Box::new(delta.unwrap()),
     })
 }
@@ -261,28 +257,7 @@ pub struct FlowChunks {
     envelopes: BTreeMap<String, CommandPrefix>,
 }
 impl FlowChunks {
-    pub fn cleanup(command: &crate::cleanup::Command) -> Result<Self> {
-        command.validate()?;
-        let mut chunks = Self {
-            bytes: vec![],
-            ranges: vec![],
-            envelopes: BTreeMap::new(),
-        };
-        chunks.append(crate::cleanup::SWEEP_HEAP, command)?;
-        Ok(chunks)
-    }
-    pub fn heap(command: &crate::heap::Command) -> Result<Self> {
-        command.validate()?;
-        let mut chunks = Self {
-            bytes: vec![],
-            ranges: vec![],
-            envelopes: BTreeMap::new(),
-        };
-        chunks.append(crate::heap::RESERVE_HEAP, command)?;
-        Ok(chunks)
-    }
     pub fn new(commands: &[FlowCommand]) -> Result<Self> {
-        ensure!(!commands.is_empty(), "empty command sequence");
         let mut chunks = Self {
             bytes: vec![],
             ranges: vec![],
@@ -396,8 +371,8 @@ pub fn encode_wal(commands: Vec<FlowCommand>, delta: crate::turso::wal::Delta) -
 fn decode_envelopes(bytes: &[u8]) -> Result<(Entry, Vec<BlobRange>)> {
     let envelopes = crate::envbuf::all(bytes)?;
     ensure!(
-        envelopes.len() >= 3,
-        "missing commitflow, ingestion, or range manifest envelope"
+        envelopes.len() >= 2,
+        "missing ingestion or range manifest envelope"
     );
     let last = envelopes.last().unwrap();
     let manifest = tuple(last.content)?;
@@ -413,8 +388,6 @@ fn decode_envelopes(bytes: &[u8]) -> Result<(Entry, Vec<BlobRange>)> {
         "range manifest coverage mismatch"
     );
     let mut commands = Vec::new();
-    let mut heap = Vec::new();
-    let mut cleanup = Vec::new();
     let mut delta = None;
     let mut ranges = Vec::new();
     let mut previous = String::new();
@@ -459,35 +432,14 @@ fn decode_envelopes(bytes: &[u8]) -> Result<(Entry, Vec<BlobRange>)> {
                     .context("missing default.turso delta")?,
             );
         } else {
-            match path {
-                COMMIT_FLOW => {
-                    ranges.extend(ranges_in(envelope.content, envelope.content_start)?);
-                    commands.push(FlowCommand::deserialize(command.index(3)?)?);
-                }
-                crate::heap::RESERVE_HEAP => {
-                    let command = crate::heap::Command::deserialize(command.index(3)?)?;
-                    command.validate()?;
-                    heap.push(command);
-                }
-                crate::cleanup::SWEEP_HEAP => {
-                    let command = crate::cleanup::Command::deserialize(command.index(3)?)?;
-                    command.validate()?;
-                    cleanup.push(command);
-                }
-                _ => anyhow::bail!("unknown command envelope"),
-            }
+            ensure!(path == COMMIT_FLOW, "unknown command envelope");
+            ranges.extend(ranges_in(envelope.content, envelope.content_start)?);
+            commands.push(FlowCommand::deserialize(command.index(3)?)?);
         }
     }
-    ensure!(
-        (heap.is_empty() && cleanup.is_empty())
-            || (heap.len() + cleanup.len() == 1 && commands.is_empty()),
-        "heap reservations must occupy their own event"
-    );
     Ok((
         Entry::Wal {
             commands,
-            heap,
-            cleanup,
             delta: Box::new(delta.context("missing Turso ingestion")?),
         },
         ranges,

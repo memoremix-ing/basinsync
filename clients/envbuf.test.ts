@@ -1,6 +1,6 @@
 import { expect,test } from "bun:test";
 import { all,at,before,concat,wrap } from "./envbuf";
-import { encodeWalEvent,rangesAt,eventTuples } from "./events";
+import { encodeWalEvent,rangesAt,eventTuples,deltasAt,type WalDelta } from "./events";
 import { sha384 } from "./client";
 
 test("EnvBuf supports aligned forward/reverse walks, nested magic, and padding validation",()=>{
@@ -16,4 +16,13 @@ test("independent EnvBuf event writer records absolute blob offsets across FlexB
   expect(eventTuples(bytes).length).toBe(commands.length+1);
   for(const range of ranges){expect(bytes.subarray(range.offset,range.offset+range.length)).toEqual(range.marker.blob);expect(sha384(range.marker.blob)).toBe(range.marker.sha384);}
   const frames=all(bytes);expect(frames.length).toBe(commands.length+2);expect(before(bytes,bytes.length)).toEqual(frames.at(-1)!);
+});
+
+test("ingestion-only events have one indexed command and no marker ranges",()=>{
+  const delta:WalDelta={version:"test",logical:{base:null,header:new Uint8Array(),frames:[]},physical:{format:"sqlite-wal/1",base:"0",milestone:"1",parent:null,base_sha384:null,segments:[]}};
+  const bytes=encodeWalEvent([],delta);
+  expect(all(bytes).length).toBe(2);
+  expect(eventTuples(bytes).map(t=>t[2])).toEqual(["sts/0/databasin/ingestturso"]);
+  expect(rangesAt(bytes)).toEqual([]);
+  expect(deltasAt(bytes).turso["default.turso"]).toEqual(delta);
 });

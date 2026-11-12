@@ -1,22 +1,17 @@
 use anyhow::{Result, ensure};
-use serde::{Deserialize, Serialize};
 
-pub const SWEEP_HEAP: &str = "sts/0/databasin/sweepheap";
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Task {
     pub flow: String,
     pub viewpoint: String,
 }
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Freed {
     pub id: String,
     pub revision: String,
     pub freed: String,
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug)]
 pub struct Command {
     pub tasks: Vec<Task>,
     pub erased: Vec<Freed>,

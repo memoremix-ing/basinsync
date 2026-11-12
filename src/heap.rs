@@ -9,7 +9,6 @@ use num_bigint::BigInt;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub const RESERVE_HEAP: &str = "sts/0/databasin/reserveheap";
 pub const YOUNG: &str = "heap/young/";
 pub const OLD: &str = "heap/old/";
 
@@ -196,8 +195,7 @@ pub fn valid_revision(revision: &str) -> Result<()> {
 pub fn key(generation: &str, id: &str, revision: &str) -> String {
     format!("{generation}{id}/{revision}")
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug)]
 pub struct Allocation {
     pub id: String,
     pub length: u64,
@@ -213,8 +211,7 @@ impl Allocation {
         valid_revision(&self.revision)
     }
 }
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug)]
 pub struct Command {
     pub flow: String,
     pub viewpoint: String,
@@ -344,33 +341,35 @@ mod tests {
     fn heap_frames_reconstruct_without_tokens_and_reject_false_commands() -> Result<()> {
         let secret = b"heap-test-secret-only-the-client-knows-92741";
         let request = request("f", secret, 128);
-        let mut writer = crate::timeline::Watershed::default().into_stager();
-        let (prepared, outcome) = writer.prepare_heap(&request)?;
+        let mut writer = crate::turso::wal::Writer::open(&crate::turso::State::genesis()?.image)?;
+        let (captured, outcome) = writer.prepare_heap(&0u8.into(), None, &request)?;
         assert_eq!(outcome.results.len(), 1);
-        let bytes = prepared.unwrap().bytes().to_vec();
+        let (command, delta) = captured.unwrap();
+        let bytes = event::encode_wal(vec![], delta)?;
+        let envelopes = crate::envbuf::all(&bytes)?;
+        assert_eq!(envelopes.len(), 2);
+        assert!(event::blob_ranges(&bytes)?.is_empty());
         assert!(!bytes.windows(secret.len()).any(|w| w == secret));
         let mut recovered = crate::timeline::Watershed::default();
         recovered.apply_entry(1u8.into(), &bytes)?;
         let state = recovered.database.as_ref().unwrap();
         assert!(!state.image.windows(secret.len()).any(|w| w == secret));
         assert!(recovered.latest("f")?.is_none());
-        let event::Entry::Wal { heap, delta, .. } = event::decode_entry(&bytes)? else {
+        let event::Entry::Wal { delta, .. } = event::decode_entry(&bytes)? else {
             unreachable!()
         };
         let base = &delta.logical.base.as_ref().unwrap().0;
         let logical = crate::turso::State::ingest_logical(base, &delta.logical)?;
         assert_eq!(logical.image, state.image);
+        state.verify_heap(None, &command)?;
         for fault in 0..3 {
-            let mut command = heap[0].clone();
+            let mut command = command.clone();
             match fault {
                 0 => command.nodes[0].length += 1,
                 1 => command.reserved = "2000-01-01T00:00:00Z".into(),
                 _ => command.viewpoint = "1".into(),
             }
-            let bad = event::FlowChunks::heap(&command)?.finish(*delta.clone())?;
-            let mut empty = crate::timeline::Watershed::default();
-            assert!(empty.apply_entry(1u8.into(), &bad).is_err());
-            assert_eq!(empty.milestone, 0u8.into());
+            assert!(state.verify_heap(None, &command).is_err());
         }
         Ok(())
     }
@@ -400,8 +399,14 @@ mod tests {
             let physical = delta.physical.ingest(&image, &base, parent.as_deref())?;
             let logical = crate::turso::State::ingest_logical(&image, &delta.logical)?;
             assert_eq!(logical.image, physical, "heap history step {step}");
-            let bytes = event::FlowChunks::heap(&command)?.finish(delta)?;
+            let bytes = event::encode_wal(vec![], delta)?;
             recovered.apply_entry((step + 1).into(), &bytes)?;
+            let before = crate::turso::State::from_image(image.clone())?;
+            recovered
+                .database
+                .as_ref()
+                .unwrap()
+                .verify_heap(Some(&before), &command)?;
             assert_eq!(recovered.database.as_ref().unwrap().image, physical);
             parent = Some(event::digest(&bytes));
             image = physical;

@@ -131,6 +131,7 @@ impl State {
         conn.execute("COMMIT")?;
         Ok(())
     }
+    #[cfg(test)]
     pub(crate) fn verify_cleanup(&self, before: Option<&State>, command: &Command) -> Result<()> {
         command.validate()?;
         let before = before.ok_or_else(|| anyhow::anyhow!("cleanup requires prior state"))?;
@@ -352,7 +353,7 @@ mod tests {
         Ok(())
     }
     #[test]
-    fn cleanup_recovery_rejects_false_freeing_timestamp() -> Result<()> {
+    fn cleanup_frames_match_internal_operation_and_preserve_snapshot() -> Result<()> {
         let mut writer = timeline::Watershed::default().into_stager();
         let mut replay = timeline::Watershed::default();
         let (prepared, _) = writer.prepare_heap(&reserve("f", &[9]))?;
@@ -360,24 +361,14 @@ mod tests {
         let prepared = writer.prepare(vec![commit("f", "0")])?;
         let old_snapshot = prepared.snapshot().unwrap();
         apply(&mut replay, prepared)?;
-        let prepared = writer
-            .prepare_cleanup(sweep(vec![task("f", "0")], 1))?
-            .unwrap();
-        let event::Entry::Wal {
-            mut cleanup, delta, ..
-        } = event::decode_entry(prepared.bytes())?
-        else {
-            unreachable!()
-        };
-        cleanup[0].freed_at = "2000-01-01T00:00:00Z".into();
-        let bad = event::FlowChunks::cleanup(&cleanup[0])?.finish(*delta)?;
-        assert!(
-            replay
-                .apply_entry(prepared.milestone().clone(), &bad)
-                .is_err()
-        );
-        assert_eq!(replay.milestone, 2u8.into());
+        let mut command = sweep(vec![task("f", "0")], 1);
+        let before = State::from_image(replay.database.as_ref().unwrap().image.clone())?;
+        let prepared = writer.prepare_cleanup(command.clone())?.unwrap();
         apply(&mut replay, prepared)?;
+        let after = replay.database.as_ref().unwrap();
+        after.verify_cleanup(Some(&before), &command)?;
+        command.freed_at = "2000-01-01T00:00:00Z".into();
+        assert!(after.verify_cleanup(Some(&before), &command).is_err());
         let old_work = cleanup::scan(&old_snapshot, 16, 32)?;
         assert_eq!(old_work.tasks, vec![task("f", "0")]);
         assert!(

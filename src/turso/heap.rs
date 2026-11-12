@@ -178,6 +178,7 @@ impl State {
         conn.execute("COMMIT")?;
         Ok(())
     }
+    #[cfg(test)]
     pub(crate) fn verify_heap(&self, before: Option<&State>, command: &Command) -> Result<()> {
         let viewpoint = command.validate()?;
         let previous = before
