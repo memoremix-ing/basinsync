@@ -43,7 +43,7 @@ CREATE TABLE graph_edges (
   PRIMARY KEY (node, retainer),
   CHECK (retainer < node)
 );
-CREATE INDEX graph_edges_retainer ON graph_edges(retainer);
+CREATE INDEX graph_edges_retainer ON graph_edges(retainer, node);
 ```
 
 For each valid *node*[^][node], insert its id, length, current reservation time,

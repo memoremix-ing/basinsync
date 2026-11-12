@@ -29,5 +29,6 @@ rounding through binary floating point. Other JSON values retain their usual mea
 For cross-language interchange, ordinary integer numbers should stay within
 `±(2^53 − 1)`; use bigints beyond that. Byte strings preserve bytes, not a typed
 array's element type or endianness. Use unique object keys and Unicode scalar
-text. JSON0 is neither a canonical serialization nor a filesystem-safe encoding;
-the uppercase reservation alone does not prevent filename collisions.
+text. JSON0 is not (yet) a canonical serialization nor are all encodings safe for
+use in filesystem paths; the uppercase reservation protects prefixes, not
+case-sensitive payloads such as `0*AA` and `0*aA`.
