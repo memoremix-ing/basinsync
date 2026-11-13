@@ -243,6 +243,17 @@ impl Preparation {
                 return Ok(());
             };
             match message {
+                Message::InspectHeap { mut request, reply } => {
+                    let mut stager = self.write_stager().await?;
+                    let (stager, request) = tokio::task::spawn_blocking(move || {
+                        stager.inspect_heap(&mut request)?;
+                        Ok::<_, anyhow::Error>((stager, request))
+                    })
+                    .await
+                    .context("heap inspection panicked")??;
+                    self.stager = Some(stager);
+                    let _ = reply.send(Ok(request));
+                }
                 Message::Cleanup { command, reply } => {
                     let permit = self
                         .batches
@@ -611,6 +622,20 @@ async fn cleanup_loop(
                     cleanup::Command {
                         tasks: work.tasks,
                         erased: vec![],
+                        detaching: vec![],
+                        freed_at: cleanup::now()?,
+                        edge_limit: config.edges,
+                    },
+                )
+                .await?;
+            }
+            if !work.detaching.is_empty() {
+                maintenance(
+                    &queue,
+                    cleanup::Command {
+                        tasks: vec![],
+                        erased: vec![],
+                        detaching: work.detaching,
                         freed_at: cleanup::now()?,
                         edge_limit: config.edges,
                     },
@@ -624,6 +649,7 @@ async fn cleanup_loop(
                     cleanup::Command {
                         tasks: vec![],
                         erased,
+                        detaching: vec![],
                         freed_at: cleanup::now()?,
                         edge_limit: config.edges,
                     },

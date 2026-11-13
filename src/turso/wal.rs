@@ -312,6 +312,9 @@ impl Writer {
     pub fn snapshot(&self) -> Result<Option<Arc<super::cow::View>>> {
         self.store.as_ref().map(|s| s.pin()).transpose()
     }
+    pub(crate) fn inspect_heap(&self, request: &mut crate::heap::Request) -> Result<()> {
+        self.state.inspect_heap(request)
+    }
     pub fn latest(&self, flow: &str) -> Result<Option<Viewpoint>> {
         self.state.latest(flow)
     }

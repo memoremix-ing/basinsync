@@ -21,6 +21,8 @@ use turso_core::{
 
 mod cleanup;
 pub mod cow;
+#[cfg(test)]
+mod deep;
 mod heap;
 use cleanup::enqueue_sweeping;
 

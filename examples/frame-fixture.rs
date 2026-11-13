@@ -10,14 +10,17 @@ use std::{
 
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().collect();
-    if args
-        .get(1)
-        .is_some_and(|arg| arg == "--inspect" || arg == "--locate" || arg == "--heap")
-    {
+    if args.get(1).is_some_and(|arg| {
+        arg == "--inspect" || arg == "--locate" || arg == "--heap" || arg == "--graph"
+    }) {
         let state = basinsync::turso::State::from_image(std::fs::read(
             args.get(2)
                 .ok_or_else(|| anyhow::anyhow!("missing database path"))?,
         )?)?;
+        if args[1] == "--graph" {
+            serde_json::to_writer(io::stdout(), &state.heap_counts()?)?;
+            return Ok(());
+        }
         if args[1] == "--heap" {
             let id = args
                 .get(3)
@@ -30,7 +33,7 @@ fn main() -> Result<()> {
                 .ok_or_else(|| anyhow::anyhow!("missing retainer"))?;
             serde_json::to_writer(
                 io::stdout(),
-                &serde_json::json!({"id":id,"length":node.length,"reserved":node.reserved,"etag":node.etag,"promoted":node.promoted,"revision":node.revision,"freed":node.freed,"retained":state.heap_edge(id,owner)?}),
+                &serde_json::json!({"id":id,"length":node.length,"reserved":node.reserved,"etag":node.etag,"promoted":node.promoted,"revision":node.revision,"freed":node.freed,"children":state.heap_children(id)?,"retained":state.heap_edge(id,owner)?}),
             )?;
             return Ok(());
         }

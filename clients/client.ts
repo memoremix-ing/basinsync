@@ -12,7 +12,7 @@ export type EpilogueStatus = ApiResponse<{
 export type ViewpointMismatch = ApiResponse<{ next: Position }>;
 export type ApiError = ApiResponse<{ error: string; message: string }>;
 export type Action = {url:string;headers:Record<string,string>};
-export type HeapNode = {auth:[height:number,version:number,token:Uint8Array];length:number;edges:unknown[]};
+export type HeapNode = {auth:[height:number,version:number,token:Uint8Array];length:number;edges:{auth:[height:number,version:number,token:Uint8Array]}[]};
 export type HeapResponse = ApiResponse<{
   errors:Record<number,{code:string;message:string}>|null;
   results:Record<number,{actions:{write:Action|null;preview:Action|null;read:Action}}>|null;

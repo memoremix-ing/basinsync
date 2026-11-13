@@ -1,10 +1,12 @@
 [conditional-read]: <glossary/conditional-read.md>
 [conditional-write]: <glossary/conditional-write.md>
 [epilogue-protocol]: <epilogue-protocol.md>
+[etag]: <glossary/etag.md>
 [flow]: <glossary/flow.md>
 [heap-reservation]: <glossary/heap-reservation.md>
 [json0]: <glossary/json0.md>
 [node]: <glossary/node.md>
+[node-height]: <glossary/node-height.md>
 [old-generation]: <glossary/old-generation.md>
 [revision]: <glossary/revision.md>
 [viewpoint]: <glossary/viewpoint.md>
@@ -22,10 +24,14 @@
   nodes: Array<{
     auth: [height: number, version: number, token: Uint8Array];
     length: number;
-    edges: [];
+    edges: Array<{ auth: [height: number, version: number, token: Uint8Array] }>;
   }>;
 }
 ```
+
+Edges identify a child set: each child has lower *height*[^][node-height] and a
+verified stored allocation. Existing *nodes*[^][node] require matching content
+length and child-id set, even when already referenced by other *nodes*[^][node].
 
 A wrong *Viewpoint*[^][viewpoint] returns the *common 409 response*[^][epilogue-protocol].
 Otherwise return HTTP 200 with nullable maps indexed by input position:
@@ -48,6 +54,6 @@ specified `Content-Length`. `preview` and `read` are
 *conditional GETs*[^][conditional-read] for that *node*[^][node] in the
 *young*[^][young-generation] and *old*[^][old-generation] generations respectively.
 Both object keys end in `${node_id}/${revision}`, sharing the stored UUIDv4
-*revision*[^][revision]. Send each action's headers. A nonempty stored etag makes `write` null; a valid
+*revision*[^][revision]. Send each action's headers. A nonempty stored *etag*[^][etag] makes `write` null; a valid
 promotion timestamp makes `preview` null.
 

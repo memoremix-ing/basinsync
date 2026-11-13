@@ -190,6 +190,10 @@ impl Stager {
         self.state.head = Some(prepared.digest.clone());
         Ok(prepared)
     }
+    pub fn inspect_heap(&mut self, request: &mut crate::heap::Request) -> Result<()> {
+        self.state.enable_vfs()?;
+        self.state.writer.as_ref().unwrap().inspect_heap(request)
+    }
     pub fn prepare_heap(
         &mut self,
         request: &crate::heap::Request,

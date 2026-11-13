@@ -6,6 +6,6 @@ a first-writer-wins Epilogue, a server, and TypeScript stress clients.
 
 [Run and verify](docs/development.md) · [Protocol and invariant](docs/epilogue-protocol.md)
 
-The current milestone is [0006 — Async shallow cleanup](docs/diy/0006-async-shallow-cleanup.md):
-durable, bounded reclamation queues and background object deletion. UUIDv4
-revisions keep delayed deletions scoped to earlier allocations of a reusable node id.
+The current milestone is [0007 — Deep heap support](docs/diy/0007-deep-heap-support.md):
+authenticated child edges, verified stored targets, immutable node descriptors,
+and bounded recursive reclamation through the durable Timeline.

@@ -7,19 +7,21 @@ use crate::{
 use anyhow::{Result, ensure};
 use num_bigint::BigInt;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub const YOUNG: &str = "heap/young/";
 pub const OLD: &str = "heap/old/";
 
 pub struct Limits {
     pub max_height: u64,
+    pub max_degree: usize,
     pub max_token_bytes: usize,
 }
 impl Default for Limits {
     fn default() -> Self {
         Self {
             max_height: 128,
+            max_degree: 128,
             max_token_bytes: 64,
         }
     }
@@ -54,13 +56,48 @@ struct Auth(
 struct WireNode {
     auth: Auth,
     length: u64,
-    edges: Vec<serde_json::Value>,
+    edges: Vec<WireEdge>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WireEdge {
+    auth: Auth,
+}
+fn authenticate(auth: Auth, limits: &Limits) -> Result<(u64, String), NodeError> {
+    let Auth(height, version, token) = auth;
+    if height > limits.max_height {
+        return Err(invalid(
+            "height_limit",
+            "node height exceeds the service limit",
+        ));
+    }
+    if version != 0 {
+        return Err(invalid(
+            "unsupported_version",
+            "only version zero is supported",
+        ));
+    }
+    if token.len() > limits.max_token_bytes {
+        return Err(invalid(
+            "token_limit",
+            "access token exceeds the service limit",
+        ));
+    }
+    Ok((height, node_id(height, version, &token)))
+}
+#[derive(Clone, Debug)]
+pub struct Child {
+    pub revision: String,
+    pub length: u64,
+    pub etag: String,
 }
 
 pub struct Request {
     pub flow: String,
     pub viewpoint: Viewpoint,
     pub nodes: Vec<Result<Node, NodeError>>,
+    pub proofs: BTreeMap<String, Result<Child, NodeError>>,
 }
 impl Request {
     pub fn parse(bytes: &[u8], limits: &Limits) -> Result<Self> {
@@ -76,36 +113,23 @@ impl Request {
                 let wire: WireNode = serde_json::from_value(value).map_err(|_| {
                     invalid("invalid_node", "invalid node fields or authentication")
                 })?;
-                let Auth(height, version, token) = wire.auth;
-                if height > limits.max_height {
-                    return Err(invalid(
-                        "height_limit",
-                        "node height exceeds the service limit",
-                    ));
-                }
-                if height != 0 {
-                    return Err(invalid(
-                        "unsupported_height",
-                        "only height zero is supported",
-                    ));
-                }
-                if version != 0 {
-                    return Err(invalid(
-                        "unsupported_version",
-                        "only version zero is supported",
-                    ));
-                }
-                if token.len() > limits.max_token_bytes {
-                    return Err(invalid(
-                        "token_limit",
-                        "access token exceeds the service limit",
-                    ));
-                }
-                if !wire.edges.is_empty() {
-                    return Err(invalid(
-                        "unsupported_edges",
-                        "shallow nodes must have no edges",
-                    ));
+                let (height, id) = authenticate(wire.auth, limits)?;
+                let mut edges = BTreeSet::new();
+                for edge in wire.edges {
+                    let (child_height, child_id) = authenticate(edge.auth, limits)?;
+                    if child_height >= height {
+                        return Err(invalid(
+                            "invalid_height",
+                            "parent height must exceed every child height",
+                        ));
+                    }
+                    edges.insert(child_id);
+                    if edges.len() > limits.max_degree {
+                        return Err(invalid(
+                            "degree_limit",
+                            "node degree exceeds the service limit",
+                        ));
+                    }
                 }
                 if wire.length > i64::MAX as u64 {
                     return Err(invalid(
@@ -114,8 +138,9 @@ impl Request {
                     ));
                 }
                 Ok(Node {
-                    id: node_id(height, version, &token),
+                    id,
                     length: wire.length,
+                    edges,
                 })
             })
             .collect();
@@ -123,8 +148,86 @@ impl Request {
             flow: wire.flow,
             viewpoint: wire.viewpoint,
             nodes,
+            proofs: BTreeMap::new(),
         })
     }
+    pub async fn verify_children(
+        &mut self,
+        bucket: &s3::Bucket,
+        permits: std::sync::Arc<tokio::sync::Semaphore>,
+    ) {
+        let candidates = std::mem::take(&mut self.proofs);
+        let mut running = tokio::task::JoinSet::new();
+        let mut pending = candidates.into_iter();
+        loop {
+            while running.len() < 8 {
+                let Some((id, proof)) = pending.next() else {
+                    break;
+                };
+                let bucket = bucket.clone();
+                let permits = permits.clone();
+                running.spawn(async move {
+                    let verified = match proof {
+                        Ok(mut child) if child.etag.is_empty() => {
+                            let _permit = permits
+                                .acquire_owned()
+                                .await
+                                .expect("heap HEAD limiter stays open");
+                            match child_etag(&bucket, &id, &child).await {
+                                Ok(etag) => {
+                                    child.etag = etag;
+                                    Ok(child)
+                                }
+                                Err(error) => Err(error),
+                            }
+                        }
+                        other => other,
+                    };
+                    (id, verified)
+                });
+            }
+            let Some(result) = running.join_next().await else {
+                break;
+            };
+            if let Ok((id, proof)) = result {
+                self.proofs.insert(id, proof);
+            }
+        }
+    }
+}
+async fn child_etag(bucket: &s3::Bucket, id: &str, child: &Child) -> Result<String, NodeError> {
+    let reader = crate::object_read::if_present(bucket)
+        .map_err(|_| invalid("child_unavailable", "child object verification failed"))?;
+    for generation in [YOUNG, OLD] {
+        let result = reader
+            .head_object(key(generation, id, &child.revision))
+            .await;
+        match result {
+            Ok((head, 200)) => {
+                if head.content_length.and_then(|n| u64::try_from(n).ok()) != Some(child.length) {
+                    return Err(invalid(
+                        "child_length_mismatch",
+                        "child object length differs from its reservation",
+                    ));
+                }
+                return head
+                    .e_tag
+                    .filter(|s| !s.is_empty())
+                    .ok_or_else(|| invalid("child_unavailable", "child object has no ETag"));
+            }
+            Ok((_, 404 | 412)) => {}
+            _ => {
+                return Err(invalid(
+                    "child_unavailable",
+                    "child object verification failed",
+                ));
+            }
+        }
+    }
+    Err(invalid(
+        "child_missing",
+        "child object is absent from both generations",
+    ))
 }
 
 pub fn node_id(height: u64, version: u64, token: &[u8]) -> String {
@@ -149,16 +252,27 @@ pub fn retainer(flow: &str, viewpoint: &Viewpoint) -> String {
 pub struct Node {
     pub id: String,
     pub length: u64,
+    pub edges: BTreeSet<String>,
 }
 impl Node {
     pub fn validate(&self) -> Result<()> {
         let parts: Vec<_> = self.id.split('/').collect();
         ensure!(
             parts.len() == 4
-                && parts[0] == format!("n-{}", lexidecimal::encode(&(-1).into()))
+                && parts[0].starts_with("n-")
                 && parts[1] == format!("v.{}", lexidecimal::encode(&0.into())),
-            "invalid shallow node id"
+            "invalid node id"
         );
+        let height = node_height(&self.id)?;
+        for edge in &self.edges {
+            Node {
+                id: edge.clone(),
+                length: 0,
+                edges: BTreeSet::new(),
+            }
+            .validate()?;
+            ensure!(node_height(edge)? < height, "invalid edge height");
+        }
         let size = parts[2]
             .strip_prefix("t.")
             .ok_or_else(|| anyhow::anyhow!("missing token size"))?;
@@ -182,6 +296,20 @@ impl Node {
     }
 }
 
+pub fn node_height(id: &str) -> Result<BigInt> {
+    let encoded = id
+        .split('/')
+        .next()
+        .and_then(|s| s.strip_prefix("n-"))
+        .ok_or_else(|| anyhow::anyhow!("missing height"))?;
+    let n = lexidecimal::decode(encoded)?;
+    ensure!(
+        n < 0.into() && lexidecimal::encode(&n) == encoded,
+        "invalid complemented height"
+    );
+    Ok(!n)
+}
+
 pub fn valid_revision(revision: &str) -> Result<()> {
     let uuid = uuid::Uuid::parse_str(revision)?;
     ensure!(
@@ -197,6 +325,7 @@ pub fn key(generation: &str, id: &str, revision: &str) -> String {
 }
 #[derive(Clone, Debug)]
 pub struct Allocation {
+    pub edges: BTreeSet<String>,
     pub id: String,
     pub length: u64,
     pub revision: String,
@@ -206,6 +335,7 @@ impl Allocation {
         Node {
             id: self.id.clone(),
             length: self.length,
+            edges: self.edges.clone(),
         }
         .validate()?;
         valid_revision(&self.revision)
@@ -217,6 +347,7 @@ pub struct Command {
     pub viewpoint: String,
     pub reserved: String,
     pub nodes: Vec<Allocation>,
+    pub children: BTreeMap<String, Child>,
 }
 impl Command {
     pub fn validate(&self) -> Result<Viewpoint> {
@@ -309,6 +440,7 @@ mod tests {
         assert!("M_flow/v.0/e.0" < child.as_str());
         Node {
             id: child,
+            edges: BTreeSet::new(),
             length: 0,
         }
         .validate()
@@ -326,14 +458,10 @@ mod tests {
             request
                 .nodes
                 .iter()
+                .skip(1)
                 .map(|n| n.as_ref().unwrap_err().code)
                 .collect::<Vec<_>>(),
-            [
-                "unsupported_height",
-                "unsupported_version",
-                "unsupported_edges",
-                "invalid_node"
-            ]
+            ["unsupported_version", "invalid_node", "invalid_node"]
         );
     }
 
@@ -384,12 +512,14 @@ mod tests {
             let n = step % 11;
             let node = Node {
                 id: node_id(0, 0, format!("history-client-token-{n}").as_bytes()),
+                edges: BTreeSet::new(),
                 length: n as u64,
             };
             let request = Request {
                 flow: format!("f-{}", step % 4),
                 viewpoint: Viewpoint::zero(),
                 nodes: vec![Ok(node.clone()), Ok(node)],
+                proofs: BTreeMap::new(),
             };
             let base = num_bigint::BigUint::from(step);
             let (captured, outcome) = writer.prepare_heap(&base, parent.as_deref(), &request)?;
@@ -412,5 +542,47 @@ mod tests {
             image = physical;
         }
         Ok(())
+    }
+    #[test]
+    fn authenticated_edges_enforce_height_degree_and_child_limits() {
+        use base64::Engine;
+        let auth = |h: u64, token: &[u8]| {
+            serde_json::json!([
+                h,
+                0,
+                format!(
+                    "0*{}",
+                    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(token)
+                )
+            ])
+        };
+        let parse = |edges: serde_json::Value| {
+            Request::parse(serde_json::json!({"flow":"f","viewpoint":"0x0","nodes":[{"auth":auth(2,b"parent"),"length":1,"edges":edges}]}).to_string().as_bytes(),&Limits {max_degree:2,..Limits::default()}).unwrap()
+        };
+        let edges =
+            serde_json::json!([{"auth":auth(0,b"a")},{"auth":auth(1,b"b")},{"auth":auth(0,b"a")}]);
+        assert_eq!(parse(edges).nodes[0].as_ref().unwrap().edges.len(), 2);
+        for (edges, code) in [
+            (
+                serde_json::json!([{"auth":auth(0,b"a")},{"auth":auth(0,b"b")},{"auth":auth(0,b"c")}]),
+                "degree_limit",
+            ),
+            (serde_json::json!([{"auth":auth(2,b"a")}]), "invalid_height"),
+            (serde_json::json!([{"auth":auth(3,b"a")}]), "invalid_height"),
+            (
+                serde_json::json!([{"auth":auth(0,&[42;65])}]),
+                "token_limit",
+            ),
+            (
+                serde_json::json!([{"auth":[0,1,"0*"]}]),
+                "unsupported_version",
+            ),
+            (
+                serde_json::json!([{"auth":[0,0,"bad-secret"]}]),
+                "invalid_node",
+            ),
+        ] {
+            assert_eq!(parse(edges).nodes[0].as_ref().unwrap_err().code, code);
+        }
     }
 }

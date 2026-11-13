@@ -1,5 +1,5 @@
 use super::*;
-use crate::heap::{Allocation, Command, NodeError, Outcome, Request, Reserved, retainer};
+use crate::heap::{Allocation, Child, Command, NodeError, Outcome, Request, Reserved, retainer};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HeapNode {
@@ -10,12 +10,11 @@ pub struct HeapNode {
     pub etag: String,
     pub promoted: String,
     pub promoted_valid: bool,
-    pub incoming: bool,
 }
 
 impl State {
     pub fn heap_node(&self, id: &str) -> Result<Option<HeapNode>> {
-        let mut query=self.native.conn.prepare("SELECT content_length,reserved,etag,promoted,julianday(promoted) IS NOT NULL,EXISTS(SELECT 1 FROM graph_edges WHERE node=?1 AND retainer>='n-' AND retainer<'n.'),revision,freed FROM graph_nodes WHERE id=?1")?;
+        let mut query=self.native.conn.prepare("SELECT content_length,reserved,etag,promoted,julianday(promoted) IS NOT NULL,revision,freed FROM graph_nodes WHERE id=?1")?;
         query.bind_at(
             NonZeroUsize::new(1).unwrap(),
             Value::build_text(id.to_owned()),
@@ -25,13 +24,12 @@ impl State {
                 let row = query.row().unwrap();
                 Ok(Some(HeapNode {
                     length: u64::try_from(row.get::<i64>(0)?)?,
-                    revision: row.get(6)?,
-                    freed: row.get(7)?,
+                    revision: row.get(5)?,
+                    freed: row.get(6)?,
                     reserved: row.get(1)?,
                     etag: row.get(2)?,
                     promoted: row.get(3)?,
                     promoted_valid: row.get::<i64>(4)? != 0,
-                    incoming: row.get::<i64>(5)? != 0,
                 }))
             }
             StepResult::Done => Ok(None),
@@ -56,12 +54,70 @@ impl State {
             StepResult::Row
         ))
     }
+    pub fn heap_counts(&self) -> Result<BTreeMap<String, u64>> {
+        let mut counts = BTreeMap::new();
+        for table in ["graph_nodes", "graph_edges", "sweeping_tasks"] {
+            self.native
+                .conn
+                .prepare(format!("SELECT count(*) FROM {table}"))?
+                .run_with_row_callback(|row| {
+                    counts.insert(table.into(), row.get::<i64>(0)? as u64);
+                    Ok(())
+                })?;
+        }
+        Ok(counts)
+    }
+    pub fn heap_children(&self, id: &str) -> Result<std::collections::BTreeSet<String>> {
+        let mut query = self
+            .native
+            .conn
+            .prepare("SELECT node FROM graph_edges WHERE retainer=?1 ORDER BY node")?;
+        query.bind_at(
+            NonZeroUsize::new(1).unwrap(),
+            Value::build_text(id.to_owned()),
+        )?;
+        let mut children = std::collections::BTreeSet::new();
+        query.run_with_row_callback(|row| {
+            children.insert(row.get(0)?);
+            Ok(())
+        })?;
+        Ok(children)
+    }
+    pub(crate) fn inspect_heap(&self, request: &mut Request) -> Result<()> {
+        for parent in request.nodes.iter().filter_map(|n| n.as_ref().ok()) {
+            if self.heap_node(&parent.id)?.is_some() {
+                continue;
+            }
+            for id in &parent.edges {
+                if request.proofs.contains_key(id) {
+                    continue;
+                }
+                let proof = match self.heap_node(id)? {
+                    Some(row) if row.freed.is_empty() => Ok(Child {
+                        revision: row.revision,
+                        length: row.length,
+                        etag: row.etag,
+                    }),
+                    Some(_) => Err(NodeError {
+                        code: "child_freed",
+                        message: "child is awaiting reclamation",
+                    }),
+                    None => Err(NodeError {
+                        code: "child_unknown",
+                        message: "child has no reserved allocation",
+                    }),
+                };
+                request.proofs.insert(id.clone(), proof);
+            }
+        }
+        Ok(())
+    }
     pub(super) fn plan_heap(&self, request: &Request) -> Result<(Option<Command>, Outcome)> {
-        let reserved = time::OffsetDateTime::now_utc()
-            .format(&time::format_description::well_known::Rfc3339)?;
+        let reserved = crate::cleanup::now()?;
         let mut outcome = Outcome::default();
-        let mut planned = BTreeMap::<String, HeapNode>::new();
+        let mut planned = BTreeMap::<String, (HeapNode, std::collections::BTreeSet<String>)>::new();
         let mut nodes = BTreeMap::<String, Allocation>::new();
+        let mut children = BTreeMap::new();
         for (index, node) in request.nodes.iter().enumerate() {
             let node = match node {
                 Ok(node) => node,
@@ -72,34 +128,74 @@ impl State {
             };
             let current = if let Some(current) = planned.get(&node.id) {
                 Some(current.clone())
+            } else if let Some(row) = self.heap_node(&node.id)? {
+                Some((row, self.heap_children(&node.id)?))
             } else {
-                self.heap_node(&node.id)?
+                None
             };
-            if let Some(current) = &current {
-                let error = if !current.freed.is_empty() {
+            let mut verified = BTreeMap::new();
+            let error = if let Some((row, edges)) = &current {
+                if !row.freed.is_empty() {
                     Some(NodeError {
                         code: "node_freed",
                         message: "node is awaiting cleanup; retry after reclamation",
                     })
-                } else if current.length != node.length {
+                } else if row.length != node.length {
                     Some(NodeError {
                         code: "length_collision",
                         message: "node already has a different content length",
                     })
-                } else if current.incoming {
+                } else if *edges != node.edges {
                     Some(NodeError {
-                        code: "referenced_node",
-                        message: "node has an incoming node edge",
+                        code: "edges_collision",
+                        message: "node already has different children",
                     })
                 } else {
                     None
-                };
-                if let Some(error) = error {
-                    outcome.errors.insert(index, error);
-                    continue;
                 }
+            } else {
+                let mut error = None;
+                for id in &node.edges {
+                    let proof = match request.proofs.get(id) {
+                        Some(Ok(proof)) => proof,
+                        Some(Err(e)) => {
+                            error = Some(e.clone());
+                            break;
+                        }
+                        None => {
+                            error = Some(NodeError {
+                                code: "child_unverified",
+                                message: "child object has not been verified",
+                            });
+                            break;
+                        }
+                    };
+                    match self.heap_node(id)? {
+                        Some(row)
+                            if row.freed.is_empty()
+                                && row.revision == proof.revision
+                                && row.length == proof.length
+                                && !proof.etag.is_empty()
+                                && (row.etag.is_empty() || row.etag == proof.etag) =>
+                        {
+                            verified.insert(id.clone(), proof.clone());
+                        }
+                        _ => {
+                            error = Some(NodeError {
+                                code: "child_changed",
+                                message: "child allocation changed during verification; retry",
+                            });
+                            break;
+                        }
+                    }
+                }
+                error
+            };
+            if let Some(error) = error {
+                outcome.errors.insert(index, error);
+                continue;
             }
-            let current = current.unwrap_or_else(|| HeapNode {
+            let current = current.map(|(row, _)| row).unwrap_or_else(|| HeapNode {
                 revision: uuid::Uuid::new_v4().to_string(),
                 freed: String::new(),
                 length: node.length,
@@ -107,7 +203,6 @@ impl State {
                 etag: String::new(),
                 promoted: String::new(),
                 promoted_valid: false,
-                incoming: false,
             });
             outcome.results.insert(
                 index,
@@ -125,15 +220,23 @@ impl State {
                     id: node.id.clone(),
                     length: node.length,
                     revision: current.revision.clone(),
+                    edges: node.edges.clone(),
                 },
             );
-            planned.insert(node.id.clone(), current);
+            planned.insert(node.id.clone(), (current, node.edges.clone()));
+            children.extend(verified);
+        }
+        for result in outcome.results.values_mut() {
+            if children.contains_key(&result.id) {
+                result.write = false;
+            }
         }
         let command = (!nodes.is_empty()).then(|| Command {
             flow: request.flow.clone(),
             viewpoint: request.viewpoint.decimal(),
             reserved,
             nodes: nodes.into_values().collect(),
+            children,
         });
         Ok((command, outcome))
     }
@@ -143,7 +246,39 @@ impl State {
         conn.set_portable_logical_changes_enabled(true);
         conn.execute("BEGIN CONCURRENT")?;
         let owner = retainer(&command.flow, &Viewpoint::parse(&command.viewpoint)?);
+        for (id, child) in &command.children {
+            let row = self
+                .heap_node(id)?
+                .ok_or_else(|| anyhow::anyhow!("missing verified child"))?;
+            ensure!(
+                row.revision == child.revision
+                    && row.length == child.length
+                    && row.freed.is_empty()
+                    && !child.etag.is_empty()
+                    && (row.etag.is_empty() || row.etag == child.etag),
+                "verified child changed before transaction"
+            );
+            let mut cache = conn.prepare(
+                "UPDATE graph_nodes SET etag=?2 WHERE id=?1 AND revision=?3 AND freed=''",
+            )?;
+            for (i, value) in [id, &child.etag, &child.revision].into_iter().enumerate() {
+                cache.bind_at(
+                    NonZeroUsize::new(i + 1).unwrap(),
+                    Value::build_text(value.to_owned()),
+                )?;
+            }
+            cache.run_ignore_rows()?;
+        }
         for node in &command.nodes {
+            if let Some(row) = self.heap_node(&node.id)? {
+                ensure!(
+                    row.revision == node.revision
+                        && row.freed.is_empty()
+                        && row.length == node.length
+                        && self.heap_children(&node.id)? == node.edges,
+                    "reserved descriptor changed before transaction"
+                );
+            }
             let mut insert=conn.prepare("INSERT INTO graph_nodes(id,content_length,reserved,etag,promoted,revision) VALUES(?1,?2,?3,'','',?4) ON CONFLICT(id) DO NOTHING")?;
             for (i, value) in [
                 Value::build_text(node.id.clone()),
@@ -167,6 +302,18 @@ impl State {
                 Value::build_text(owner.clone()),
             )?;
             edge.run_ignore_rows()?;
+            for child in &node.edges {
+                let mut edge = conn.prepare("INSERT INTO graph_edges(node,retainer) VALUES(?1,?2) ON CONFLICT(node,retainer) DO NOTHING")?;
+                edge.bind_at(
+                    NonZeroUsize::new(1).unwrap(),
+                    Value::build_text(child.clone()),
+                )?;
+                edge.bind_at(
+                    NonZeroUsize::new(2).unwrap(),
+                    Value::build_text(node.id.clone()),
+                )?;
+                edge.run_ignore_rows()?;
+            }
         }
         let mut cursor = conn.prepare("UPDATE watershed SET milestone=?1 WHERE id=1")?;
         cursor.bind_at(
@@ -199,7 +346,7 @@ impl State {
                 .map(|db| db.heap_node(&node.id))
                 .transpose()?
                 .flatten();
-            let expected = previous.unwrap_or_else(|| HeapNode {
+            let mut expected = previous.unwrap_or_else(|| HeapNode {
                 revision: node.revision.clone(),
                 freed: String::new(),
                 length: node.length,
@@ -207,13 +354,18 @@ impl State {
                 etag: String::new(),
                 promoted: String::new(),
                 promoted_valid: false,
-                incoming: false,
             });
+            if let Some(child) = command.children.get(&node.id) {
+                expected.etag = child.etag.clone();
+            }
+            ensure!(
+                self.heap_children(&node.id)? == node.edges,
+                "recovered child set mismatch"
+            );
             ensure!(
                 expected.length == node.length
                     && expected.revision == node.revision
-                    && expected.freed.is_empty()
-                    && !expected.incoming,
+                    && expected.freed.is_empty(),
                 "invalid heap collision"
             );
             ensure!(
@@ -268,8 +420,8 @@ mod tests {
             .conn
             .execute(format!("INSERT INTO graph_edges VALUES('{id}','{parent}')"))?;
         let (command, outcome) = state.plan_heap(&request)?;
-        assert!(command.is_none());
-        assert_eq!(outcome.errors[&0].code, "referenced_node");
+        assert!(command.is_some());
+        assert!(outcome.errors.is_empty());
         assert!(
             state
                 .native

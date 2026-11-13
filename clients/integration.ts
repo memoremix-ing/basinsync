@@ -977,12 +977,12 @@ try {
       const result=spawn([`${root}/target/debug/examples/frame-fixture`,"--heap",path,id(token),owner(f,v)],{cwd:root,stdout:"pipe",stderr:"inherit"});
       const row=await new Response(result.stdout).json();assert.equal(await result.exited,0);return row;
     }
-    const input=[node(),{...node(),auth:[1,0,secret] as HeapNode["auth"]},{...node(),auth:[0,1,secret] as HeapNode["auth"]},{...node(),edges:["target"]},node(oversize),node(),node(secret,8),node(emptySecret,0)];
+    const input=[node(),{...node(),auth:[129,0,secret] as HeapNode["auth"]},{...node(),auth:[0,1,secret] as HeapNode["auth"]},{...node(),edges:["target"]} as unknown as HeapNode,node(oversize),node(),node(secret,8),node(emptySecret,0)];
     const response=await reserved(await reserveHeap(app.url,flow,0n,input));
     assert.equal(response.timelines.watershed.milestone,1n);
     assert.deepEqual(Object.keys(response.results!),["0","5","7"]);
     assert.deepEqual(Object.keys(response.errors!),["1","2","3","4","6"]);
-    assert.deepEqual(Object.values(response.errors!).map(e=>e.code),["unsupported_height","unsupported_version","unsupported_edges","token_limit","length_collision"]);
+    assert.deepEqual(Object.values(response.errors!).map(e=>e.code),["height_limit","unsupported_version","invalid_node","token_limit","length_collision"]);
     const actions=response.results![0].actions,zero=response.results![7].actions;
     assert(actions.write&&actions.preview&&zero.write&&zero.preview);
     const revision = new URL(actions.write.url).pathname.split("/").at(-1)!;
@@ -1143,6 +1143,100 @@ try {
     await stop(retry.process);
   }
   console.log("put of success: bounded deferred cleanup, shared retainers, foreground progress during DELETE, revision-safe reuse, late-upload dust, and durable restart recovery");
+
+  {
+    const b=await bucket(),flows=new Set<string>(),heads=new Map<string,number>();let mode="normal",target="",rootId="",checkedDeletion=false;
+    const slow=Promise.withResolvers<void>(),entered=Promise.withResolvers<void>();let hold=false;
+    async function image(){
+      const list=await s3.send(new ListObjectsV2Command({Bucket:b,Prefix:"timeline/"}));
+      const moments=(list.Contents??[]).map(o=>fromKey(o.Key!)).sort((a,b)=>a<b?-1:1);
+      let bytes:Uint8Array|undefined;
+      for(const m of moments){const d=deltasAt(await get(b,m)).turso["default.turso"] as WalDelta;bytes=ingestWal(bytes??d.logical.base!,d.physical.segments);}
+      assert(bytes);return bytes;
+    }
+    async function inspect(bytes:Uint8Array,id?:string){
+      const path=`${artifacts}/deep-${serial++}.turso`;writeFileSync(path,bytes);
+      const args=id?["--heap",path,id,"unused"]:["--graph",path];
+      const p=spawn([`${root}/target/debug/examples/frame-fixture`,...args],{cwd:root,stdout:"pipe",stderr:"inherit"});
+      const row=await new Response(p.stdout).json();assert.equal(await p.exited,0);return row;
+    }
+    const proxy=relay((_,response)=>response,async request=>{
+      const path=new URL(request.url).pathname;
+      if(request.method==="HEAD"&&path.includes("/heap/")){
+        assert.equal(request.headers.get("if-match"),"*");heads.set(path,(heads.get(path)??0)+1);
+        if(path===target&&mode==="denied")return new Response(null,{status:403});
+        if(path===target&&mode==="unavailable")return new Response(null,{status:500});
+        if(path===target&&hold){entered.resolve();await slow.promise;}
+      }
+      if(request.method==="DELETE"&&rootId&&path.includes(`/${rootId}/`)){
+        const row=await inspect(await image(),rootId);assert.deepEqual(row.children,[]);assert(row.freed);checkedDeletion=true;
+      }
+    });
+    const app=await server(b,proxy.url);
+    const token=(name:string)=>bytes(`deep-node-auth-private-${name}`);
+    const leaf=(name:string):HeapNode=>({auth:[0,0,token(name)],length:1,edges:[]});
+    const parent=(height:number,name:string,children:HeapNode[]):HeapNode=>({auth:[height,0,token(name)],length:1,edges:children.map(n=>({auth:n.auth}))});
+    const reserve=async(flow:string,nodes:HeapNode[])=>{const r=await reserveHeap(app.url,flow,0n,nodes);await status(r.clone(),200);const body=parse<HeapResponse>(await r.text());if(body.results)flows.add(flow);return body;};
+    const upload=async(a:NonNullable<HeapResponse["results"]>[number]["actions"])=>{assert(a.write);const r=await fetch(a.write.url,{method:"PUT",headers:a.write.headers,body:bytes("x")});assert(r.ok,await r.text());};
+    const a=leaf("a"),c=leaf("c"),shared=leaf("shared");
+    const leaves=await reserve("leaves",[a,shared,c]);for(const result of Object.values(leaves.results!))await upload(result.actions);
+    const left=parent(1,"left",[a,shared]),right=parent(1,"right",[shared,c]);
+    const leftResult=await reserve("deep",[left]);await upload(leftResult.results![0].actions);
+    const rightResult=await reserve("deep",[right]);await upload(rightResult.results![0].actions);
+    const sharedPath=new URL(leaves.results![1].actions.preview!.url).pathname;assert.equal(heads.get(sharedPath),1,"ETag cache avoids a second child HEAD");
+    const rootNode=parent(2,"root",[left,right]),rootResult=await reserve("deep",[rootNode]);await upload(rootResult.results![0].actions);
+    const rootPath=new URL(rootResult.results![0].actions.preview!.url).pathname;rootId=rootPath.split("/heap/young/")[1].split("/").slice(0,-1).join("/");
+    const repeat=await reserve("sharing",[{...left,edges:[...left.edges].reverse().concat(left.edges[0])}]);assert(repeat.results);assert.equal(new URL(repeat.results![0].actions.preview!.url).pathname,new URL(leftResult.results![0].actions.preview!.url).pathname);
+    assert.equal((await reserve("deep",[{...left,length:2}])).errors![0].code,"length_collision");
+    assert.equal((await reserve("deep",[{...left,edges:[left.edges[0]]}])).errors![0].code,"edges_collision");
+    assert.equal((await reserve("deep",[parent(1,"bad-height",[left])])).errors![0].code,"invalid_height");
+    assert.equal((await reserve("deep",[parent(1,"unknown",[leaf("unknown-child")])])).errors![0].code,"child_unknown");
+    const missing=leaf("missing");const missingResult=await reserve("leaves",[missing]);
+    const needsMissing=parent(1,"needs-missing",[missing]);assert.equal((await reserve("deep",[needsMissing])).errors![0].code,"child_missing");
+    await upload(missingResult.results![0].actions);assert((await reserve("deep",[needsMissing])).results);
+    const oldOnly=leaf("old-only"),oldAllocation=(await reserve("leaves",[oldOnly])).results![0].actions;
+    await s3.send(new PutObjectCommand({Bucket:b,Key:new URL(oldAllocation.read.url).pathname.slice(b.length+2),Body:bytes("x")}));
+    assert((await reserve("deep",[parent(1,"needs-old",[oldOnly])])).results,"uncached old-generation target is verified");
+    const wrong=leaf("wrong-length"),wrongAllocation=(await reserve("leaves",[wrong])).results![0].actions;
+    const wrongKey=new URL(wrongAllocation.preview!.url).pathname.slice(b.length+2);
+    await s3.send(new PutObjectCommand({Bucket:b,Key:wrongKey,Body:bytes("xx")}));
+    assert.equal((await reserve("deep",[parent(1,"bad-content-length",[wrong])])).errors![0].code,"child_length_mismatch");
+    const guarded=leaf("guarded"),guardedAllocation=(await reserve("leaves",[guarded])).results![0].actions;await upload(guardedAllocation);target=new URL(guardedAllocation.preview!.url).pathname;
+    for(const failure of ["denied","unavailable"]){mode=failure;assert.equal((await reserve("deep",[parent(1,"guarded-parent",[guarded])])).errors![0].code,"child_unavailable");}
+    mode="normal";hold=true;
+    const waiting=reserve("deep",[parent(1,"guarded-parent",[guarded])]);await timeout(entered.promise);
+    await timeout(status(await commit(app.url,"unrelated-head",bytes("root"),0n),201),3000);
+    slow.resolve();assert((await waiting).results);hold=false;
+    const graph=await inspect(await image(),rootId);assert.equal(graph.children.length,2);
+    await stop(app.process);
+    const limited=await server(await bucket(),endpoint,{BASINSYNC_NODE_MAX_DEGREE:"1"});
+    const degree=await reserveHeap(limited.url,"f",0n,[left]);await status(degree.clone(),200);assert.equal(parse<HeapResponse>(await degree.text()).errors![0].code,"degree_limit");await stop(limited.process);
+    const cleaner=await server(b,proxy.url,{BASINSYNC_CLEANUP_INTERVAL_MS:"10",BASINSYNC_SWEEP_EDGE_BATCH_SIZE:"1",BASINSYNC_ERASE_BATCH_SIZE:"1",BASINSYNC_ERASE_CONCURRENCY:"1"});
+    for(const flow of flows)await status(await commit(cleaner.url,flow,bytes("marker"),0n),201);
+    await eventually(async()=>{const rows=await inspect(await image());return rows;},rows=>rows.graph_nodes===0&&rows.graph_edges===0&&rows.sweeping_tasks===0);
+    assert(checkedDeletion,"parent object deletion follows durable outbound edge removal");
+    assert.equal((await s3.send(new ListObjectsV2Command({Bucket:b,Prefix:"heap/young/"}))).KeyCount,0);
+    await stop(cleaner.process);
+    const restored=await server(b,endpoint,{BASINSYNC_BACKUP_INTERVAL_MS:"10"}),tip=(await fullStatus(restored.url,"deep")).timelines.watershed.milestone;
+    const cp=await eventually(()=>watershedBackup(b),cp=>cp?.milestone===tip);assert(cp);assert.deepEqual(await inspect(cp.blob),{graph_nodes:0,graph_edges:0,sweeping_tasks:0});await stop(restored.process);
+    for await(const page of paginateListObjectsV2({client:s3},{Bucket:b}))for(const object of page.Contents??[]){const r=await s3.send(new GetObjectCommand({Bucket:b,Key:object.Key!}));const body=Buffer.from(await r.Body!.transformToByteArray());assert(!body.includes(bytes("deep-node-auth-private-")),"child access tokens never reach storage");}
+  }
+  {
+    const b=await bucket(),gate=Promise.withResolvers<void>(),entered=Promise.withResolvers<void>();let held=false,target="";
+    const proxy=relay(async(request,response)=>{if(!held&&request.method==="HEAD"&&new URL(request.url).pathname===target&&response.status===200){held=true;entered.resolve();await gate.promise;}return response;});
+    const app=await server(b,proxy.url,{BASINSYNC_CLEANUP_INTERVAL_MS:"15"});
+    const child:HeapNode={auth:[0,0,bytes("verification-race-child")],length:1,edges:[]},parent:HeapNode={auth:[1,0,bytes("verification-race-parent")],length:1,edges:[{auth:child.auth}]};
+    const reserve=async(flow:string,nodes:HeapNode[])=>{const r=await reserveHeap(app.url,flow,0n,nodes);await status(r.clone(),200);return parse<HeapResponse>(await r.text());};
+    const first=(await reserve("old",[child])).results![0].actions;assert(first.write);const put=await fetch(first.write.url,{method:"PUT",headers:first.write.headers,body:bytes("x")});assert(put.ok);target=new URL(first.preview!.url).pathname;
+    const pending=reserve("parent",[parent]);await timeout(entered.promise);
+    await status(await commit(app.url,"old",bytes("marker"),0n),201);
+    await eventually(async()=>{const r=await fetch(first.preview!.url,{headers:first.preview!.headers});await r.arrayBuffer();return r.status;},s=>s===404||s===412);
+    const replacement=await eventually(()=>reserve("replacement",[child]),r=>!!r.results);const next=replacement.results![0].actions;assert(next.write);assert.notEqual(new URL(next.write.url).pathname,target);
+    const write=await fetch(next.write.url,{method:"PUT",headers:next.write.headers,body:bytes("x")});assert(write.ok);gate.resolve();
+    const rejected=await pending;assert.equal(rejected.errors![0].code,"child_changed");assert.equal(rejected.results,null);
+    assert((await reserve("parent",[parent])).results);await stop(app.process);
+  }
+  console.log("put of success: deep node DAGs, cached conditional HEADs in both generations, immutable child sets, degree/height limits, nonblocking verification, revision races, bounded recursive reclamation, and snapshot replay");
 
   console.log(`Integration passed. Logs: ${artifacts}`);
 } finally {

@@ -36,6 +36,7 @@ struct App {
     published: watch::Receiver<timeline::Prefix>,
     bucket: Box<Bucket>,
     heap_limits: heap::Limits,
+    heap_heads: Arc<Semaphore>,
 }
 
 type Shared = Arc<App>;
@@ -278,6 +279,10 @@ impl QueuedCommit {
 enum Message {
     Commit(QueuedCommit),
     Reserve(QueuedReservation),
+    InspectHeap {
+        request: heap::Request,
+        reply: oneshot::Sender<Result<heap::Request>>,
+    },
     Cleanup {
         command: cleanup::Command,
         reply: oneshot::Sender<Result<()>>,
@@ -295,6 +300,9 @@ impl Message {
             }
             Self::Reserve(r) => {
                 let _ = r.reply.send(observed(Err(stopped()), prefix));
+            }
+            Self::InspectHeap { reply, .. } => {
+                let _ = reply.send(Err(anyhow::anyhow!("publication stopped")));
             }
             Self::Cleanup { reply, .. } => {
                 let _ = reply.send(Err(anyhow::anyhow!("publication stopped")));
@@ -355,8 +363,27 @@ async fn heap_reserve(State(app): State<Shared>, body: axum::extract::Request) -
         let body = Bytes::from_request(body, &app).await.map_err(|e| {
             Failure::new(e.status(), "invalid_request", "invalid heap request body")
         })?;
-        let request = heap::Request::parse(&body, &app.heap_limits)
+        let mut request = heap::Request::parse(&body, &app.heap_limits)
             .map_err(|_| Failure::bad("invalid heap request"))?;
+        if request
+            .nodes
+            .iter()
+            .filter_map(|n| n.as_ref().ok())
+            .any(|n| !n.edges.is_empty())
+        {
+            let (reply, inspected) = oneshot::channel();
+            app.queue
+                .send(Message::InspectHeap { request, reply })
+                .await
+                .map_err(|_| stopped())?;
+            request = inspected
+                .await
+                .map_err(|_| stopped())?
+                .map_err(|_| stopped())?;
+            request
+                .verify_children(&app.bucket, app.heap_heads.clone())
+                .await;
+        }
         let (reply, result) = oneshot::channel();
         app.queue
             .send(Message::Reserve(QueuedReservation {
@@ -440,6 +467,9 @@ async fn main() -> Result<()> {
     let capacity = (batch_max * PIPELINE_BATCHES).max(32);
     let (queue, receiver) = mpsc::channel(capacity);
     let heap_limits = heap::Limits {
+        max_degree: env::var("BASINSYNC_NODE_MAX_DEGREE")
+            .unwrap_or_else(|_| "128".into())
+            .parse()?,
         max_height: env::var("BASINSYNC_HEAP_MAX_HEIGHT")
             .unwrap_or_else(|_| "128".into())
             .parse()?,
@@ -508,6 +538,7 @@ async fn main() -> Result<()> {
         published: published_rx,
         bucket: signing_bucket,
         heap_limits,
+        heap_heads: Arc::new(Semaphore::new(8)),
     });
     let api = Router::new()
         .route("/epilogue", put(commit))

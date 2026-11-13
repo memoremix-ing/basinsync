@@ -60,12 +60,32 @@ impl State {
         for node in command.erased {
             if self.heap_node(&node.id)?.is_some_and(|row| {
                 row.revision == node.revision && row.freed == node.freed && !row.freed.is_empty()
-            }) {
+            }) && self.heap_children(&node.id)?.is_empty()
+                && strings(
+                    &self.native.conn,
+                    "SELECT node FROM graph_edges WHERE node=?1 LIMIT 1",
+                    &[&node.id],
+                )?
+                .is_empty()
+            {
                 erased.push(node);
             }
         }
         command.erased = erased;
-        Ok((!command.tasks.is_empty() || !command.erased.is_empty()).then_some(command))
+        let mut detaching = Vec::new();
+        for node in command.detaching {
+            if self.heap_node(&node.id)?.is_some_and(|row| {
+                row.revision == node.revision && row.freed == node.freed && !row.freed.is_empty()
+            }) && !self.heap_children(&node.id)?.is_empty()
+            {
+                detaching.push(node);
+            }
+        }
+        command.detaching = detaching;
+        Ok((!command.tasks.is_empty()
+            || !command.erased.is_empty()
+            || !command.detaching.is_empty())
+        .then_some(command))
     }
     pub(crate) fn transact_cleanup(&self, milestone: &str, command: &Command) -> Result<()> {
         command.validate()?;
@@ -116,10 +136,42 @@ impl State {
                 enqueue_sweeping(conn, &task.flow, &Viewpoint::parse(&task.viewpoint)?)?;
             }
         }
+        for parent in &command.detaching {
+            if budget == 0 {
+                break;
+            }
+            if !self.heap_node(&parent.id)?.is_some_and(|row| {
+                row.revision == parent.revision
+                    && row.freed == parent.freed
+                    && !row.freed.is_empty()
+            }) {
+                continue;
+            }
+            let nodes = strings(
+                conn,
+                &format!(
+                    "SELECT node FROM graph_edges WHERE retainer=?1 ORDER BY node LIMIT {budget}"
+                ),
+                &[&parent.id],
+            )?;
+            budget -= nodes.len();
+            for node in nodes {
+                execute(
+                    conn,
+                    "DELETE FROM graph_edges WHERE node=?1 AND retainer=?2",
+                    &[&node, &parent.id],
+                )?;
+                execute(
+                    conn,
+                    "UPDATE graph_nodes SET freed=?2 WHERE id=?1 AND freed='' AND NOT EXISTS(SELECT 1 FROM graph_edges WHERE node=?1)",
+                    &[&node, &command.freed_at],
+                )?;
+            }
+        }
         for node in &command.erased {
             execute(
                 conn,
-                "DELETE FROM graph_nodes WHERE id=?1 AND revision=?2 AND freed=?3 AND freed<>'' AND NOT EXISTS(SELECT 1 FROM graph_edges WHERE node=?1)",
+                "DELETE FROM graph_nodes WHERE id=?1 AND revision=?2 AND freed=?3 AND freed<>'' AND NOT EXISTS(SELECT 1 FROM graph_edges WHERE node=?1) AND NOT EXISTS(SELECT 1 FROM graph_edges WHERE retainer=?1)",
                 &[&node.id, &node.revision, &node.freed],
             )?;
         }
@@ -180,6 +232,39 @@ impl State {
                 "sweeping task disagrees with remaining edges"
             );
         }
+        for parent in &command.detaching {
+            if budget == 0 {
+                break;
+            }
+            let old = before
+                .heap_node(&parent.id)?
+                .ok_or_else(|| anyhow::anyhow!("missing detaching parent"))?;
+            ensure!(
+                old.revision == parent.revision
+                    && old.freed == parent.freed
+                    && !old.freed.is_empty(),
+                "detaching revision mismatch"
+            );
+            let nodes = strings(
+                &before.native.conn,
+                &format!(
+                    "SELECT node FROM graph_edges WHERE retainer=?1 ORDER BY node LIMIT {budget}"
+                ),
+                &[&parent.id],
+            )?;
+            budget -= nodes.len();
+            for node in nodes {
+                ensure!(
+                    !self.heap_edge(&node, &parent.id)?,
+                    "detached edge survived"
+                );
+                affected.insert(node);
+            }
+            ensure!(
+                self.heap_node(&parent.id)?.as_ref() == Some(&old),
+                "detachment changed parent row"
+            );
+        }
         for id in affected {
             let mut expected = before
                 .heap_node(&id)?
@@ -212,12 +297,14 @@ mod tests {
         heap::Request {
             flow: flow.into(),
             viewpoint: Viewpoint::zero(),
+            proofs: BTreeMap::new(),
             nodes: nodes
                 .iter()
                 .map(|n| {
                     Ok(heap::Node {
                         id: heap::node_id(0, 0, &[*n]),
                         length: 1,
+                        edges: Default::default(),
                     })
                 })
                 .collect(),
@@ -239,6 +326,7 @@ mod tests {
         cleanup::Command {
             tasks,
             erased: vec![],
+            detaching: vec![],
             freed_at: cleanup::now().unwrap(),
             edge_limit: limit,
         }
@@ -331,6 +419,7 @@ mod tests {
         let command = cleanup::Command {
             tasks: vec![],
             erased,
+            detaching: vec![],
             freed_at: cleanup::now()?,
             edge_limit: 1,
         };

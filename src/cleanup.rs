@@ -15,6 +15,7 @@ pub struct Freed {
 pub struct Command {
     pub tasks: Vec<Task>,
     pub erased: Vec<Freed>,
+    pub detaching: Vec<Freed>,
     pub freed_at: String,
     pub edge_limit: usize,
 }
@@ -25,11 +26,19 @@ impl Command {
             "invalid cleanup edge limit"
         );
         ensure!(
-            self.tasks.is_empty() != self.erased.is_empty(),
+            [
+                !self.tasks.is_empty(),
+                !self.erased.is_empty(),
+                !self.detaching.is_empty()
+            ]
+            .into_iter()
+            .filter(|phase| *phase)
+            .count()
+                == 1,
             "expected one cleanup phase"
         );
         ensure!(
-            self.tasks.len() <= 4096 && self.erased.len() <= 4096,
+            self.tasks.len() <= 4096 && self.erased.len() <= 4096 && self.detaching.len() <= 4096,
             "cleanup batch too large"
         );
         time::OffsetDateTime::parse(
@@ -46,10 +55,11 @@ impl Command {
             );
         }
         let mut ids = std::collections::BTreeSet::new();
-        for node in &self.erased {
+        for node in self.erased.iter().chain(&self.detaching) {
             crate::heap::Node {
                 id: node.id.clone(),
                 length: 0,
+                edges: Default::default(),
             }
             .validate()?;
             crate::heap::valid_revision(&node.revision)?;
@@ -66,6 +76,7 @@ impl Command {
 pub struct Work {
     pub tasks: Vec<Task>,
     pub freed: Vec<Freed>,
+    pub detaching: Vec<Freed>,
 }
 pub fn scan(snapshot: &crate::timeline::Snapshot, tasks: usize, nodes: usize) -> Result<Work> {
     ensure!(
@@ -80,7 +91,7 @@ pub fn scan(snapshot: &crate::timeline::Snapshot, tasks: usize, nodes: usize) ->
             work.tasks.push(Task { flow: row.get(0)?, viewpoint: row.get(1)? }); Ok(())
         })?;
     conn.prepare(format!(
-        "SELECT id,revision,freed FROM graph_nodes WHERE freed>'' AND NOT EXISTS(SELECT 1 FROM graph_edges WHERE node=graph_nodes.id) ORDER BY freed,id LIMIT {nodes}"
+        "SELECT id,revision,freed FROM graph_nodes WHERE freed>'' AND NOT EXISTS(SELECT 1 FROM graph_edges WHERE node=graph_nodes.id) AND NOT EXISTS(SELECT 1 FROM graph_edges WHERE retainer=graph_nodes.id) ORDER BY freed,id LIMIT {nodes}"
     ))?
     .run_with_row_callback(|row| {
         work.freed.push(Freed {
@@ -90,6 +101,8 @@ pub fn scan(snapshot: &crate::timeline::Snapshot, tasks: usize, nodes: usize) ->
         });
         Ok(())
     })?;
+    conn.prepare(format!("SELECT id,revision,freed FROM graph_nodes WHERE freed>'' AND NOT EXISTS(SELECT 1 FROM graph_edges WHERE node=graph_nodes.id) AND EXISTS(SELECT 1 FROM graph_edges WHERE retainer=graph_nodes.id) ORDER BY freed,id LIMIT {nodes}"))?
+        .run_with_row_callback(|row| { work.detaching.push(Freed {id:row.get(0)?,revision:row.get(1)?,freed:row.get(2)?}); Ok(()) })?;
     conn.execute("COMMIT")?;
     Ok(work)
 }
