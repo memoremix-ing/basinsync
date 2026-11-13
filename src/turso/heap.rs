@@ -9,12 +9,13 @@ pub struct HeapNode {
     pub reserved: String,
     pub etag: String,
     pub promoted: String,
+    pub marked: String,
     pub promoted_valid: bool,
 }
 
 impl State {
     pub fn heap_node(&self, id: &str) -> Result<Option<HeapNode>> {
-        let mut query=self.native.conn.prepare("SELECT content_length,reserved,etag,promoted,julianday(promoted) IS NOT NULL,revision,freed FROM graph_nodes WHERE id=?1")?;
+        let mut query=self.native.conn.prepare("SELECT content_length,reserved,etag,promoted,julianday(promoted) IS NOT NULL,revision,freed,marked FROM graph_nodes WHERE id=?1")?;
         query.bind_at(
             NonZeroUsize::new(1).unwrap(),
             Value::build_text(id.to_owned()),
@@ -26,6 +27,7 @@ impl State {
                     length: u64::try_from(row.get::<i64>(0)?)?,
                     revision: row.get(5)?,
                     freed: row.get(6)?,
+                    marked: row.get(7)?,
                     reserved: row.get(1)?,
                     etag: row.get(2)?,
                     promoted: row.get(3)?,
@@ -56,7 +58,12 @@ impl State {
     }
     pub fn heap_counts(&self) -> Result<BTreeMap<String, u64>> {
         let mut counts = BTreeMap::new();
-        for table in ["graph_nodes", "graph_edges", "sweeping_tasks"] {
+        for table in [
+            "graph_nodes",
+            "graph_edges",
+            "sweeping_tasks",
+            "marking_tasks",
+        ] {
             self.native
                 .conn
                 .prepare(format!("SELECT count(*) FROM {table}"))?
@@ -88,29 +95,68 @@ impl State {
             if self.heap_node(&parent.id)?.is_some() {
                 continue;
             }
-            for id in &parent.edges {
-                if request.proofs.contains_key(id) {
-                    continue;
-                }
-                let proof = match self.heap_node(id)? {
-                    Some(row) if row.freed.is_empty() => Ok(Child {
-                        revision: row.revision,
-                        length: row.length,
-                        etag: row.etag,
-                    }),
-                    Some(_) => Err(NodeError {
-                        code: "child_freed",
-                        message: "child is awaiting reclamation",
-                    }),
-                    None => Err(NodeError {
-                        code: "child_unknown",
-                        message: "child has no reserved allocation",
-                    }),
-                };
-                request.proofs.insert(id.clone(), proof);
-            }
+            self.inspect_children(&parent.edges, &mut request.proofs)?;
         }
         Ok(())
+    }
+    pub(crate) fn inspect_children(
+        &self,
+        edges: &std::collections::BTreeSet<String>,
+        proofs: &mut crate::heap::Proofs,
+    ) -> Result<()> {
+        for id in edges {
+            if proofs.contains_key(id) {
+                continue;
+            }
+            let proof = match self.heap_node(id)? {
+                Some(row) if row.freed.is_empty() => Ok(Child {
+                    revision: row.revision,
+                    length: row.length,
+                    etag: row.etag,
+                }),
+                Some(_) => Err(NodeError {
+                    code: "child_freed",
+                    message: "child is awaiting reclamation",
+                }),
+                None => Err(NodeError {
+                    code: "child_unknown",
+                    message: "child has no reserved allocation",
+                }),
+            };
+            proofs.insert(id.clone(), proof);
+        }
+        Ok(())
+    }
+    pub(crate) fn check_children(
+        &self,
+        edges: &std::collections::BTreeSet<String>,
+        proofs: &crate::heap::Proofs,
+    ) -> Result<Option<NodeError>> {
+        for id in edges {
+            let proof = match proofs.get(id) {
+                Some(Ok(p)) => p,
+                Some(Err(e)) => return Ok(Some(e.clone())),
+                None => {
+                    return Ok(Some(NodeError {
+                        code: "child_unverified",
+                        message: "child object has not been verified",
+                    }));
+                }
+            };
+            if !self.heap_node(id)?.is_some_and(|row| {
+                row.freed.is_empty()
+                    && row.revision == proof.revision
+                    && row.length == proof.length
+                    && !proof.etag.is_empty()
+                    && (row.etag.is_empty() || row.etag == proof.etag)
+            }) {
+                return Ok(Some(NodeError {
+                    code: "child_changed",
+                    message: "child allocation changed during verification; retry",
+                }));
+            }
+        }
+        Ok(None)
     }
     pub(super) fn plan_heap(&self, request: &Request) -> Result<(Option<Command>, Outcome)> {
         let reserved = crate::cleanup::now()?;
@@ -202,6 +248,7 @@ impl State {
                 reserved: reserved.clone(),
                 etag: String::new(),
                 promoted: String::new(),
+                marked: String::new(),
                 promoted_valid: false,
             });
             outcome.results.insert(
@@ -353,6 +400,7 @@ impl State {
                 reserved: command.reserved.clone(),
                 etag: String::new(),
                 promoted: String::new(),
+                marked: String::new(),
                 promoted_valid: false,
             });
             if let Some(child) = command.children.get(&node.id) {

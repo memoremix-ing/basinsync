@@ -24,7 +24,7 @@ test("FlexBuffers uses a unary command vector and exact binary blobs", () => {
   const backing = new Uint8Array([11, 0, 255, 128, 99]);
   const blob = backing.subarray(1,4);
   for (const flow of ["雪/a", "__proto__", "constructor"]) {
-    const marker = { viewpoint:"18446744073709551616", sha384:sha384(blob), blob };
+    const marker = { viewpoint:"18446744073709551616", sha384:sha384(blob), edges:[], blob };
     const bytes = encodeEvent({[flow]:marker});
     const tuple = toReference(bytes).get(0);
     expect(tuple.length()).toBe(4);

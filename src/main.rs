@@ -142,13 +142,14 @@ impl App {
 }
 
 struct Commit {
+    proofs: heap::Proofs,
     flow: String,
     marker: Marker,
     viewpoint: Viewpoint,
 }
 
 impl Commit {
-    async fn read(mut form: Multipart) -> Result<Self, Failure> {
+    async fn read(mut form: Multipart, limits: &heap::Limits) -> Result<Self, Failure> {
         let (mut details, mut blob) = (None, None);
         while let Some(field) = form
             .next_field()
@@ -172,8 +173,11 @@ impl Commit {
             flow,
             viewpoint,
             sha384,
+            edges,
         } = serde_json::from_slice(&details.ok_or_else(|| Failure::bad("missing details"))?)
-            .map_err(Failure::bad)?;
+            .map_err(|_| Failure::bad("invalid commit details"))?;
+        let edges = heap::authenticate_edges(edges, limits, None)
+            .map_err(|e| Failure::new(StatusCode::UNPROCESSABLE_ENTITY, e.code, e.message))?;
         event::valid_flow(&flow).map_err(Failure::bad)?;
         basinsync::epilogue::flow_key(&flow, &viewpoint).map_err(Failure::bad)?;
         let blob = blob.ok_or_else(|| Failure::bad("missing blob"))?;
@@ -186,8 +190,11 @@ impl Commit {
             ));
         }
         Ok(Self {
+            proofs: Default::default(),
             flow,
             marker: Marker {
+                edges,
+                verified: Default::default(),
                 viewpoint: viewpoint.decimal(),
                 sha384: format!("{digest:x}"),
                 blob: blob.to_vec(),
@@ -230,7 +237,19 @@ async fn commit(
             .acquire_owned()
             .await
             .map_err(|_| stopped())?;
-        let request = Commit::read(form).await?;
+        let mut request = Commit::read(form, &app.heap_limits).await?;
+        if !request.marker.edges.is_empty() {
+            let (reply, received) = oneshot::channel();
+            app.queue
+                .send(Message::InspectCommit { request, reply })
+                .await
+                .map_err(|_| stopped())?;
+            request = received
+                .await
+                .map_err(|_| stopped())?
+                .map_err(|_| stopped())?;
+            heap::verify_children(&mut request.proofs, &app.bucket, app.heap_heads.clone()).await;
+        }
         let (reply, result) = oneshot::channel();
         let queued = tracing::enabled!(tracing::Level::DEBUG)
             .then(|| (request.flow.clone(), request.viewpoint.decimal()));
@@ -277,6 +296,14 @@ impl QueuedCommit {
     }
 }
 enum Message {
+    InspectCommit {
+        request: Commit,
+        reply: oneshot::Sender<Result<Commit>>,
+    },
+    Promote {
+        command: basinsync::promotion::Command,
+        reply: oneshot::Sender<Result<()>>,
+    },
     Commit(QueuedCommit),
     Reserve(QueuedReservation),
     InspectHeap {
@@ -300,6 +327,12 @@ impl Message {
             }
             Self::Reserve(r) => {
                 let _ = r.reply.send(observed(Err(stopped()), prefix));
+            }
+            Self::InspectCommit { reply, .. } => {
+                let _ = reply.send(Err(anyhow::anyhow!("publication stopped")));
+            }
+            Self::Promote { reply, .. } => {
+                let _ = reply.send(Err(anyhow::anyhow!("publication stopped")));
             }
             Self::InspectHeap { reply, .. } => {
                 let _ = reply.send(Err(anyhow::anyhow!("publication stopped")));
@@ -479,6 +512,12 @@ async fn main() -> Result<()> {
     };
     let signing_bucket = bucket.clone();
     let cleanup = server_pipeline::CleanupConfig {
+        allow_transfer: env::var("BASINSYNC_PROMOTION_ALLOW_TRANSFER")
+            .unwrap_or_else(|_| "false".into())
+            .parse()?,
+        marking: env::var("BASINSYNC_MARK_BATCH_SIZE")
+            .unwrap_or_else(|_| "256".into())
+            .parse()?,
         interval: Duration::from_millis(
             env::var("BASINSYNC_CLEANUP_INTERVAL_MS")
                 .unwrap_or_else(|_| "1000".into())
@@ -498,7 +537,8 @@ async fn main() -> Result<()> {
             .parse()?,
     };
     anyhow::ensure!(
-        (1..=4096).contains(&cleanup.tasks)
+        (1..=4096).contains(&cleanup.marking)
+            && (1..=4096).contains(&cleanup.tasks)
             && (1..=4096).contains(&cleanup.edges)
             && (1..=4096).contains(&cleanup.nodes)
             && (1..=32).contains(&cleanup.concurrency),

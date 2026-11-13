@@ -2,9 +2,10 @@
 use crate::lexidecimal::Viewpoint;
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CommitDetails {
+    pub edges: Vec<crate::heap::WireEdge>,
     #[serde(deserialize_with = "crate::json0::deserialize_text")]
     pub flow: String,
     #[serde(deserialize_with = "crate::json0::deserialize_viewpoint")]
@@ -23,7 +24,7 @@ mod tests {
     #[test]
     fn json0_types_escaping_and_duplicate_rejection() {
         let details: CommitDetails = serde_json::from_str(
-            r#"{"flow":"00x1","viewpoint":"0x100000000000000000000000000000000","sha384":"0*AP8"}"#,
+            r#"{"flow":"00x1","viewpoint":"0x100000000000000000000000000000000","edges":[],"sha384":"0*AP8"}"#,
         )
         .unwrap();
         assert_eq!(details.flow, "0x1");
@@ -34,26 +35,42 @@ mod tests {
         assert_eq!(details.sha384, [0, 255]);
         for wire in ["0*AP8", "0*AP8=", "0%AP8=", "0%AP8", "0* A\tP8\n"] {
             let details: CommitDetails = serde_json::from_value(serde_json::json!({
-                "flow": "0", "viewpoint": "0x0", "sha384": wire,
+                "flow": "0", "viewpoint": "0x0", "edges":[],"sha384": wire,
             }))
             .unwrap();
             assert_eq!(details.flow, "0");
             assert_eq!(details.sha384, [0, 255]);
         }
         for wire in [
-            r#"{"flow":"0x1","viewpoint":"0x0","sha384":"0*"}"#,
-            r#"{"flow":"f","viewpoint":"0~0","sha384":"0*"}"#,
-            r#"{"flow":"f","viewpoint":"0","sha384":"0*"}"#,
-            r#"{"flow":"f","viewpoint":0,"sha384":"0*"}"#,
-            r#"{"flow":"f","viewpoint":"0x0","sha384":"00*"}"#,
-            r#"{"flow":"f","viewpoint":"0x0","sha384":"0*?"}"#,
-            r#"{"flow":"f","flow":"g","viewpoint":"0x0","sha384":"0*"}"#,
-            r#"{"flow":"f","viewpoint":"0x0","sha384":"0*","extra":0}"#,
+            r#"{"flow":"0x1","viewpoint":"0x0","edges":[],"sha384":"0*"}"#,
+            r#"{"flow":"f","viewpoint":"0~0","edges":[],"sha384":"0*"}"#,
+            r#"{"flow":"f","viewpoint":"0","edges":[],"sha384":"0*"}"#,
+            r#"{"flow":"f","viewpoint":0,"edges":[],"sha384":"0*"}"#,
+            r#"{"flow":"f","viewpoint":"0x0","edges":[],"sha384":"00*"}"#,
+            r#"{"flow":"f","viewpoint":"0x0","edges":[],"sha384":"0*?"}"#,
+            r#"{"flow":"f","flow":"g","viewpoint":"0x0","edges":[],"sha384":"0*"}"#,
+            r#"{"flow":"f","viewpoint":"0x0","edges":[],"sha384":"0*","extra":0}"#,
         ] {
             assert!(
                 serde_json::from_str::<CommitDetails>(wire).is_err(),
                 "{wire}"
             );
+        }
+    }
+
+    #[test]
+    fn commit_edges_are_required_even_when_empty() {
+        for edges in [
+            None,
+            Some(serde_json::Value::Null),
+            Some(serde_json::json!({})),
+            Some(serde_json::json!("[]")),
+        ] {
+            let mut value = serde_json::json!({"flow":"f","viewpoint":"0x0","sha384":"0*"});
+            if let Some(edges) = edges {
+                value["edges"] = edges;
+            }
+            assert!(serde_json::from_value::<CommitDetails>(value).is_err());
         }
     }
 
@@ -63,7 +80,7 @@ mod tests {
             let integer = BigUint::from_bytes_be(&value);
             let wire = serde_json::json!({
                 "flow": "f", "viewpoint": format!("0x{integer:x}"),
-                "sha384": format!("0*{}", base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&value)),
+                "edges":[],"sha384": format!("0*{}", base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&value)),
             });
             let details: CommitDetails = serde_json::from_value(wire).unwrap();
             prop_assert_eq!(details.sha384, value);

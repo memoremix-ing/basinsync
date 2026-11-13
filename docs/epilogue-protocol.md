@@ -3,9 +3,11 @@
 [conditional-read]: <glossary/conditional-read.md>
 [differential-event]: <glossary/differential-event.md>
 [epilogue]: <glossary/epilogue.md>
+[heap-protocol]: <heap-protocol.md>
 [json0]: <glossary/json0.md>
 [lexidecimal]: <glossary/lexidecimal.md>
 [milestone]: <glossary/milestone.md>
+[node]: <glossary/node.md>
 [range-get]: <glossary/range-get.md>
 [reservoir]: <glossary/reservoir.md>
 [sha384]: <glossary/sha384.md>
@@ -22,7 +24,9 @@ within each *Reservoir*[^][reservoir] namespace; see the *key layout*[^][watersh
 
 `PUT /api/v0/epilogue` accepts multipart `details` (*JSON0*[^][json0]) and
 `blob` (raw bytes). `details` contains `viewpoint: bigint` and
-`sha384: Uint8Array`. Require the expected
+`sha384: Uint8Array`, plus a required `edges` array (`[]` for an empty graph), using the
+*reservation API's*[^][heap-protocol] authenticated child descriptors.
+Verify each referenced *node*[^][node] before accepting its edge. Require the expected
 *viewpoint*[^][viewpoint] and matching *digest*[^][sha384] before accepting a
 commit. Rejection must not advance the sequence.
 

@@ -11,7 +11,7 @@ test("EnvBuf supports aligned forward/reverse walks, nested magic, and padding v
   for(let n=1;n<bytes.length;n++)if(!frames.some(f=>f.end===n))expect(()=>all(bytes.subarray(0,n))).toThrow();
 });
 test("independent EnvBuf event writer records absolute blob offsets across FlexBuffers width boundaries",()=>{
-  const commands=[0,1,7,8,255,256,65535,65536].map((length,i)=>{const blob=new Uint8Array(length).fill(i);return {[`flow-${i}`]:{viewpoint:"0",sha384:sha384(blob),blob}};});
+  const commands=[0,1,7,8,255,256,65535,65536].map((length,i)=>{const blob=new Uint8Array(length).fill(i);return {[`flow-${i}`]:{viewpoint:"0",sha384:sha384(blob),edges:[],blob}};});
   const bytes=encodeWalEvent(commands,{} as any),ranges=rangesAt(bytes);
   expect(eventTuples(bytes).length).toBe(commands.length+1);
   for(const range of ranges){expect(bytes.subarray(range.offset,range.offset+range.length)).toEqual(range.marker.blob);expect(sha384(range.marker.blob)).toBe(range.marker.sha384);}

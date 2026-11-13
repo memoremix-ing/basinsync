@@ -58,7 +58,37 @@ pub async fn presign_write(bucket: &Bucket, key: &str, length: u64) -> Result<Ac
     .await
 }
 
-async fn signed_request(
+// Sort by header name, not by the concatenated `name:value`: prefix names such
+// as x-amz-copy-source / x-amz-copy-source-if-match otherwise sort incorrectly.
+fn canonical_request(
+    method: &str,
+    url: &Url,
+    headers: &HeaderMap,
+    payload: &str,
+) -> Result<String> {
+    let ordered: BTreeMap<_, _> = headers
+        .iter()
+        .map(|(k, v)| {
+            Ok((
+                k.as_str(),
+                v.to_str()?.split_whitespace().collect::<Vec<_>>().join(" "),
+            ))
+        })
+        .collect::<Result<_>>()?;
+    let names = ordered.keys().copied().collect::<Vec<_>>().join(";");
+    let block = ordered
+        .iter()
+        .map(|(k, v)| format!("{k}:{v}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    Ok(format!(
+        "{method}\n{}\n{}\n{block}\n\n{names}\n{payload}",
+        signing::canonical_uri_string(url),
+        signing::canonical_query_string(url)
+    ))
+}
+
+pub(crate) async fn signed_request(
     bucket: &Bucket,
     key: &str,
     method: &str,
@@ -107,7 +137,7 @@ async fn signed_request(
             key.as_str() != "X-Amz-Signature" && key.as_str() != "X-Amz-SignedHeaders"
         }))
         .append_pair("X-Amz-SignedHeaders", &signed_headers);
-    let canonical = signing::canonical_request(method, &url, &headers, "UNSIGNED-PAYLOAD")?;
+    let canonical = canonical_request(method, &url, &headers, "UNSIGNED-PAYLOAD")?;
     let region = bucket.region();
     let signing_key = signing::signing_key(
         &datetime,
@@ -132,4 +162,30 @@ async fn signed_request(
         url: url.into(),
         headers: access_headers,
     })
+}
+
+#[cfg(test)]
+mod canonical_tests {
+    use super::*;
+    #[test]
+    fn prefix_header_names_follow_signed_header_order() {
+        let headers = HeaderMap::from_iter([
+            (
+                HeaderName::from_static("x-amz-copy-source-if-match"),
+                "\"etag\"".parse().unwrap(),
+            ),
+            (
+                HeaderName::from_static("x-amz-copy-source"),
+                "bucket/key".parse().unwrap(),
+            ),
+        ]);
+        let c = canonical_request(
+            "PUT",
+            &Url::parse("https://example.com/key").unwrap(),
+            &headers,
+            "UNSIGNED-PAYLOAD",
+        )
+        .unwrap();
+        assert!(c.contains("x-amz-copy-source:bucket/key\nx-amz-copy-source-if-match:\"etag\"\n\nx-amz-copy-source;x-amz-copy-source-if-match"));
+    }
 }

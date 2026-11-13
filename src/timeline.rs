@@ -194,6 +194,55 @@ impl Stager {
         self.state.enable_vfs()?;
         self.state.writer.as_ref().unwrap().inspect_heap(request)
     }
+    pub fn inspect_children(
+        &mut self,
+        edges: &std::collections::BTreeSet<String>,
+        proofs: &mut crate::heap::Proofs,
+    ) -> Result<()> {
+        self.state.enable_vfs()?;
+        self.state
+            .writer
+            .as_ref()
+            .unwrap()
+            .inspect_children(edges, proofs)
+    }
+    pub fn check_children(
+        &mut self,
+        edges: &std::collections::BTreeSet<String>,
+        proofs: &crate::heap::Proofs,
+    ) -> Result<Option<crate::heap::NodeError>> {
+        self.state.enable_vfs()?;
+        self.state
+            .writer
+            .as_ref()
+            .unwrap()
+            .check_children(edges, proofs)
+    }
+    pub fn prepare_promotion(
+        &mut self,
+        command: crate::promotion::Command,
+    ) -> Result<Option<Prepared>> {
+        self.state.enable_vfs()?;
+        let Some(delta) = self.state.writer.as_mut().unwrap().prepare_promotion(
+            &self.state.milestone,
+            self.state.head.as_deref(),
+            &command,
+        )?
+        else {
+            return Ok(None);
+        };
+        let bytes = event::encode_wal(vec![], delta)?;
+        let prepared = Prepared {
+            digest: event::digest(&bytes),
+            bytes,
+            milestone: &self.state.milestone + 1u8,
+            parent: self.state.head.clone(),
+            view: self.state.writer.as_ref().unwrap().snapshot()?,
+        };
+        self.state.milestone = prepared.milestone.clone();
+        self.state.head = Some(prepared.digest.clone());
+        Ok(Some(prepared))
+    }
     pub fn prepare_heap(
         &mut self,
         request: &crate::heap::Request,
@@ -604,6 +653,8 @@ mod tests {
     fn marker(viewpoint: &str) -> event::Marker {
         use sha2::{Digest, Sha384};
         event::Marker {
+            edges: Default::default(),
+            verified: Default::default(),
             viewpoint: viewpoint.into(),
             sha384: format!("{:x}", Sha384::digest([])),
             blob: vec![],

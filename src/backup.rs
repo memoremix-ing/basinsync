@@ -9,6 +9,16 @@ use tokio::sync::watch;
 /// Publish only after every marker through this immutable, durable snapshot is stored.
 pub async fn publish(bucket: &Bucket, snapshot: &Snapshot) -> Result<()> {
     let previous = epilogue::latest_checkpoint(bucket).await?;
+    // A full-file Watershed marker has no outgoing heap edges of its own.
+    // Repair a sign after a crash before permitting a newer backup.
+    if let Some(cp) = &previous {
+        epilogue::confirm_promotion_sign(
+            bucket,
+            &epilogue::promotion_key(epilogue::WATERSHED_PREFIX, &cp.viewpoint)?,
+            &cp.milestone,
+        )
+        .await?;
+    }
     let mut milestone = previous
         .as_ref()
         .map_or_else(|| 0u8.into(), |cp| cp.milestone.clone());
@@ -96,6 +106,12 @@ pub async fn publish(bucket: &Bucket, snapshot: &Snapshot) -> Result<()> {
         .with_max_concurrent_chunks(1)
         .execute_stream(&mut reader)
         .await?;
+    epilogue::confirm_promotion_sign(
+        bucket,
+        &epilogue::promotion_key(epilogue::WATERSHED_PREFIX, &checkpoint.viewpoint)?,
+        &checkpoint.milestone,
+    )
+    .await?;
     tracing::info!(viewpoint=%checkpoint.viewpoint.decimal(), milestone=%checkpoint.milestone, "Watershed backup published");
     Ok(())
 }

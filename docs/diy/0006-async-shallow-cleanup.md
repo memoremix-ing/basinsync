@@ -27,10 +27,9 @@ and `heap/old/${node_id}/${revision}` for *young*[^][young-generation] and
 revision: delayed DELETEs and acknowledgments must target the old *revision*[^][revision] only.
 These keys disclose neither *Flow*[^][flow], *Viewpoint*[^][viewpoint], nor *Timeline*[^][timeline] position.
 
-Extend `graph_nodes` with `revision TEXT NOT NULL` and
-`freed DATETIME NOT NULL DEFAULT ''`, then add:
-
 ```sql
+ALTER TABLE graph_nodes ADD COLUMN revision TEXT NOT NULL;
+ALTER TABLE graph_nodes ADD COLUMN freed DATETIME NOT NULL DEFAULT '';
 CREATE INDEX graph_nodes_freed ON graph_nodes(freed, id);
 CREATE TABLE sweeping_tasks (
   flow TEXT NOT NULL,

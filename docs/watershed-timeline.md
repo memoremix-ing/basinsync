@@ -9,6 +9,7 @@
 [flexbuffers]: <glossary/flexbuffers.md>
 [flow]: <glossary/flow.md>
 [milestone]: <glossary/milestone.md>
+[node]: <glossary/node.md>
 [physical-frame]: <glossary/physical-frame.md>
 [range-manifest]: <glossary/range-manifest.md>
 [sha384]: <glossary/sha384.md>
@@ -35,7 +36,7 @@ Commitflow tuples begin with `Symbol.species`, using the
 *FlexBuffers*[^][flexbuffers] extension encoding, and carry a `markers` map
 keyed by *Flow*[^][flow] id.
 Each entry contains decimal `viewpoint`, hexadecimal *SHA-384*[^][sha384] in
-`sha384`, and binary `blob`. *Conditional creation*[^][conditional-write] of a
+`sha384`, binary `blob`, and required `edges` (`[]` for an empty graph) containing derived child *node*[^][node] ids. *Conditional creation*[^][conditional-write] of a
 *DifferentialEvent*[^][differential-event] at the next *Milestone*[^][milestone]
 arbitrates competing writers. Concatenate zero or more *EnvBuf-wrapped*[^][envbuf]
 commitflow tuples, one `sts/0/databasin/ingestturso` tuple, then a

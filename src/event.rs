@@ -13,6 +13,9 @@ pub const COMMIT_FLOW: &str = "sts/0/databasin/commitflow";
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Marker {
+    pub edges: std::collections::BTreeSet<String>,
+    #[serde(skip)]
+    pub verified: BTreeMap<String, crate::heap::Child>,
     pub viewpoint: String,
     pub sha384: String,
     #[serde(with = "serde_bytes")]
@@ -22,6 +25,14 @@ pub struct Marker {
 impl Marker {
     pub fn validate(&self) -> Result<Viewpoint> {
         let viewpoint = Viewpoint::parse(&self.viewpoint)?;
+        for id in &self.edges {
+            crate::heap::Node {
+                id: id.clone(),
+                length: 0,
+                edges: Default::default(),
+            }
+            .validate()?;
+        }
         ensure!(
             self.sha384 == format!("{:x}", Sha384::digest(&self.blob)),
             "CommitMarker digest mismatch"
@@ -102,6 +113,8 @@ mod tests {
     fn unary_batch_and_binary_blob() {
         let blob = vec![0, 255, 0, 128];
         let marker = Marker {
+            edges: Default::default(),
+            verified: Default::default(),
             viewpoint: "0".into(),
             sha384: format!("{:x}", Sha384::digest(&blob)),
             blob: blob.clone(),
@@ -488,6 +501,8 @@ mod envelope_tests {
                     markers: BTreeMap::from([(
                         format!("{i}-雪"),
                         Marker {
+                            edges: Default::default(),
+                            verified: Default::default(),
                             viewpoint: "0".into(),
                             sha384: digest(&blob),
                             blob,

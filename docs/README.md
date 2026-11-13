@@ -5,6 +5,7 @@
 [0005-shallow-heap-management]: <diy/0005-shallow-heap-management.md>
 [0006-async-shallow-cleanup]: <diy/0006-async-shallow-cleanup.md>
 [0007-deep-heap-support]: <diy/0007-deep-heap-support.md>
+[0008-commit-marker-edges-with-node-promotion]: <diy/0008-commit-marker-edges-with-node-promotion.md>
 
 # basinsync
 
@@ -29,3 +30,6 @@ Stage uploads with *0005 — Shallow heap management*[^][0005-shallow-heap-manag
 Reclaim staged objects with *0006 — Async shallow cleanup*[^][0006-async-shallow-cleanup].
 
 Build deeper graphs with *0007 — Deep heap support*[^][0007-deep-heap-support].
+
+Retain and promote committed graphs with
+*0008 — CommitMarker edges with node promotion*[^][0008-commit-marker-edges-with-node-promotion].

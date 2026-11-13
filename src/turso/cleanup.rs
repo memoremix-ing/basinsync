@@ -12,7 +12,7 @@ pub(super) fn enqueue_sweeping(
         &[flow, &viewpoint.decimal()],
     )
 }
-fn execute(conn: &Arc<Connection>, sql: &str, values: &[&str]) -> Result<()> {
+pub(super) fn execute(conn: &Arc<Connection>, sql: &str, values: &[&str]) -> Result<()> {
     let mut q = conn.prepare(sql)?;
     for (i, value) in values.iter().enumerate() {
         q.bind_at(
@@ -23,7 +23,7 @@ fn execute(conn: &Arc<Connection>, sql: &str, values: &[&str]) -> Result<()> {
     q.run_ignore_rows()?;
     Ok(())
 }
-fn strings(conn: &Arc<Connection>, sql: &str, values: &[&str]) -> Result<Vec<String>> {
+pub(super) fn strings(conn: &Arc<Connection>, sql: &str, values: &[&str]) -> Result<Vec<String>> {
     let mut q = conn.prepare(sql)?;
     for (i, value) in values.iter().enumerate() {
         q.bind_at(
@@ -315,6 +315,8 @@ mod tests {
             markers: BTreeMap::from([(
                 flow.into(),
                 event::Marker {
+                    edges: Default::default(),
+                    verified: Default::default(),
                     viewpoint: viewpoint.into(),
                     sha384: event::digest(&[]),
                     blob: vec![],

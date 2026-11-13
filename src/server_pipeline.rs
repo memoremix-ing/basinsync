@@ -243,6 +243,43 @@ impl Preparation {
                 return Ok(());
             };
             match message {
+                Message::InspectCommit { mut request, reply } => {
+                    let mut stager = self.write_stager().await?;
+                    let (stager, request) = tokio::task::spawn_blocking(move || {
+                        stager.inspect_children(&request.marker.edges, &mut request.proofs)?;
+                        Ok::<_, anyhow::Error>((stager, request))
+                    })
+                    .await
+                    .context("marker inspection panicked")??;
+                    self.stager = Some(stager);
+                    let _ = reply.send(Ok(request));
+                }
+                Message::Promote { command, reply } => {
+                    let permit = self
+                        .batches
+                        .clone()
+                        .acquire_owned()
+                        .await
+                        .context("publication stopped")?;
+                    let mut stager = self.write_stager().await?;
+                    let (stager, batch) = tokio::task::spawn_blocking(move || {
+                        let prepared = stager.prepare_promotion(command)?;
+                        let batch = Batch {
+                            prefix: stager.prefix(),
+                            prepared,
+                            replies: vec![Reply::Cleanup(reply)],
+                            _permit: permit,
+                        };
+                        Ok::<_, anyhow::Error>((stager, batch))
+                    })
+                    .await
+                    .context("promotion preparation panicked")??;
+                    self.stager = Some(stager);
+                    self.output
+                        .send(Publication::Batch(batch))
+                        .await
+                        .map_err(|_| anyhow::anyhow!("publication stopped"))?;
+                }
                 Message::InspectHeap { mut request, reply } => {
                     let mut stager = self.write_stager().await?;
                     let (stager, request) = tokio::task::spawn_blocking(move || {
@@ -432,8 +469,9 @@ fn prepare(
     for queued in requests {
         let Commit {
             flow,
-            marker,
+            mut marker,
             viewpoint,
+            proofs,
         } = queued.request;
         let next = match expected.get(&flow) {
             Some(next) => next.clone(),
@@ -443,7 +481,17 @@ fn prepare(
             Err(Failure::Mismatch(ViewpointMismatch {
                 next: Position { viewpoint: next },
             }))
+        } else if let Some(error) = stager.check_children(&marker.edges, &proofs)? {
+            Err(Failure::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                error.code,
+                error.message,
+            ))
         } else {
+            marker.verified = proofs
+                .into_iter()
+                .filter_map(|(id, p)| p.ok().map(|p| (id, p)))
+                .collect();
             expected.insert(flow.clone(), viewpoint.next());
             commands.push(event::FlowCommand {
                 markers: BTreeMap::from([(flow, marker)]),
@@ -591,12 +639,23 @@ pub(super) struct CleanupConfig {
     pub edges: usize,
     pub nodes: usize,
     pub concurrency: usize,
+    pub marking: usize,
+    pub allow_transfer: bool,
 }
 async fn maintenance(queue: &mpsc::Sender<Message>, command: cleanup::Command) -> Result<()> {
     let slot = queue.try_reserve().context("request queue busy")?;
     let (reply, complete) = oneshot::channel();
     slot.send(Message::Cleanup { command, reply });
     complete.await.context("cleanup publication stopped")?
+}
+async fn promote_maintenance(
+    queue: &mpsc::Sender<Message>,
+    command: basinsync::promotion::Command,
+) -> Result<()> {
+    let slot = queue.try_reserve().context("request queue busy")?;
+    let (reply, complete) = oneshot::channel();
+    slot.send(Message::Promote { command, reply });
+    complete.await.context("promotion publication stopped")?
 }
 async fn cleanup_loop(
     bucket: Box<Bucket>,
@@ -652,6 +711,49 @@ async fn cleanup_loop(
                         detaching: vec![],
                         freed_at: cleanup::now()?,
                         edge_limit: config.edges,
+                    },
+                )
+                .await?;
+            }
+            let Some(snapshot) = snapshots.borrow().clone() else {
+                return Ok(());
+            };
+            let marking = config.marking;
+            let work = tokio::task::spawn_blocking(move || {
+                basinsync::promotion::scan(&snapshot, tasks, marking)
+            })
+            .await
+            .context("marking scan panicked")??;
+            if !work.marking.marked.is_empty() {
+                promote_maintenance(&queue, work.marking).await?;
+            }
+            let promoted = basinsync::promotion::promote(
+                &bucket,
+                work.promote,
+                config.concurrency,
+                config.allow_transfer,
+            )
+            .await;
+            if !promoted.is_empty() {
+                promote_maintenance(
+                    &queue,
+                    basinsync::promotion::Command {
+                        promoted,
+                        at: cleanup::now()?,
+                        ..Default::default()
+                    },
+                )
+                .await?;
+            }
+            let signed =
+                basinsync::promotion::confirm_signs(&bucket, work.ready, config.concurrency).await;
+            if !signed.is_empty() {
+                promote_maintenance(
+                    &queue,
+                    basinsync::promotion::Command {
+                        signed,
+                        at: cleanup::now()?,
+                        ..Default::default()
                     },
                 )
                 .await?;

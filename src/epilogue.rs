@@ -25,6 +25,55 @@ pub fn flow_key(flow: &str, viewpoint: &Viewpoint) -> Result<String> {
     );
     Ok(key)
 }
+pub fn promotion_key(prefix: &str, viewpoint: &Viewpoint) -> Result<String> {
+    let key = format!("{prefix}{}", viewpoint.lexidecimal());
+    ensure!(
+        key.len() <= 1024,
+        "PromotionSign key exceeds S3's key size limit"
+    );
+    Ok(key)
+}
+pub fn flow_promotion_key(flow: &str, viewpoint: &Viewpoint) -> Result<String> {
+    promotion_key(&flow_prefix(flow), viewpoint)
+}
+/// A sign is an immutable, empty object; confirmation also resolves ambiguous PUT replies.
+pub async fn confirm_promotion_sign(bucket: &Bucket, key: &str, upstream: &BigUint) -> Result<()> {
+    ensure!(
+        upstream > &BigUint::from(0u8),
+        "PromotionSign upstream must be positive"
+    );
+    if promotion_sign_matches(bucket, key, upstream).await? {
+        return Ok(());
+    }
+    let mut headers = conditional_headers();
+    headers.insert("x-amz-meta-upstream", upstream.to_string().parse()?);
+    let result = bucket
+        .put_object_with_headers(key, &[], Some(headers))
+        .await;
+    ensure!(
+        promotion_sign_matches(bucket, key, upstream).await?,
+        "PromotionSign not confirmed: {result:?}"
+    );
+    Ok(())
+}
+async fn promotion_sign_matches(bucket: &Bucket, key: &str, upstream: &BigUint) -> Result<bool> {
+    let (head, status) = crate::object_read::if_present(bucket)?
+        .head_object(key)
+        .await?;
+    match status {
+        200 => {
+            ensure!(
+                head.metadata.as_ref().and_then(|m| m.get("upstream"))
+                    == Some(&upstream.to_string()),
+                "PromotionSign upstream mismatch"
+            );
+            Ok(true)
+        }
+        404 | 412 => Ok(false),
+        _ => anyhow::bail!("PromotionSign HEAD returned HTTP {status}"),
+    }
+}
+
 pub fn conditional_headers() -> HeaderMap {
     HeaderMap::from_iter([(
         axum::http::header::IF_NONE_MATCH,
@@ -37,17 +86,21 @@ pub async fn latest_key(bucket: &Bucket, prefix: &str) -> Result<Option<(String,
         .list_page(prefix.into(), None, None, None, Some(1))
         .await?;
     ensure!(status == 200, "Epilogue LIST returned HTTP {status}");
-    page.contents
-        .first()
-        .map(|object| {
-            let suffix = object
-                .key
-                .strip_prefix(prefix)
-                .context("invalid Epilogue key")?;
-            let viewpoint = Viewpoint::from_key(&format!("{WATERSHED_PREFIX}{suffix}"))?;
-            Ok((object.key.clone(), viewpoint))
-        })
-        .transpose()
+    let Some(object) = page.contents.first() else {
+        return Ok(None);
+    };
+    let suffix = object
+        .key
+        .strip_prefix(prefix)
+        .context("invalid Epilogue key")?;
+    // All complemented markers sort before all uncomplemented signs. A sign
+    // at the minimum therefore means this Epilogue currently has no markers.
+    if suffix.starts_with("0z") {
+        crate::lexidecimal::decode(suffix)?;
+        return Ok(None);
+    }
+    let viewpoint = Viewpoint::from_key(&format!("{WATERSHED_PREFIX}{suffix}"))?;
+    Ok(Some((object.key.clone(), viewpoint)))
 }
 
 #[derive(Clone, Debug)]
@@ -225,6 +278,25 @@ mod tests {
             assert!(keys.insert(key));
         }
         assert!(flow_key(&"x".repeat(600), &vp).is_err());
+        Ok(())
+    }
+    #[test]
+    fn promotion_signs_use_uncomplemented_keys_after_every_marker() -> Result<()> {
+        let values = ["0", "1", "16", "340282366920938463463374607431768211456"];
+        let mut markers = Vec::new();
+        let mut signs = Vec::new();
+        for value in values {
+            let vp = Viewpoint::parse(value)?;
+            let marker = flow_key("f/雪", &vp)?;
+            let sign = flow_promotion_key("f/雪", &vp)?;
+            assert!(sign.ends_with(&vp.lexidecimal()));
+            assert!(marker < sign);
+            assert!(Viewpoint::from_key(&promotion_key(WATERSHED_PREFIX, &vp)?).is_err());
+            markers.push(marker);
+            signs.push(sign);
+        }
+        assert!(markers.iter().all(|m| signs.iter().all(|s| m < s)));
+        assert!(flow_promotion_key(&"x".repeat(600), &Viewpoint::zero()).is_err());
         Ok(())
     }
     #[test]

@@ -599,6 +599,8 @@ fn disk_seed(path: &str, event_path: &str, flows: usize, payload: usize) -> Resu
                 (
                     format!("flow-{n:06}"),
                     Marker {
+                        edges: Default::default(),
+                        verified: Default::default(),
                         viewpoint: "0".into(),
                         sha384: event::digest(&[]),
                         blob: Vec::new(),
@@ -666,6 +668,8 @@ fn strided_input(index: usize, batch: usize, flows: usize, blob: &[u8]) -> Vec<F
             markers: BTreeMap::from([(
                 format!("flow-{:06}", (n * 7919) % flows),
                 Marker {
+                    edges: Default::default(),
+                    verified: Default::default(),
                     viewpoint: (n / flows + 1).to_string(),
                     sha384: digest.clone(),
                     blob: blob.to_vec(),

@@ -82,6 +82,8 @@ fn commits() -> Result<()> {
         let markers = BTreeMap::from([(
             flow,
             Marker {
+                edges: Default::default(),
+                verified: Default::default(),
                 viewpoint,
                 sha384: checksum.clone(),
                 blob: blob.clone(),
@@ -209,6 +211,8 @@ fn seed() -> Result<()> {
             (
                 format!("flow-{i:06}"),
                 Marker {
+                    edges: Default::default(),
+                    verified: Default::default(),
                     viewpoint: "0".into(),
                     sha384: hash(&[]),
                     blob: vec![],

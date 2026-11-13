@@ -3,7 +3,7 @@ import { encode, toReference, type Reference } from "./flexbuffer";
 import { all, wrap, concat } from "./envbuf";
 import { encode as lex } from "./lexidecimal";
 
-export type Marker={viewpoint:string;sha384:string;blob:Uint8Array};
+export type Marker={viewpoint:string;sha384:string;blob:Uint8Array;edges:string[]};
 export type FlowMarker={flow:string;marker:Marker};
 export type BlobRange=FlowMarker&{offset:number;length:number};
 const namespace="sync.memoremix.com",command="sts/0/databasin/commitflow",ingest="sts/0/databasin/ingestturso";
@@ -55,7 +55,8 @@ export function rangesAt(bytes:Uint8Array):BlobRange[] {
     for(const flow of Object.keys(markers.toObject() as object)){
       const marker=markers.get(flow),viewpoint=marker.get("viewpoint").stringValue(),sha384=marker.get("sha384").stringValue(),blob=marker.get("blob").blobValue();
       assert(viewpoint!==null&&sha384!==null&&blob!==null);
-      entries.push({flow,marker:{viewpoint,sha384,blob:new Uint8Array(blob)},offset:base+blob.byteOffset,length:blob.length});
+      const edges=marker.get("edges").toObject();assert(Array.isArray(edges)&&edges.every(e=>typeof e==="string"));
+      entries.push({flow,marker:{viewpoint,sha384,blob:new Uint8Array(blob),edges},offset:base+blob.byteOffset,length:blob.length});
     }
   }
   return entries;

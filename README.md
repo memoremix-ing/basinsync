@@ -6,6 +6,7 @@ a first-writer-wins Epilogue, a server, and TypeScript stress clients.
 
 [Run and verify](docs/development.md) · [Protocol and invariant](docs/epilogue-protocol.md)
 
-The current milestone is [0007 — Deep heap support](docs/diy/0007-deep-heap-support.md):
-authenticated child edges, verified stored targets, immutable node descriptors,
-and bounded recursive reclamation through the durable Timeline.
+The current milestone is [0008 — CommitMarker edges with node promotion](docs/diy/0008-commit-marker-edges-with-node-promotion.md):
+authenticated marker edges, bounded depth-first marking, and restartable promotion
+of retained graphs from young to old storage outside the request path, with
+PromotionSigns certifying completion.

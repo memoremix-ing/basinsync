@@ -12,6 +12,8 @@ fn command(flow: &str, vp: &str) -> FlowCommand {
         markers: BTreeMap::from([(
             flow.into(),
             Marker {
+                edges: Default::default(),
+                verified: Default::default(),
                 viewpoint: vp.into(),
                 sha384: event::digest(&[0, 255, 128]),
                 blob: vec![0, 255, 128],

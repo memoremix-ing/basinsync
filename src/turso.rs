@@ -24,12 +24,13 @@ pub mod cow;
 #[cfg(test)]
 mod deep;
 mod heap;
+mod promotion;
 use cleanup::enqueue_sweeping;
 
 pub const ID: &str = "default.turso";
 pub const VERSION: &str = "0.9.0-pre.1+032f5bb2c7e74107f7ef9b66d576312379000a88";
 pub const PAGE_SIZE: usize = 16384;
-pub const SCHEMA: &str = "CREATE TABLE watershed (id INTEGER PRIMARY KEY CHECK (id = 1), milestone TEXT NOT NULL); CREATE TABLE flows (id TEXT PRIMARY KEY NOT NULL, viewpoint TEXT NOT NULL); CREATE TABLE marker_ranges (flow TEXT NOT NULL, downstream TEXT NOT NULL, upstream TEXT NOT NULL, blob_offset INTEGER NOT NULL CHECK(blob_offset>=0), content_length INTEGER NOT NULL CHECK(content_length>=0), sha384 TEXT NOT NULL, PRIMARY KEY(flow, downstream)); CREATE INDEX marker_ranges_upstream ON marker_ranges(upstream); CREATE TABLE graph_nodes (id TEXT PRIMARY KEY NOT NULL, content_length INTEGER NOT NULL CHECK(content_length>=0), reserved DATETIME NOT NULL, etag TEXT NOT NULL, promoted DATETIME NOT NULL, revision TEXT NOT NULL, freed DATETIME NOT NULL DEFAULT ''); CREATE INDEX graph_nodes_freed ON graph_nodes(freed,id); CREATE TABLE sweeping_tasks (flow TEXT NOT NULL, viewpoint TEXT NOT NULL, prioritized DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(flow,viewpoint)); CREATE INDEX sweeping_tasks_prioritized ON sweeping_tasks(prioritized,flow,viewpoint); CREATE TABLE graph_edges (node TEXT NOT NULL, retainer TEXT NOT NULL, PRIMARY KEY(node, retainer), CHECK(retainer<node)); CREATE INDEX graph_edges_retainer ON graph_edges(retainer, node); INSERT INTO watershed VALUES (1, '0');";
+pub const SCHEMA: &str = "CREATE TABLE watershed (id INTEGER PRIMARY KEY CHECK (id = 1), milestone TEXT NOT NULL); CREATE TABLE flows (id TEXT PRIMARY KEY NOT NULL, viewpoint TEXT NOT NULL); CREATE TABLE marker_ranges (flow TEXT NOT NULL, downstream TEXT NOT NULL, upstream TEXT NOT NULL, blob_offset INTEGER NOT NULL CHECK(blob_offset>=0), content_length INTEGER NOT NULL CHECK(content_length>=0), sha384 TEXT NOT NULL, PRIMARY KEY(flow, downstream)); CREATE INDEX marker_ranges_upstream ON marker_ranges(upstream); CREATE TABLE graph_nodes (id TEXT PRIMARY KEY NOT NULL, content_length INTEGER NOT NULL CHECK(content_length>=0), reserved DATETIME NOT NULL, etag TEXT NOT NULL, promoted DATETIME NOT NULL, revision TEXT NOT NULL, freed DATETIME NOT NULL DEFAULT '', marked DATETIME NOT NULL DEFAULT ''); CREATE INDEX graph_nodes_promotion ON graph_nodes(promoted,marked); CREATE INDEX graph_nodes_freed ON graph_nodes(freed,id); CREATE TABLE sweeping_tasks (flow TEXT NOT NULL, viewpoint TEXT NOT NULL, prioritized DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(flow,viewpoint)); CREATE INDEX sweeping_tasks_prioritized ON sweeping_tasks(prioritized,flow,viewpoint); CREATE TABLE marking_tasks (flow TEXT NOT NULL, viewpoint TEXT NOT NULL, upstream TEXT NOT NULL, prioritized DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(flow,viewpoint)); CREATE INDEX marking_tasks_prioritized ON marking_tasks(prioritized,flow,viewpoint); CREATE TABLE graph_edges (node TEXT NOT NULL, retainer TEXT NOT NULL, PRIMARY KEY(node, retainer), CHECK(retainer<node)); CREATE INDEX graph_edges_retainer ON graph_edges(retainer, node); INSERT INTO watershed VALUES (1, '0');";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Blob(#[serde(with = "serde_bytes")] pub Vec<u8>);
@@ -374,21 +375,26 @@ impl State {
         milestone: &str,
         markers: &BTreeMap<String, Marker>,
     ) -> Result<()> {
-        Self::transact_values(
+        Self::transact_ranges(
             native,
             milestone,
             markers
                 .iter()
                 .map(|(flow, marker)| (flow.as_str(), marker.viewpoint.as_str())),
+            &[],
+            &[crate::event::FlowCommand {
+                markers: markers.clone(),
+            }],
         )
     }
 
+    #[cfg(test)]
     fn transact_values<'a>(
         native: &Native,
         milestone: &str,
         values: impl IntoIterator<Item = (&'a str, &'a str)>,
     ) -> Result<()> {
-        Self::transact_ranges(native, milestone, values, &[])
+        Self::transact_ranges(native, milestone, values, &[], &[])
     }
 
     fn transact_ranges<'a>(
@@ -396,10 +402,16 @@ impl State {
         milestone: &str,
         values: impl IntoIterator<Item = (&'a str, &'a str)>,
         ranges: &[crate::event::BlobRange],
+        commands: &[crate::event::FlowCommand],
     ) -> Result<()> {
         let conn = &native.conn;
         conn.set_portable_logical_changes_enabled(true);
+        let upstream = crate::lexidecimal::encode(
+            &num_bigint::BigInt::parse_bytes(milestone.as_bytes(), 10)
+                .ok_or_else(|| anyhow::anyhow!("invalid Milestone"))?,
+        );
         conn.execute("BEGIN CONCURRENT")?;
+        promotion::retain_markers(native, commands, &upstream)?;
         for (flow, viewpoint) in values {
             let mut stmt = conn.prepare("INSERT INTO flows (id, viewpoint) VALUES (?1, ?2) ON CONFLICT (id) DO UPDATE SET viewpoint = excluded.viewpoint")?;
             stmt.bind_at(
@@ -413,10 +425,6 @@ impl State {
             stmt.run_ignore_rows()?;
             enqueue_sweeping(conn, flow, &Viewpoint::parse(viewpoint)?)?;
         }
-        let upstream = crate::lexidecimal::encode(
-            &num_bigint::BigInt::parse_bytes(milestone.as_bytes(), 10)
-                .ok_or_else(|| anyhow::anyhow!("invalid Milestone"))?,
-        );
         for range in ranges {
             enqueue_sweeping(conn, &range.flow, &range.viewpoint)?;
             let mut stmt = conn.prepare("INSERT INTO marker_ranges(flow,downstream,upstream,blob_offset,content_length,sha384) VALUES(?1,?2,?3,?4,?5,?6)")?;
@@ -743,6 +751,8 @@ mod tests {
     fn logical_recovery_reproduces_physical_database() -> Result<()> {
         let state = State::genesis()?;
         let marker = Marker {
+            edges: Default::default(),
+            verified: Default::default(),
             viewpoint: "0".into(),
             sha384: hash(&[]),
             blob: vec![],
@@ -787,6 +797,8 @@ mod tests {
                             "x".repeat(if n == 1 { 20000 } else { 150 })
                         ),
                         Marker {
+                            edges: Default::default(),
+                            verified: Default::default(),
                             viewpoint: huge.clone(),
                             sha384: hash(&[]),
                             blob: vec![],
@@ -814,6 +826,8 @@ mod tests {
                 (
                     format!("{n:04}/{}", "x".repeat(200)),
                     Marker {
+                        edges: Default::default(),
+                        verified: Default::default(),
                         viewpoint: "0".into(),
                         sha384: hash(&[]),
                         blob: vec![],
@@ -856,7 +870,7 @@ mod tests {
                 for id in batch {
                     let flow = format!("{id}/\"/雪/{}", "z".repeat(id as usize));
                     let viewpoint = expected.get(&flow).map_or_else(Viewpoint::zero, Viewpoint::next);
-                    markers.insert(flow.clone(), Marker { viewpoint: viewpoint.decimal(), sha384: hash(&[]), blob: vec![] });
+                    markers.insert(flow.clone(), Marker { edges: Default::default(), verified: Default::default(), viewpoint: viewpoint.decimal(), sha384: hash(&[]), blob: vec![] });
                 }
                 for (flow, marker) in &markers { expected.insert(flow.clone(), marker.validate().unwrap()); }
                 let (next, delta) = state.stage(&(n+1).to_string(), &markers, n == 0).unwrap();
@@ -873,6 +887,8 @@ mod tests {
         let markers = BTreeMap::from([(
             "flow".into(),
             Marker {
+                edges: Default::default(),
+                verified: Default::default(),
                 viewpoint: "0".into(),
                 sha384: hash(&[]),
                 blob: vec![],

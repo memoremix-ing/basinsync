@@ -3,13 +3,13 @@ import { closeSync, mkdirSync, mkdtempSync, openSync, writeFileSync, readFileSyn
 import { createServer, createConnection } from "node:net";
 import { resolve } from "node:path";
 import { spawn } from "bun";
-import { CreateBucketCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client, paginateListObjectsV2, CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, HeadObjectCommand, CopyObjectCommand, CreateBucketCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client, paginateListObjectsV2, CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand } from "@aws-sdk/client-s3";
 import { encode as flexEncode } from "flatbuffers/js/flexbuffers.js";
 import { toObject, encode as extensionEncode } from "./flexbuffer";
 import { commit, form, epilogueStatus as fullStatus, latestBlob, sha384, sha384Bytes, type ApiError, type CommitResponse, type Timelines, type ViewpointMismatch, reserveHeap, type HeapResponse, type HeapNode } from "./client";
 import { parse, stringify } from "./json0";
 import { key, fromKey } from "./diffuse16";
-import { key as epilogueKey, encode as lex } from "./lexidecimal";
+import { key as epilogueKey, encode as lex, decode as unlex } from "./lexidecimal";
 import { encodeEvent, markerAt, deltasAt, legacyDeltasAt, entriesAt, rangesAt, eventTuples, encodeTuples, encodeWalEvent, type WalDelta, type Marker } from "./events";
 import { ingestWal } from "./wal";
 import { all as envelopes, before as previousEnvelope } from "./envbuf";
@@ -141,7 +141,7 @@ async function get(bucket: string, milestone: bigint) {
   const r = await s3.send(new GetObjectCommand({Bucket:bucket,Key:key(milestone)}));
   return r.Body!.transformToByteArray();
 }
-const marker = (blob: Uint8Array, viewpoint="0"): Marker => ({blob,viewpoint,sha384:sha384(blob)});
+const marker = (blob: Uint8Array, viewpoint="0"): Marker => ({blob,viewpoint,sha384:sha384(blob),edges:[]});
 async function seed(bucket: string, milestone: bigint, payload: Uint8Array) {
   await s3.send(new PutObjectCommand({Bucket:bucket,Key:key(milestone),Body:payload}));
 }
@@ -149,7 +149,9 @@ async function badStartup(bucket: string) {
   assert.equal(await timeout(serverProcess(bucket,endpoint,"127.0.0.1:0").exited),1);
 }
 
-function isWatershedPut(request:Request){const path=new URL(request.url).pathname;return request.method==="PUT"&&path.includes("/epilogue/")&&!path.includes("/flows/");}
+function isWatershedPut(request:Request){const path=new URL(request.url).pathname;return request.method==="PUT"&&path.includes("/epilogue/0y")&&!path.includes("/flows/");}
+const signKey=(flow:string,vp:bigint)=>`flows/0x${Buffer.from(flow).toString("hex")}/epilogue/${lex(vp)}`;
+async function exists(b:string,key:string){try{await s3.send(new HeadObjectCommand({Bucket:b,Key:key,IfMatch:"*"}));return true;}catch(e){if([404,412].includes((e as {$metadata: {httpStatusCode:number}}).$metadata.httpStatusCode))return false;throw e;}}
 const flowKey=(flow:string,vp:bigint)=>`flows/0x${Buffer.from(flow).toString("hex")}/${epilogueKey(vp)}`;
 async function flowBlob(bucket:string,flow:string,viewpoint:bigint):Promise<Uint8Array|null>{
   try{
@@ -194,9 +196,9 @@ try {
   assert(sha384(a).startsWith("00"));
   assert.deepEqual(await epilogueStatus(writer.url,flowA),{latest:null});
   await mismatch(await commit(writer.url,flowA,a,1n),0n);
-  for (const kind of ["missing-details","duplicate-details","missing-flow","nul-flow","long-flow","missing-blob","duplicate-blob","unknown-part","legacy-part","unknown-details","decimal","number","negative","missing-viewpoint","missing-digest","hex-digest","array-digest","wrong-digest","short-digest","long-digest","malformed-json","duplicate-property","unescaped-flow","invalid-base64"]) {
+  for (const kind of ["missing-details","duplicate-details","missing-flow","nul-flow","long-flow","missing-blob","duplicate-blob","unknown-part","legacy-part","unknown-details","decimal","number","negative","missing-viewpoint","missing-digest","missing-edges","hex-digest","array-digest","wrong-digest","short-digest","long-digest","malformed-json","duplicate-property","unescaped-flow","invalid-base64"]) {
     const data = form(flowA,a,0n);
-    const details: Record<string,unknown> = {flow:flowA,viewpoint:0n,sha384:sha384Bytes(a)};
+    const details: Record<string,unknown> = {flow:flowA,viewpoint:0n,sha384:sha384Bytes(a),edges:[]};
     if(kind==="missing-flow")delete details.flow;
     if(kind==="nul-flow")details.flow="x\0y";
     if(kind==="long-flow")details.flow="x".repeat(600);
@@ -206,6 +208,7 @@ try {
     if(kind==="negative")details.viewpoint=-1n;
     if(kind==="missing-viewpoint")delete details.viewpoint;
     if(kind==="missing-digest")delete details.sha384;
+    if(kind==="missing-edges")delete details.edges;
     if(kind==="hex-digest")details.sha384=sha384(a);
     if(kind==="array-digest")details.sha384=Array.from(sha384Bytes(a));
     if(kind==="wrong-digest")details.sha384=new Uint8Array(48).fill(255);
@@ -229,7 +232,7 @@ try {
   // JSON0 accepts standard base64 too; multipart part ordering is immaterial.
   const alternate = new FormData();
   alternate.set("blob",new Blob([a]));
-  const wire = JSON.parse(stringify({flow:flowA,viewpoint:1n,sha384:sha384Bytes(a)}));
+  const wire = JSON.parse(stringify({flow:flowA,viewpoint:1n,sha384:sha384Bytes(a),edges:[]}));
   wire.sha384=`0%${Buffer.from(sha384Bytes(a)).toString("base64")}`;
   alternate.set("details",JSON.stringify(wire));
   await mismatch(await fetch(`${writer.url}/api/v0/epilogue`,{method:"PUT",body:alternate}),0n);
@@ -723,7 +726,7 @@ try {
     const apps=await Promise.all([server(b,proxy.url,{BASINSYNC_BACKUP_INTERVAL_MS:"10"}),server(b,proxy.url,{BASINSYNC_BACKUP_INTERVAL_MS:"10"})]);
     const checkpoint=await eventually(()=>watershedBackup(b),cp=>cp?.milestone===3n);assert(checkpoint);await Bun.sleep(80);
     assert.equal(checkpoint.key,epilogueKey(0n));assert.equal(arrived,2);
-    const objects=await s3.send(new ListObjectsV2Command({Bucket:b,Prefix:"epilogue/"}));assert.equal(objects.KeyCount,1);
+    const objects=await s3.send(new ListObjectsV2Command({Bucket:b,Prefix:"epilogue/0y"}));assert.equal(objects.KeyCount,1);
     for(let n=0;n<3;n++)assert.deepEqual(await flowBlob(b,"race-copy",BigInt(n)),bytes(String(n)));
     for(const app of apps){assert.equal((await epilogueStatus(app.url,"race-copy")).latest?.viewpoint,2n);await stop(app.process);}
   }
@@ -744,7 +747,7 @@ try {
     (winner===1n?high:low).resolve();
     const checkpoint=await eventually(()=>watershedBackup(b),cp=>cp?.milestone===2n);assert(checkpoint);await Bun.sleep(40);
     assert.equal(checkpoint.key,epilogueKey(winner===1n?1n:0n));
-    const list=await s3.send(new ListObjectsV2Command({Bucket:b,Prefix:"epilogue/"}));assert.equal(list.KeyCount,winner===1n?2:1);
+    const list=await s3.send(new ListObjectsV2Command({Bucket:b,Prefix:"epilogue/0y"}));assert.equal(list.KeyCount,winner===1n?2:1);
     await stop(lowApp.process);await stop(highApp.process);
   }
   console.log("put of success: competing backup workers retain a gapless Watershed Epilogue");
@@ -1213,12 +1216,12 @@ try {
     const degree=await reserveHeap(limited.url,"f",0n,[left]);await status(degree.clone(),200);assert.equal(parse<HeapResponse>(await degree.text()).errors![0].code,"degree_limit");await stop(limited.process);
     const cleaner=await server(b,proxy.url,{BASINSYNC_CLEANUP_INTERVAL_MS:"10",BASINSYNC_SWEEP_EDGE_BATCH_SIZE:"1",BASINSYNC_ERASE_BATCH_SIZE:"1",BASINSYNC_ERASE_CONCURRENCY:"1"});
     for(const flow of flows)await status(await commit(cleaner.url,flow,bytes("marker"),0n),201);
-    await eventually(async()=>{const rows=await inspect(await image());return rows;},rows=>rows.graph_nodes===0&&rows.graph_edges===0&&rows.sweeping_tasks===0);
+    await eventually(async()=>{const rows=await inspect(await image());return rows;},rows=>rows.graph_nodes===0&&rows.graph_edges===0&&rows.sweeping_tasks===0&&rows.marking_tasks===0);
     assert(checkedDeletion,"parent object deletion follows durable outbound edge removal");
     assert.equal((await s3.send(new ListObjectsV2Command({Bucket:b,Prefix:"heap/young/"}))).KeyCount,0);
     await stop(cleaner.process);
     const restored=await server(b,endpoint,{BASINSYNC_BACKUP_INTERVAL_MS:"10"}),tip=(await fullStatus(restored.url,"deep")).timelines.watershed.milestone;
-    const cp=await eventually(()=>watershedBackup(b),cp=>cp?.milestone===tip);assert(cp);assert.deepEqual(await inspect(cp.blob),{graph_nodes:0,graph_edges:0,sweeping_tasks:0});await stop(restored.process);
+    const cp=await eventually(()=>watershedBackup(b),cp=>cp?.milestone===tip);assert(cp);assert.deepEqual(await inspect(cp.blob),{graph_nodes:0,graph_edges:0,sweeping_tasks:0,marking_tasks:0});await stop(restored.process);
     for await(const page of paginateListObjectsV2({client:s3},{Bucket:b}))for(const object of page.Contents??[]){const r=await s3.send(new GetObjectCommand({Bucket:b,Key:object.Key!}));const body=Buffer.from(await r.Body!.transformToByteArray());assert(!body.includes(bytes("deep-node-auth-private-")),"child access tokens never reach storage");}
   }
   {
@@ -1237,6 +1240,205 @@ try {
     assert((await reserve("parent",[parent])).results);await stop(app.process);
   }
   console.log("put of success: deep node DAGs, cached conditional HEADs in both generations, immutable child sets, degree/height limits, nonblocking verification, revision races, bounded recursive reclamation, and snapshot replay");
+
+  {
+    const b=await bucket();let holdCopies=false,rootPath="",rootYoung="",copyCount=0,deleteFailed=false,ambiguous=true;
+    const gate=Promise.withResolvers<void>(),entered=Promise.withResolvers<void>();
+    async function image(){
+      const list=await s3.send(new ListObjectsV2Command({Bucket:b,Prefix:"timeline/"}));
+      let bytes:Uint8Array|undefined;
+      for(const m of (list.Contents??[]).map(o=>fromKey(o.Key!)).sort((a,b)=>a<b?-1:1)){
+        const d=deltasAt(await get(b,m)).turso["default.turso"] as WalDelta;
+        bytes=ingestWal(bytes??d.logical.base!,d.physical.segments);
+      }
+      assert(bytes);return bytes;
+    }
+    async function inspect(id:string,owner="unused",blob?:Uint8Array){
+      const path=`${artifacts}/promotion-${serial++}.turso`;writeFileSync(path,blob??await image());
+      const p=spawn([`${root}/target/debug/examples/frame-fixture`,"--heap",path,id,owner],{cwd:root,stdout:"pipe",stderr:"inherit"});
+      const row=await new Response(p.stdout).json();assert.equal(await p.exited,0);return row;
+    }
+    const copies:string[]=[];
+    const proxy=relay((request,response)=>{
+      if(ambiguous&&request.headers.has("x-amz-copy-source")&&response.ok){ambiguous=false;return new Response("lost COPY reply",{status:500});}
+      return response;
+    },async request=>{
+      const path=new URL(request.url).pathname;
+      if(request.method==="PUT"&&path.includes("/heap/old/")&&request.headers.has("x-amz-copy-source")){
+        assert.equal(request.headers.get("if-none-match"),"*");assert(request.headers.get("x-amz-copy-source-if-match"));
+        if(holdCopies&&path===rootPath){entered.resolve();await gate.promise;}
+        copies.push(path);if(path===rootPath)copyCount++;
+      }
+      if(request.method==="DELETE"&&path===rootYoung&&!deleteFailed){deleteFailed=true;return new Response("retry",{status:500});}
+    });
+    let app=await server(b,proxy.url,{BASINSYNC_NODE_MAX_DEGREE:"1"});
+    const auth=(h:number,s:string):HeapNode["auth"]=>[h,0,bytes(`marker-edge-private-${s}`)];
+    const leaf:HeapNode={auth:auth(0,"leaf"),length:1,edges:[]};
+    const orphan:HeapNode={auth:auth(0,"orphan"),length:1,edges:[]};
+    const reserve=async(flow:string,nodes:HeapNode[],vp=0n)=>{const r=await reserveHeap(app.url,flow,vp,nodes);await status(r.clone(),200);return parse<HeapResponse>(await r.text());};
+    const upload=async(action:NonNullable<HeapResponse["results"]>[number]["actions"]["write"],body=bytes("x"))=>{assert(action);const r=await fetch(action.url,{method:"PUT",headers:action.headers,body});assert(r.ok,await r.text());};
+    const leaves=await reserve("graph",[leaf,orphan]);await upload(leaves.results![0].actions.write);await upload(leaves.results![1].actions.write);
+    const parent:HeapNode={auth:auth(1,"parent"),length:1,edges:[{auth:leaf.auth}]};
+    const parentActions=(await reserve("graph",[parent])).results![0].actions;assert(parentActions.preview);
+    const parentId=new URL(parentActions.preview.url).pathname.split("/heap/young/")[1]!.split("/").slice(0,-1).join("/");
+    const missing=await commit(app.url,"graph",bytes("marker"),0n,undefined,[{auth:parent.auth}]);await status(missing.clone(),422);assert.equal(parse<ApiError>(await missing.text()).error,"child_missing");
+    assert.deepEqual(await epilogueStatus(app.url,"graph"),{latest:null});
+    const unknown=await commit(app.url,"graph",bytes("marker"),0n,undefined,[{auth:auth(0,"unknown")}]);await status(unknown.clone(),422);assert.equal(parse<ApiError>(await unknown.text()).error,"child_unknown");
+    await status(await commit(app.url,"graph",bytes("marker"),0n,undefined,[{auth:parent.auth},{auth:leaf.auth}]),422);
+    await status(await commit(app.url,"graph",bytes("marker"),0n,undefined,[{auth:[129,0,bytes("too-high")]}]),422);
+    await status(await commit(app.url,"graph",bytes("marker"),0n,undefined,[{auth:[0,1,bytes("wrong-version")]}]),422);
+    await upload(parentActions.write);
+    rootPath=new URL(parentActions.read.url).pathname;rootYoung=new URL(parentActions.preview.url).pathname;
+    await status(await commit(app.url,"graph",bytes("marker"),0n,undefined,[{auth:parent.auth},{auth:parent.auth}]),201);
+    const markerImage=await image();const owner=`M_graph/v.${lex(0n)}/e.${lex(0n)}`;
+    assert((await inspect(parentId,owner,markerImage)).retained);
+    const events=(await s3.send(new ListObjectsV2Command({Bucket:b,Prefix:"timeline/"}))).Contents!;
+    const markerEvent=await get(b,events.map(o=>fromKey(o.Key!)).reduce((a,b)=>a>b?a:b));
+    assert.equal((eventTuples(markerEvent)[0]![3] as {markers:Record<string,{edges:string[]}>}).markers.graph!.edges.length,1,"marker edge IDs are deduplicated");
+    assert(!Buffer.from(markerEvent).includes(bytes("marker-edge-private-")),"marker auth tokens never persist");
+    await mismatch(await commit(app.url,"graph",bytes("wrong"),0n,undefined,[{auth:parent.auth}]),1n);
+    await stop(app.process);
+    holdCopies=true;
+    app=await server(b,proxy.url,{BASINSYNC_CLEANUP_INTERVAL_MS:"10",BASINSYNC_MARK_BATCH_SIZE:"1",BASINSYNC_SWEEP_EDGE_BATCH_SIZE:"1",BASINSYNC_ERASE_BATCH_SIZE:"1",BASINSYNC_ERASE_CONCURRENCY:"1"});
+    await timeout(entered.promise);
+    const parentMarked=await inspect(parentId,owner);assert(parentMarked.marked);assert.equal(parentMarked.promoted,"");assert.equal(parentMarked.freed,"");
+    assert.equal(await exists(b,signKey("graph",0n)),false,"no sign before the entire graph is promoted");
+    await timeout(status(await commit(app.url,"foreground",bytes("responsive"),0n),201),3000);
+    await s3.send(new CopyObjectCommand({Bucket:b,Key:rootPath.slice(b.length+2),CopySource:rootYoung.slice(1),CopySourceIfMatch:parentMarked.etag,IfNoneMatch:"*"}));
+    gate.resolve();holdCopies=false;
+    await eventually(()=>inspect(parentId,owner),r=>!!r.promoted);
+    await eventually(()=>exists(b,signKey("graph",0n)),Boolean);
+    assert(deleteFailed&&!ambiguous);assert.equal(copyCount,1,"retry after DELETE failure HEADs the old copy instead of copying again");
+    for(const actions of [leaves.results![0].actions,parentActions]){
+      const r=await fetch(actions.read.url,{headers:actions.read.headers});assert.equal(r.status,200);assert.deepEqual(new Uint8Array(await r.arrayBuffer()),bytes("x"));
+      const y=await fetch(actions.preview!.url,{headers:actions.preview!.headers});assert([404,412].includes(y.status));await y.arrayBuffer();
+    }
+    await eventually(async()=>{const r=await fetch(leaves.results![1].actions.preview!.url,{headers:leaves.results![1].actions.preview!.headers});await r.arrayBuffer();return r.status;},s=>s===404||s===412);
+    const repeated=(await reserve("graph",[parent],1n)).results![0].actions;assert.equal(repeated.write,null);assert.equal(repeated.preview,null);assert.equal(new URL(repeated.read.url).pathname,rootPath);
+    const newParent:HeapNode={auth:auth(2,"new-parent"),length:1,edges:[{auth:parent.auth}]};
+    assert((await reserve("next",[newParent])).results);
+    await status(await commit(app.url,"other",bytes("old-node-edge"),0n,undefined,[{auth:parent.auth}]),201);
+    const node=(await inspect(parentId,owner));assert(node.promoted&&node.marked&&!node.freed);
+    await stop(app.process);
+    app=await server(b,proxy.url,{BASINSYNC_CLEANUP_INTERVAL_MS:"10",BASINSYNC_BACKUP_INTERVAL_MS:"10"});
+    const tip=(await fullStatus(app.url,"graph")).timelines.watershed.milestone;
+    const cp=await eventually(()=>watershedBackup(b),v=>!!v&&v.milestone>=tip);assert(cp);
+    const restored=await inspect(parentId,owner,cp.blob);assert(restored.retained&&restored.marked&&restored.promoted);
+    await stop(app.process);
+    assert(copies.length>=2,"both parent and child promoted");
+  }
+  {
+    // Retry an ambiguous successful COPY after restart; old presence protects the young source.
+    const b=await bucket();let blocked=true,copyAttempts=0,sourceReads=0;const copyRejected=Promise.withResolvers<void>();
+    const proxy=relay((_,response)=>response,async request=>{
+      const path=new URL(request.url).pathname;
+      if(request.method==="PUT"&&path.includes("/heap/old/")&&request.headers.has("x-amz-copy-source")){
+        copyAttempts++;copyRejected.resolve();return new Response("unsupported",{status:501});
+      }
+      if(request.method==="GET"&&path.includes("/heap/young/"))sourceReads++;
+      if(request.method==="DELETE"&&path.includes("/heap/young/")&&blocked)return new Response("deferred",{status:500});
+    });
+    let app=await server(b,proxy.url,{BASINSYNC_CLEANUP_INTERVAL_MS:"10"});
+    const data=new Uint8Array(9*1024*1024+3);data.fill(42);data[0]=7;data[data.length-1]=19;
+    const input:HeapNode={auth:[0,0,bytes("promotion-fallback-private")],length:data.length,edges:[]};
+    const r=await reserveHeap(app.url,"f",0n,[input]);await status(r.clone(),200);const actions=parse<HeapResponse>(await r.text()).results![0].actions;assert(actions.write&&actions.preview);
+    const p=await fetch(actions.write.url,{method:"PUT",headers:actions.write.headers,body:data});assert(p.ok);
+    await status(await commit(app.url,"f",bytes("marker"),0n,undefined,[{auth:input.auth}]),201);
+    await timeout(copyRejected.promise);await Bun.sleep(40);assert.equal(sourceReads,0,"COPY failure cannot silently relay bytes");
+    await stop(app.process);
+    app=await server(b,proxy.url,{BASINSYNC_CLEANUP_INTERVAL_MS:"10",BASINSYNC_PROMOTION_ALLOW_TRANSFER:"true"});
+    await eventually(async()=>{const r=await fetch(actions.read.url,{headers:actions.read.headers});await r.arrayBuffer();return r.status;},s=>s===200);
+    assert(sourceReads>0,"transfer is explicitly enabled");
+    const preview=await fetch(actions.preview.url,{headers:actions.preview.headers});assert.equal(preview.status,200);await preview.arrayBuffer();
+    await stop(app.process);const before=copyAttempts;blocked=false;
+    app=await server(b,proxy.url,{BASINSYNC_CLEANUP_INTERVAL_MS:"10"});
+    await eventually(async()=>{const r=await reserveHeap(app.url,"f",1n,[input]);await status(r.clone(),200);return parse<HeapResponse>(await r.text());},r=>r.results?.[0]?.actions.preview===null);
+    assert.equal(copyAttempts,before,"restart resumes deletion from verified old object");
+    const old=await fetch(actions.read.url,{headers:actions.read.headers});assert.equal(old.status,200);assert.deepEqual(new Uint8Array(await old.arrayBuffer()),data);
+    await stop(app.process);
+  }
+  {
+    // A successful HEAD for a reclaimed revision cannot authorize a marker edge to its replacement.
+    const b=await bucket(),gate=Promise.withResolvers<void>(),entered=Promise.withResolvers<void>();let held=false,target="";
+    const proxy=relay(async(request,response)=>{if(!held&&request.method==="HEAD"&&new URL(request.url).pathname===target&&response.status===200){held=true;entered.resolve();await gate.promise;}return response;});
+    const app=await server(b,proxy.url,{BASINSYNC_CLEANUP_INTERVAL_MS:"15"});
+    const node:HeapNode={auth:[0,0,bytes("marker-verification-reuse-private")],length:1,edges:[]};
+    const reserve=async(flow:string)=>{const r=await reserveHeap(app.url,flow,0n,[node]);await status(r.clone(),200);return parse<HeapResponse>(await r.text());};
+    const first=(await reserve("stage")).results![0].actions;assert(first.write&&first.preview);
+    let r=await fetch(first.write.url,{method:"PUT",headers:first.write.headers,body:bytes("x")});assert(r.ok);target=new URL(first.preview.url).pathname;
+    const pending=commit(app.url,"marker",bytes("marker"),0n,undefined,[{auth:node.auth}]);await timeout(entered.promise);
+    await status(await commit(app.url,"stage",bytes("release"),0n),201);
+    await eventually(async()=>{const r=await fetch(first.preview!.url,{headers:first.preview!.headers});await r.arrayBuffer();return r.status;},s=>s===404||s===412);
+    const next=(await eventually(()=>reserve("replacement"),r=>!!r.results)).results![0].actions;assert(next.write);assert.notEqual(new URL(next.write.url).pathname,target);
+    r=await fetch(next.write.url,{method:"PUT",headers:next.write.headers,body:bytes("x")});assert(r.ok);gate.resolve();
+    const rejected=await pending;await status(rejected.clone(),422);assert.equal(parse<ApiError>(await rejected.text()).error,"child_changed");
+    assert.deepEqual(await epilogueStatus(app.url,"marker"),{latest:null});
+    await status(await commit(app.url,"marker",bytes("retry"),0n,undefined,[{auth:node.auth}]),201);
+    await stop(app.process);
+  }
+  console.log("put of success: authenticated marker edges, postorder marking, retained DAGs, bounded promotion, conditional COPY and streaming fallback, foreground progress, and retry/restart/snapshot recovery");
+
+  {
+    const b=await bucket(),flow="sign/0x",target=signKey(flow,0n),attempted=Promise.withResolvers<void>();
+    let stored=false,confirm=false,puts=0;let mismatch=Promise.withResolvers<void>();
+    async function counts(){
+      const list=await s3.send(new ListObjectsV2Command({Bucket:b,Prefix:"timeline/"}));let image:Uint8Array|undefined;
+      for(const m of (list.Contents??[]).map(o=>fromKey(o.Key!)).sort((a,b)=>a<b?-1:1)){const d=deltasAt(await get(b,m)).turso["default.turso"] as WalDelta;image=ingestWal(image??d.logical.base!,d.physical.segments);}
+      assert(image);const path=`${artifacts}/signs-${serial++}.turso`;writeFileSync(path,image);
+      const p=spawn([`${root}/target/debug/examples/frame-fixture`,"--graph",path],{cwd:root,stdout:"pipe",stderr:"inherit"});
+      const rows=await new Response(p.stdout).json();assert.equal(await p.exited,0);return rows;
+    }
+    const proxy=relay((request,response)=>{
+      if(request.method==="HEAD"&&new URL(request.url).pathname===`/${b}/${target}`&&response.status===200&&response.headers.get("x-amz-meta-upstream")!=="1")mismatch.resolve();
+      if(request.method==="PUT"&&new URL(request.url).pathname===`/${b}/${target}`&&response.ok){stored=true;attempted.resolve();return new Response("lost sign reply",{status:500});}
+      return response;
+    },async request=>{
+      if(new URL(request.url).pathname!==`/${b}/${target}`)return;
+      if(request.method==="PUT"){puts++;assert.equal(request.headers.get("if-none-match"),"*");}
+      if(request.method==="HEAD"){
+        assert.equal(request.headers.get("if-match"),"*");assert.equal(request.headers.get("if-none-match"),null);
+        if(stored&&!confirm)return new Response(null,{status:500});
+      }
+    });
+    // Positive signs alone cannot be mistaken for a recovery marker.
+    await s3.send(new PutObjectCommand({Bucket:b,Key:`epilogue/${lex(100n)}`,Body:new Uint8Array()}));
+    let app=await server(b,proxy.url);
+    await status(await commit(app.url,flow,new Uint8Array(),0n),201);
+    await status(await commit(app.url,flow,bytes("second"),1n),201);
+    assert.equal((await counts()).marking_tasks,2,"empty graphs also queue marking tasks");
+    await stop(app.process);
+    app=await server(b,proxy.url,{BASINSYNC_CLEANUP_INTERVAL_MS:"10"});
+    await timeout(attempted.promise);
+    assert(await exists(b,target));assert((await counts()).marking_tasks>=1,"unconfirmed sign keeps its task");
+    await status(await commit(app.url,"foreground-sign",bytes("responsive"),0n),201);
+    await stop(app.process);const before=puts;confirm=true;
+    for(const metadata of [{},{upstream:"999"}] as Record<string,string>[]){
+      mismatch=Promise.withResolvers<void>();
+      await s3.send(new PutObjectCommand({Bucket:b,Key:target,Body:new Uint8Array(),Metadata:metadata}));
+      app=await server(b,proxy.url,{BASINSYNC_CLEANUP_INTERVAL_MS:"10"});await timeout(mismatch.promise);
+      assert((await counts()).marking_tasks>=1,"sign upstream must match its source Milestone");await stop(app.process);
+    }
+    await s3.send(new PutObjectCommand({Bucket:b,Key:target,Body:new Uint8Array(),Metadata:{upstream:"1"}}));
+    app=await server(b,proxy.url,{BASINSYNC_CLEANUP_INTERVAL_MS:"10",BASINSYNC_BACKUP_INTERVAL_MS:"10"});
+    await eventually(counts,r=>r.marking_tasks===0&&r.sweeping_tasks===0);
+    assert.equal(puts,before,"restart confirms an existing sign without rewriting it");
+    assert.equal((await s3.send(new HeadObjectCommand({Bucket:b,Key:target}))).Metadata!.upstream,"1");
+    assert.equal((await s3.send(new HeadObjectCommand({Bucket:b,Key:signKey(flow,1n)}))).Metadata!.upstream,"2");
+    assert(await exists(b,signKey("foreground-sign",0n)));
+    const tip=(await fullStatus(app.url,flow)).timelines.watershed.milestone;
+    const cp=await eventually(()=>watershedBackup(b),cp=>!!cp&&cp.milestone>=tip);assert(cp);
+    const cpViewpoint=~unlex(cp.key.slice("epilogue/".length));const cpSign=`epilogue/${lex(cpViewpoint)}`;
+    await eventually(()=>exists(b,cpSign),Boolean);
+    await eventually(()=>flowBlob(b,flow,1n),v=>!!v);await stop(app.process);
+    assert.equal((await s3.send(new HeadObjectCommand({Bucket:b,Key:cpSign}))).Metadata!.upstream,cp.milestone.toString());
+    const objects=await s3.send(new ListObjectsV2Command({Bucket:b,Prefix:`flows/0x${Buffer.from(flow).toString("hex")}/epilogue/`}));
+    assert.deepEqual(objects.Contents!.map(o=>o.Key),[flowKey(flow,0n),flowKey(flow,1n),signKey(flow,0n),signKey(flow,1n)].sort());
+    await s3.send(new DeleteObjectCommand({Bucket:b,Key:cpSign}));
+    app=await server(b,proxy.url,{BASINSYNC_BACKUP_INTERVAL_MS:"10"});
+    await eventually(()=>exists(b,cpSign),Boolean);assert.equal((await watershedBackup(b))!.key,cp.key,"backup restart repairs its sign without creating a new marker");
+    assert.deepEqual(await epilogueStatus(app.url,flow),{latest:{viewpoint:1n}});await stop(app.process);
+  }
+  console.log("put of success: uncomplemented PromotionSigns, empty graphs, retained tasks until S3 confirmation, ambiguous sign PUTs, restart repair, and mixed-key Epilogue recovery");
 
   console.log(`Integration passed. Logs: ${artifacts}`);
 } finally {

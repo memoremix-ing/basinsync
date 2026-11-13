@@ -6,6 +6,7 @@
 [lexidecimal]: <glossary/lexidecimal.md>
 [milestone]: <glossary/milestone.md>
 [prologue-vacuuming]: <glossary/prologue-vacuuming.md>
+[promotion-sign]: <glossary/promotion-sign.md>
 [reservoir]: <glossary/reservoir.md>
 [sha384]: <glossary/sha384.md>
 [timeline]: <glossary/timeline.md>
@@ -23,8 +24,11 @@ epilogue/Lexidecimal(~viewpoint)                       # Watershed
 flows/0x<lowercase UTF-8 hex of id>/epilogue/Lexidecimal(~viewpoint)
 ```
 
-Use *complemented Lexidecimal*[^][lexidecimal] positions for both
-*Epilogues*[^][epilogue]. *Watershed*[^][watershed] *Viewpoints*[^][viewpoint] count
+Use *complemented Lexidecimal*[^][lexidecimal] positions for *markers*[^][commit-marker]
+in both *Epilogues*[^][epilogue]; their *PromotionSigns*[^][promotion-sign] use
+uncomplemented positions in those same namespaces. The full-file
+*Watershed*[^][watershed] *marker's*[^][commit-marker] own graph has no outgoing edges;
+confirm its sign after publication, repairing a missing sign on retry. *Watershed*[^][watershed] *Viewpoints*[^][viewpoint] count
 backups independently of *Milestones*[^][milestone]. A backup's S3 metadata
 binds its image to the recovery prefix:
 
@@ -45,10 +49,19 @@ all *Flow*[^][flow] *markers*[^][commit-marker] through its
 Competing backup workers adopt the winning *Viewpoint*[^][viewpoint], keeping
 backed-up *Milestones*[^][milestone] increasing.
 
-A stored *CommitMarker*[^][commit-marker] permits, but does not require,
-*Epilogue compaction*[^][epilogue-compaction] before its
-*Viewpoint*[^][viewpoint] and *Timeline eviction*[^][timeline-eviction] through
-its *Milestone*[^][milestone]. Serialize cleanup requests through the
-*Watershed*[^][watershed] *Timeline*[^][timeline]. Replacing payloads with zero-length
-objects can preserve *conditional-write barriers*[^][conditional-write]. *Prologue vacuuming*[^][prologue-vacuuming]
+Plan future *Epilogue compaction*[^][epilogue-compaction] around a contiguous
+available prefix of stored *CommitMarker*[^][commit-marker]/*PromotionSign*[^][promotion-sign]
+pairs. *Markers*[^][commit-marker] must have reached their *Epilogues*[^][epilogue]
+from the *Watershed*[^][watershed] *Timeline*[^][timeline]; a recovery anchor alone
+is insufficient. Compact up to, but not through, the retained *Viewpoint*[^][viewpoint].
+Tombstone compacted *markers*[^][commit-marker] with zero-length objects to preserve
+*conditional-write barriers*[^][conditional-write], and DELETE their
+*PromotionSigns*[^][promotion-sign]. A sign LISTer checks the corresponding
+*marker*[^][commit-marker] metadata, deleting and skipping stale signs on demand
+before selecting the oldest available snapshot; see *compaction*[^][epilogue-compaction].
+
+A stored *Watershed*[^][watershed] recovery anchor permits *Timeline eviction*[^][timeline-eviction]
+through its *Milestone*[^][milestone] once the corresponding *Flow*[^][flow]
+*markers*[^][commit-marker] are replicated. Serialize cleanup requests through the
+*Watershed*[^][watershed] *Timeline*[^][timeline]. *Prologue vacuuming*[^][prologue-vacuuming]
 is a separate process.

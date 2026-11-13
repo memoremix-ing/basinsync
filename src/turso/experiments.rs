@@ -281,6 +281,8 @@ fn wal_capture_reconstructs_without_database_diff() -> Result<()> {
         let markers = BTreeMap::from([(
             format!("flow-{}", n % 4),
             Marker {
+                edges: Default::default(),
+                verified: Default::default(),
                 viewpoint: (n / 4).to_string(),
                 sha384: hash(&[]),
                 blob: vec![],
@@ -544,6 +546,8 @@ fn wal_growth_deletion_rollback_and_corruption() -> Result<()> {
                     "雪".repeat(if n == 1 { 10000 } else { 100 })
                 ),
                 Marker {
+                    edges: Default::default(),
+                    verified: Default::default(),
                     viewpoint: "0".into(),
                     sha384: hash(&[]),
                     blob: vec![],
@@ -621,7 +625,7 @@ proptest::proptest! {
             for id in batch {
                 let flow=format!("{id}/雪");
                 let vp=live.state.latest(&flow).unwrap().map_or_else(Viewpoint::zero,|v|v.next());
-                markers.insert(flow,Marker {viewpoint:vp.decimal(),sha384:hash(&[]),blob:vec![]});
+                markers.insert(flow,Marker { edges: Default::default(), verified: Default::default(),viewpoint:vp.decimal(),sha384:hash(&[]),blob:vec![]});
             }
             let delta=live.commit(&markers).unwrap();
             let wire=encode_wal(markers,delta.clone()).unwrap();
@@ -766,6 +770,8 @@ fn input(index: usize, batch: usize, flows: usize, blob: &[u8]) -> BTreeMap<Stri
             (
                 format!("flow-{:06}", n % flows),
                 Marker {
+                    edges: Default::default(),
+                    verified: Default::default(),
                     viewpoint: (n / flows + 1).to_string(),
                     sha384: hash(blob),
                     blob: blob.to_vec(),
@@ -946,6 +952,8 @@ fn measure() -> Result<()> {
                         (
                             "flow-000000".into(),
                             Marker {
+                                edges: Default::default(),
+                                verified: Default::default(),
                                 viewpoint: (n + 1).to_string(),
                                 sha384: hash(&blob),
                                 blob: blob.clone(),
@@ -1127,6 +1135,8 @@ async fn actual_frames_recover_after_stored_batch_reply_is_lost() -> Result<()> 
     let seed_markers = BTreeMap::from([(
         "a".into(),
         Marker {
+            edges: Default::default(),
+            verified: Default::default(),
             viewpoint: "0".into(),
             sha384: hash(&[]),
             blob: vec![],
@@ -1141,6 +1151,8 @@ async fn actual_frames_recover_after_stored_batch_reply_is_lost() -> Result<()> 
         let markers = BTreeMap::from([(
             "a".into(),
             Marker {
+                edges: Default::default(),
+                verified: Default::default(),
                 viewpoint: (milestone - 1).to_string(),
                 sha384: hash(&[]),
                 blob: vec![],
@@ -1376,6 +1388,8 @@ fn ordered_same_flow_commands_materialize_atomically_and_recover() -> Result<()>
                 (
                     "hot".into(),
                     Marker {
+                        edges: Default::default(),
+                        verified: Default::default(),
                         viewpoint: (batch * 32 + offset).to_string(),
                         sha384: hash(&[offset as u8]),
                         blob: vec![offset as u8],
@@ -1423,6 +1437,8 @@ fn ordered_same_flow_commands_materialize_atomically_and_recover() -> Result<()>
         (
             "hot".into(),
             Marker {
+                edges: Default::default(),
+                verified: Default::default(),
                 viewpoint: "320".into(),
                 sha384: hash(&[]),
                 blob: vec![],
@@ -1431,6 +1447,8 @@ fn ordered_same_flow_commands_materialize_atomically_and_recover() -> Result<()>
         (
             "hot".into(),
             Marker {
+                edges: Default::default(),
+                verified: Default::default(),
                 viewpoint: "322".into(),
                 sha384: hash(&[]),
                 blob: vec![],

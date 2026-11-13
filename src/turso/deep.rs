@@ -67,6 +67,8 @@ impl World {
             markers: BTreeMap::from([(
                 flow.into(),
                 event::Marker {
+                    edges: Default::default(),
+                    verified: Default::default(),
                     viewpoint: "0".into(),
                     sha384: event::digest(&[]),
                     blob: vec![],
@@ -230,5 +232,220 @@ fn child_verification_is_bound_to_the_current_live_revision() -> Result<()> {
     assert!(prepared.is_none());
     assert_eq!(outcome.errors[&0].code, "child_changed");
     assert!(world.db().heap_node(&parent.id)?.is_none());
+    Ok(())
+}
+
+#[test]
+fn marker_graphs_mark_in_bounded_postorder_and_survive_staging_sweeps() -> Result<()> {
+    let mut w = World::new();
+    let leaf = |name: &str| heap::Node {
+        id: heap::node_id(0, 0, name.as_bytes()),
+        length: 1,
+        edges: BTreeSet::new(),
+    };
+    let a = leaf("marked-a");
+    let b = leaf("marked-b");
+    let unused = leaf("marked-unused");
+    assert!(
+        w.reserve("graph", vec![a.clone(), b.clone(), unused.clone()])?
+            .errors
+            .is_empty()
+    );
+    let parent = heap::Node {
+        id: heap::node_id(1, 0, b"marked-parent"),
+        length: 1,
+        edges: BTreeSet::from([a.id.clone(), b.id.clone()]),
+    };
+    w.reserve("graph", vec![parent.clone()])?;
+    let middle = parent;
+    let parent = heap::Node {
+        id: heap::node_id(2, 0, b"marked-root"),
+        length: 1,
+        edges: BTreeSet::from([middle.id.clone(), b.id.clone()]),
+    };
+    w.reserve("graph", vec![parent.clone()])?;
+    let edges = BTreeSet::from([parent.id.clone()]);
+    let mut proofs = heap::Proofs::new();
+    w.writer.inspect_children(&edges, &mut proofs)?;
+    for child in proofs.values_mut().flatten() {
+        child.etag = "\"verified\"".into();
+    }
+    assert!(w.writer.check_children(&edges, &proofs)?.is_none());
+    let prepared = w.writer.prepare(vec![event::FlowCommand {
+        markers: BTreeMap::from([(
+            "graph".into(),
+            event::Marker {
+                viewpoint: "0".into(),
+                sha384: event::digest(&[]),
+                blob: vec![],
+                edges,
+                verified: proofs.into_iter().map(|(id, p)| (id, p.unwrap())).collect(),
+            },
+        )]),
+    }])?;
+    w.apply(prepared)?;
+    let owner = heap::marker_retainer("graph", &Viewpoint::zero());
+    assert!(w.db().heap_edge(&parent.id, &owner)?);
+    assert_eq!(w.db().heap_node(&parent.id)?.unwrap().etag, "\"verified\"");
+    // An out-of-order proposal cannot mark a parent before its children, nor remove its task.
+    let row = w.db().heap_node(&parent.id)?.unwrap();
+    let task = crate::promotion::Task {
+        upstream: w.writer.prefix().milestone().clone(),
+        flow: "graph".into(),
+        viewpoint: "0".into(),
+    };
+    let mut wrong_upstream = task.clone();
+    wrong_upstream.upstream += 1u8;
+    assert!(!w.db().marking_task(&wrong_upstream)?);
+    let bad = crate::promotion::Command {
+        tasks: vec![task.clone()],
+        marked: vec![crate::promotion::Node {
+            id: parent.id.clone(),
+            revision: row.revision,
+            etag: row.etag,
+            length: 1,
+        }],
+        at: cleanup::now()?,
+        ..Default::default()
+    };
+    let p = w.writer.prepare_promotion(bad)?.unwrap();
+    w.apply(p)?;
+    let mut seen = Vec::new();
+    loop {
+        let work = crate::promotion::scan(w.snapshot.as_ref().unwrap(), 1, 1)?;
+        assert!(w.db().marking_task(&task)?);
+        if work.marking.marked.is_empty() {
+            assert!(
+                work.ready.is_empty(),
+                "marking alone does not complete promotion"
+            );
+            break;
+        }
+        assert_eq!(work.marking.marked.len(), 1);
+        seen.push(work.marking.marked[0].id.clone());
+        let p = w.writer.prepare_promotion(work.marking)?.unwrap();
+        w.apply(p)?;
+    }
+    assert_eq!(seen.len(), 4);
+    assert_eq!(seen[2], middle.id);
+    assert_eq!(seen.last(), Some(&parent.id));
+    assert!(seen.contains(&a.id) && seen.contains(&b.id));
+    // Release every staging edge a transaction at a time. The marker graph remains retained.
+    loop {
+        let work = cleanup::scan(w.snapshot.as_ref().unwrap(), 1, 32)?;
+        if work.tasks.is_empty() {
+            break;
+        }
+        w.maintenance(work.tasks, vec![], vec![])?;
+    }
+    assert!(!w.db().heap_node(&unused.id)?.unwrap().freed.is_empty());
+    for n in [&a, &b, &middle, &parent] {
+        assert!(w.db().heap_node(&n.id)?.unwrap().freed.is_empty());
+    }
+    let work = crate::promotion::scan(w.snapshot.as_ref().unwrap(), 1, 32)?;
+    assert_eq!(work.promote.len(), 2);
+    let mut stale = work.promote.clone();
+    stale[0].revision = uuid::Uuid::new_v4().to_string();
+    let one = stale.remove(0);
+    assert!(
+        w.writer
+            .prepare_promotion(crate::promotion::Command {
+                promoted: vec![one],
+                at: cleanup::now()?,
+                ..Default::default()
+            })?
+            .is_none()
+    );
+    let mut promoted = Vec::new();
+    loop {
+        let work = crate::promotion::scan(w.snapshot.as_ref().unwrap(), 1, 32)?;
+        assert!(w.db().marking_task(&task)?);
+        if work.promote.is_empty() {
+            assert_eq!(work.ready, vec![task.clone()]);
+            break;
+        }
+        promoted.extend(work.promote.iter().map(|n| n.id.clone()));
+        let p = w
+            .writer
+            .prepare_promotion(crate::promotion::Command {
+                promoted: work.promote,
+                at: cleanup::now()?,
+                ..Default::default()
+            })?
+            .unwrap();
+        w.apply(p)?;
+    }
+    assert_eq!(promoted.len(), 4);
+    assert_eq!(promoted[2], middle.id);
+    assert_eq!(promoted[3], parent.id);
+    let p = w
+        .writer
+        .prepare_promotion(crate::promotion::Command {
+            signed: vec![crate::promotion::ConfirmedSign::simulated(task.clone())],
+            at: cleanup::now()?,
+            ..Default::default()
+        })?
+        .unwrap();
+    w.apply(p)?;
+    assert!(!w.db().marking_task(&task)?);
+    for n in [&a, &b, &middle, &parent] {
+        assert!(w.db().heap_node(&n.id)?.unwrap().promoted_valid);
+    }
+    // A second marker can retain an already marked/promoted graph; only its task needs clearing.
+    let edges = BTreeSet::from([parent.id.clone()]);
+    let mut proofs = heap::Proofs::new();
+    w.writer.inspect_children(&edges, &mut proofs)?;
+    assert!(
+        proofs
+            .values()
+            .all(|p| !p.as_ref().unwrap().etag.is_empty())
+    );
+    let p = w.writer.prepare(vec![event::FlowCommand {
+        markers: BTreeMap::from([(
+            "other".into(),
+            event::Marker {
+                viewpoint: "0".into(),
+                sha384: event::digest(&[]),
+                blob: vec![],
+                edges,
+                verified: proofs.into_iter().map(|(id, p)| (id, p.unwrap())).collect(),
+            },
+        )]),
+    }])?;
+    w.apply(p)?;
+    let work = crate::promotion::scan(w.snapshot.as_ref().unwrap(), 1, 1)?;
+    assert_eq!(work.marking.tasks.len(), 1);
+    assert!(work.marking.marked.is_empty());
+    assert!(w.writer.prepare_promotion(work.marking)?.is_none());
+    assert_eq!(work.ready.len(), 1);
+    let p = w
+        .writer
+        .prepare_promotion(crate::promotion::Command {
+            signed: work
+                .ready
+                .into_iter()
+                .map(crate::promotion::ConfirmedSign::simulated)
+                .collect(),
+            at: cleanup::now()?,
+            ..Default::default()
+        })?
+        .unwrap();
+    w.apply(p)?;
+    assert!(
+        crate::promotion::scan(w.snapshot.as_ref().unwrap(), 1, 1)?
+            .marking
+            .tasks
+            .is_empty()
+    );
+    w.commit("empty")?;
+    let empty = crate::promotion::Task {
+        upstream: w.writer.prefix().milestone().clone(),
+        flow: "empty".into(),
+        viewpoint: "0".into(),
+    };
+    let work = crate::promotion::scan(w.snapshot.as_ref().unwrap(), 1, 1)?;
+    assert_eq!(work.ready, vec![empty.clone()]);
+    assert!(work.marking.marked.is_empty());
+    assert!(w.db().marking_task(&empty)?);
     Ok(())
 }

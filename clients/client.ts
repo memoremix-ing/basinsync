@@ -12,7 +12,8 @@ export type EpilogueStatus = ApiResponse<{
 export type ViewpointMismatch = ApiResponse<{ next: Position }>;
 export type ApiError = ApiResponse<{ error: string; message: string }>;
 export type Action = {url:string;headers:Record<string,string>};
-export type HeapNode = {auth:[height:number,version:number,token:Uint8Array];length:number;edges:{auth:[height:number,version:number,token:Uint8Array]}[]};
+export type Edge = {auth:[height:number,version:number,token:Uint8Array]};
+export type HeapNode = Edge & {length:number;edges:Edge[]};
 export type HeapResponse = ApiResponse<{
   errors:Record<number,{code:string;message:string}>|null;
   results:Record<number,{actions:{write:Action|null;preview:Action|null;read:Action}}>|null;
@@ -26,19 +27,19 @@ export async function parseResponse<T>(response: Response): Promise<T> {
 export const sha384 = (blob: Uint8Array): string =>
   createHash("sha384").update(blob).digest("hex");
 
-export type CommitDetails = { flow: string; viewpoint: bigint; sha384: Uint8Array };
+export type CommitDetails = { flow: string; viewpoint: bigint; sha384: Uint8Array; edges: Edge[] };
 export const sha384Bytes = (blob: Uint8Array): Uint8Array =>
   new Uint8Array(createHash("sha384").update(blob).digest());
 
-export function form(flow: string, blob: Uint8Array, viewpoint: bigint, digest = sha384Bytes(blob)): FormData {
+export function form(flow: string, blob: Uint8Array, viewpoint: bigint, digest = sha384Bytes(blob), edges: Edge[] = []): FormData {
   const data = new FormData();
-  data.set("details", stringify({ flow, viewpoint, sha384: digest } satisfies CommitDetails));
+  data.set("details", stringify({ flow, viewpoint, sha384: digest, edges } satisfies CommitDetails));
   data.set("blob", new Blob([new Uint8Array(blob)]), "marker");
   return data;
 }
 
-export async function commit(url: string, flow: string, blob: Uint8Array, viewpoint: bigint, digest?: Uint8Array): Promise<Response> {
-  return fetch(`${url}/api/v0/epilogue`, { method: "PUT", body: form(flow, blob, viewpoint, digest), signal: AbortSignal.timeout(30_000) });
+export async function commit(url: string, flow: string, blob: Uint8Array, viewpoint: bigint, digest?: Uint8Array, edges: Edge[] = []): Promise<Response> {
+  return fetch(`${url}/api/v0/epilogue`, { method: "PUT", body: form(flow, blob, viewpoint, digest, edges), signal: AbortSignal.timeout(30_000) });
 }
 
 export async function epilogueStatus(url: string, flow: string): Promise<EpilogueStatus> {

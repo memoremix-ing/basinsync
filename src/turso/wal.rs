@@ -315,6 +315,35 @@ impl Writer {
     pub(crate) fn inspect_heap(&self, request: &mut crate::heap::Request) -> Result<()> {
         self.state.inspect_heap(request)
     }
+    pub(crate) fn inspect_children(
+        &self,
+        edges: &std::collections::BTreeSet<String>,
+        proofs: &mut crate::heap::Proofs,
+    ) -> Result<()> {
+        self.state.inspect_children(edges, proofs)
+    }
+    pub(crate) fn check_children(
+        &self,
+        edges: &std::collections::BTreeSet<String>,
+        proofs: &crate::heap::Proofs,
+    ) -> Result<Option<crate::heap::NodeError>> {
+        self.state.check_children(edges, proofs)
+    }
+    pub(crate) fn prepare_promotion(
+        &mut self,
+        base: &BigUint,
+        parent: Option<&str>,
+        command: &crate::promotion::Command,
+    ) -> Result<Option<Delta>> {
+        ensure!(&self.cursor == base, "unpublished database transaction");
+        if !self.state.promotion_pending(command)? {
+            return Ok(None);
+        }
+        let milestone = base + 1u8;
+        self.state
+            .transact_promotion(&milestone.to_string(), command)?;
+        Ok(Some(self.capture(base, parent, milestone)?))
+    }
     pub fn latest(&self, flow: &str) -> Result<Option<Viewpoint>> {
         self.state.latest(flow)
     }
@@ -409,6 +438,7 @@ impl Writer {
             &milestone.to_string(),
             values.into_iter(),
             ranges,
+            commands,
         )?;
         self.capture(base, parent, milestone)
     }

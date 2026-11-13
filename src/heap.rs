@@ -61,7 +61,7 @@ struct WireNode {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct WireEdge {
+pub struct WireEdge {
     auth: Auth,
 }
 fn authenticate(auth: Auth, limits: &Limits) -> Result<(u64, String), NodeError> {
@@ -85,6 +85,33 @@ fn authenticate(auth: Auth, limits: &Limits) -> Result<(u64, String), NodeError>
         ));
     }
     Ok((height, node_id(height, version, &token)))
+}
+pub fn authenticate_edges(
+    wire: Vec<WireEdge>,
+    limits: &Limits,
+    parent_height: Option<u64>,
+) -> Result<BTreeSet<String>, NodeError> {
+    let mut edges = BTreeSet::new();
+    for edge in wire {
+        let (height, id) = authenticate(edge.auth, limits)?;
+        if parent_height.is_some_and(|p| height >= p) {
+            return Err(invalid(
+                "invalid_height",
+                "parent height must exceed every child height",
+            ));
+        }
+        edges.insert(id);
+        if edges.len() > limits.max_degree {
+            return Err(invalid(
+                "degree_limit",
+                "node degree exceeds the service limit",
+            ));
+        }
+    }
+    Ok(edges)
+}
+pub fn marker_retainer(flow: &str, viewpoint: &Viewpoint) -> String {
+    retainer(flow, viewpoint).replacen("A_", "M_", 1)
 }
 #[derive(Clone, Debug)]
 pub struct Child {
@@ -114,23 +141,7 @@ impl Request {
                     invalid("invalid_node", "invalid node fields or authentication")
                 })?;
                 let (height, id) = authenticate(wire.auth, limits)?;
-                let mut edges = BTreeSet::new();
-                for edge in wire.edges {
-                    let (child_height, child_id) = authenticate(edge.auth, limits)?;
-                    if child_height >= height {
-                        return Err(invalid(
-                            "invalid_height",
-                            "parent height must exceed every child height",
-                        ));
-                    }
-                    edges.insert(child_id);
-                    if edges.len() > limits.max_degree {
-                        return Err(invalid(
-                            "degree_limit",
-                            "node degree exceeds the service limit",
-                        ));
-                    }
-                }
+                let edges = authenticate_edges(wire.edges, limits, Some(height))?;
                 if wire.length > i64::MAX as u64 {
                     return Err(invalid(
                         "invalid_length",
@@ -156,45 +167,54 @@ impl Request {
         bucket: &s3::Bucket,
         permits: std::sync::Arc<tokio::sync::Semaphore>,
     ) {
-        let candidates = std::mem::take(&mut self.proofs);
-        let mut running = tokio::task::JoinSet::new();
-        let mut pending = candidates.into_iter();
-        loop {
-            while running.len() < 8 {
-                let Some((id, proof)) = pending.next() else {
-                    break;
-                };
-                let bucket = bucket.clone();
-                let permits = permits.clone();
-                running.spawn(async move {
-                    let verified = match proof {
-                        Ok(mut child) if child.etag.is_empty() => {
-                            let _permit = permits
-                                .acquire_owned()
-                                .await
-                                .expect("heap HEAD limiter stays open");
-                            match child_etag(&bucket, &id, &child).await {
-                                Ok(etag) => {
-                                    child.etag = etag;
-                                    Ok(child)
-                                }
-                                Err(error) => Err(error),
-                            }
-                        }
-                        other => other,
-                    };
-                    (id, verified)
-                });
-            }
-            let Some(result) = running.join_next().await else {
+        verify_children(&mut self.proofs, bucket, permits).await;
+    }
+}
+pub type Proofs = BTreeMap<String, Result<Child, NodeError>>;
+pub async fn verify_children(
+    proofs: &mut Proofs,
+    bucket: &s3::Bucket,
+    permits: std::sync::Arc<tokio::sync::Semaphore>,
+) {
+    let candidates = std::mem::take(proofs);
+    let mut running = tokio::task::JoinSet::new();
+    let mut pending = candidates.into_iter();
+    loop {
+        while running.len() < 8 {
+            let Some((id, proof)) = pending.next() else {
                 break;
             };
-            if let Ok((id, proof)) = result {
-                self.proofs.insert(id, proof);
-            }
+            let bucket = bucket.clone();
+            let permits = permits.clone();
+            running.spawn(async move {
+                let verified = match proof {
+                    Ok(mut child) if child.etag.is_empty() => {
+                        let _permit = permits
+                            .acquire_owned()
+                            .await
+                            .expect("heap HEAD limiter stays open");
+                        match child_etag(&bucket, &id, &child).await {
+                            Ok(etag) => {
+                                child.etag = etag;
+                                Ok(child)
+                            }
+                            Err(error) => Err(error),
+                        }
+                    }
+                    other => other,
+                };
+                (id, verified)
+            });
+        }
+        let Some(result) = running.join_next().await else {
+            break;
+        };
+        if let Ok((id, proof)) = result {
+            proofs.insert(id, proof);
         }
     }
 }
+
 async fn child_etag(bucket: &s3::Bucket, id: &str, child: &Child) -> Result<String, NodeError> {
     let reader = crate::object_read::if_present(bucket)
         .map_err(|_| invalid("child_unavailable", "child object verification failed"))?;

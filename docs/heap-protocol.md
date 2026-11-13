@@ -7,6 +7,7 @@
 [json0]: <glossary/json0.md>
 [node]: <glossary/node.md>
 [node-height]: <glossary/node-height.md>
+[node-promotion]: <glossary/node-promotion.md>
 [old-generation]: <glossary/old-generation.md>
 [revision]: <glossary/revision.md>
 [viewpoint]: <glossary/viewpoint.md>
@@ -30,7 +31,7 @@
 ```
 
 Edges identify a child set: each child has lower *height*[^][node-height] and a
-verified stored allocation. Existing *nodes*[^][node] require matching content
+verified stored allocation in either generation. Existing *nodes*[^][node] require matching content
 length and child-id set, even when already referenced by other *nodes*[^][node].
 
 A wrong *Viewpoint*[^][viewpoint] returns the *common 409 response*[^][epilogue-protocol].
@@ -55,5 +56,5 @@ specified `Content-Length`. `preview` and `read` are
 *young*[^][young-generation] and *old*[^][old-generation] generations respectively.
 Both object keys end in `${node_id}/${revision}`, sharing the stored UUIDv4
 *revision*[^][revision]. Send each action's headers. A nonempty stored *etag*[^][etag] makes `write` null; a valid
-promotion timestamp makes `preview` null.
+*promotion*[^][node-promotion] timestamp makes `preview` null.
 
