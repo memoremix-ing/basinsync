@@ -142,7 +142,7 @@ impl Frames {
             ensure!(crc == (word(24), word(28)), "WAL header checksum");
             let mut transaction = BTreeMap::new();
             let mut committed = false;
-            for frame in bytes[32..].chunks_exact(PAGE_SIZE + 24) {
+            for frame in bytes[32..].as_chunks::<{ PAGE_SIZE + 24 }>().0 {
                 let fw = |offset: usize| {
                     u32::from_be_bytes(frame[offset..offset + 4].try_into().unwrap())
                 };
@@ -218,7 +218,7 @@ impl Frames {
 }
 
 fn checksum(bytes: &[u8], mut s: (u32, u32), little: bool) -> (u32, u32) {
-    for words in bytes.chunks_exact(8) {
+    for words in bytes.as_chunks::<8>().0 {
         let read = |x: &[u8]| {
             if little {
                 u32::from_le_bytes(x.try_into().unwrap())
@@ -527,7 +527,7 @@ impl Writer {
         State::transact_ranges(
             &self.state.native,
             &milestone.to_string(),
-            values.into_iter(),
+            values,
             ranges,
             commands,
         )?;

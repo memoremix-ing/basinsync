@@ -280,11 +280,7 @@ fn prepare_cdc(
             values.insert(flow.as_str(), marker.viewpoint.as_str());
         }
     }
-    State::transact_values(
-        &writer.state.native,
-        &milestone.to_string(),
-        values.into_iter(),
-    )?;
+    State::transact_values(&writer.state.native, &milestone.to_string(), values)?;
     let native = &writer.state.native;
     let bytes = read_file(&*native.io, &*native.storage.get_logical_log_file())?;
     let frames = std::mem::take(&mut *native.storage.frames.lock().unwrap());

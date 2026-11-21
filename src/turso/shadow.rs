@@ -457,7 +457,7 @@ impl Shadow {
         let imported = (|| -> Result<()> {
             let mut next = self.native.conn.wal_state()?.max_frame + 1;
             for segment in &delta.physical.segments {
-                for frame in segment.0[32..].chunks_exact(PAGE_SIZE + 24) {
+                for frame in segment.0[32..].as_chunks::<{ PAGE_SIZE + 24 }>().0 {
                     self.native.conn.wal_insert_frame(next, frame)?;
                     next += 1;
                 }

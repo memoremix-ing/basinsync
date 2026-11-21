@@ -11,7 +11,7 @@ url = "2"
 uuid = { version = "1", features = ["v4"] }
 time = { version = "0.3", features = ["parsing", "formatting", "macros"] }
 tempfile = "3"
-turso_core = { path = "../../../jcmoore/turso.git/sts-0/core", default-features = false, features = ["fs", "conn_raw_api"] }
+turso_core = { path = "vendor/turso/core", default-features = false, features = ["fs", "conn_raw_api"] }
 base64 = "0.22"
 flexbuffers = "25.12.19"
 serde_bytes = "0.11"
@@ -30,4 +30,4 @@ metrics-exporter-prometheus = { version = "0.18", default-features = false }
 
 [dev-dependencies]
 proptest = "1"
-redb = { path = "../../../cberner/redb.git/lts-4" }
+redb = "4.4.0"

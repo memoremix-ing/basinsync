@@ -1,10 +1,18 @@
 [conditional-write]: <glossary/conditional-write.md>
 [observability]: <observability.md>
 [sha384]: <glossary/sha384.md>
+[turso]: <glossary/turso.md>
 [versitygw]: <https://github.com/versity/versitygw/releases/tag/v1.11.0>
 [viewpoint]: <glossary/viewpoint.md>
 
 # Development
+
+*Turso*[~][turso] is vendored as a git submodule at `vendor/turso`, pinned to a tested commit
+after its `v0.9.0-pre.1` tag. Fetch it before building:
+
+```sh
+git submodule update --init
+```
 
 Use *VersityGW v1.11.0*[~][versitygw] as the S3-compatible test endpoint, with its
 POSIX backend and a separate metadata sidecar directory. Install the pinned binary:
