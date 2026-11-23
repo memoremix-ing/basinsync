@@ -10,7 +10,9 @@ Reserve `VT_VECTOR_UINT` for extensions: its first element is one ASCII prefix
 byte, followed by the payload below. Ordinary unsigned arrays use other vector
 types; binary data uses `VT_BLOB`.
 
-Note that length of a `VT_VECTOR_UINT` can widen every element: byte-valued elements
+Variable-length vectors choose a common width for their length, values and offsets;
+values or reference offsets can force widening before the length does. A `VT_VECTOR_UINT`
+can therefore widen every element: byte-valued elements
 need at least two bytes each at 256 total elements, or four at 65,536, counting
 the tag (in contrast to `VT_BLOB`, which keeps payload bytes packed as its length grows).
 

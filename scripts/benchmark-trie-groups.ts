@@ -14,8 +14,7 @@ mkdirSync(root, { recursive: true });
 const workerOriginal = readFileSync("clients/trie-cost-worker.ts", "utf8");
 const results: any[] = [];
 const variants = (
-  Bun.env.TRIE_GROUP_VARIANTS ??
-  "baseline,group256,early-equal,hoist-length,group256-early,all,reverse-bounds,group256-reverse"
+  Bun.env.TRIE_GROUP_VARIANTS ?? "baseline,group255,group256"
 ).split(",");
 const rounds = Number(Bun.env.TRIE_GROUP_ROUNDS ?? 5);
 assert(Number.isSafeInteger(rounds) && rounds > 0);
@@ -33,16 +32,27 @@ for (const v of variants) {
     hoist = ["hoist-length", "all"].includes(v);
   const triePath = `${folder}/clients/structures/trie.ts`;
   let trie = readFileSync(triePath, "utf8");
-  if (group256) {
+  const groupCap = v.startsWith("group255")
+    ? 255
+    : group256 || v.startsWith("group256-")
+      ? 256
+      : 63;
+  if (v.startsWith("group") || v === "all") {
     assert(
-      trie.includes("rows.length > 63") && trie.includes("bucket.length <= 63"),
+      /rows.length > (63|255)/.test(trie) &&
+        /bucket.length <= (63|255)/.test(trie),
       "inspect changed group thresholds",
     );
     trie = trie
-      .replace("rows.length > 63", "rows.length > 256")
-      .replace("bucket.length <= 63", "bucket.length <= 256");
+      .replace(/rows.length > (63|255)/, `rows.length > ${groupCap}`)
+      .replace(/bucket.length <= (63|255)/, `bucket.length <= ${groupCap}`);
   }
-  if (v.includes("reverse")) {
+  if (v.endsWith("no-reversals")) {
+    const before =
+      "        reversals: bounds(\n          input.map((r) => r.key.slice().reverse()),\n          compare,\n        ),\n";
+    assert(trie.includes(before), "source snapshot has no reversal bounds");
+    trie = trie.replace(before, "");
+  } else if (v.includes("reverse")) {
     const before =
       "reversals: bounds(\n          input.map((r) => r.key.slice().reverse()),\n          compare,\n        ),";
     assert(trie.includes(before));

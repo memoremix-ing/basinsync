@@ -49,12 +49,15 @@ func TestCodecAndPublishedSL2(t *testing.T) {
 	}
 }
 func TestCanonicalBoundaries(t *testing.T) {
-	for _, n := range []int{0, 1, 63, 64, 1280, 1281, 5000} {
+	for _, n := range []int{0, 1, 63, 64, 255, 256, 1280, 1281, 5000} {
 		b := newTestBasin(t)
 		input := rows(n)
 		root, err := Build(b, input, CountConsumer(7))
 		if err != nil {
 			t.Fatal(n, err)
+		}
+		if _, exists := mapping(root[5])["reversals"]; exists {
+			t.Fatal("base header has reversal bounds")
 		}
 		reversed := append([]Entry{}, input...)
 		for i, j := 0, len(reversed)-1; i < j; i, j = i+1, j-1 {
@@ -68,7 +71,7 @@ func TestCanonicalBoundaries(t *testing.T) {
 		if err != nil || !reflect.DeepEqual(all, input) {
 			t.Fatal("scan", n, err)
 		}
-		for _, i := range []int{0, 62, 63, 1279, n - 1} {
+		for _, i := range []int{0, 62, 63, 254, 255, 1279, n - 1} {
 			if i >= 0 && i < n {
 				v, ok, err := Get(b, root, input[i].Key, 7)
 				if err != nil || !ok || !reflect.DeepEqual(v, input[i].Value) {

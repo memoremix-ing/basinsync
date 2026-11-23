@@ -170,6 +170,13 @@ for (const name of [
       `export async function sha384(b: Uint8Array): Promise<Uint8Array> { return new Uint8Array(new Bun.CryptoHasher("sha384").update(b).digest()); }\nexport async function hmac(k: Uint8Array,b: Uint8Array): Promise<Uint8Array> { return new Uint8Array(new Bun.CryptoHasher("sha384", k).update(b).digest()); }\n` +
       s[core].slice(end);
   }
+  // Keep the current wire schema constant across historical algorithm variants.
+  s[trie] = s[trie]
+    .replace(/\b63\b/g, "255")
+    .replace(
+      "        reversals: bounds(\n          input.map((r) => r.key.slice().reverse()),\n          compare,\n        ),\n",
+      "",
+    );
   variants[name] = s;
   for (const [file, text] of Object.entries(s)) {
     const dest = `${dir}/${name}/${file}`;
@@ -253,6 +260,7 @@ const report = {
     arch: arch(),
     memory: totalmem(),
   },
+  schema_normalization: "255-entry groups; no base reversal bounds",
   baseline_sha384: Object.fromEntries(files.map((f) => [f, hash(baseline[f])])),
   variant_sha384: Object.fromEntries(
     names.map((v) => [

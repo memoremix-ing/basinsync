@@ -5,6 +5,7 @@
 [client-costs-comparison]: <client-costs-comparison.html>
 [collection-performance]: <collection-performance.md>
 [flexbuffers]: <../../../../../../glossary/flexbuffers.md>
+[group-cap-255]: <group-cap-255.json>
 [lexidecimal]: <../../../../../../glossary/lexidecimal.md>
 [lexidecimal-grouping]: <lexidecimal-grouping.json>
 [node]: <../../../../../../glossary/node.md>
@@ -133,7 +134,7 @@ runs. Raw reports fingerprint each source variant and the worker.
 
 *Follow-up measurements*[~][lexidecimal-grouping]: 90 logical-only trials, five per
 configuration, plus separate structural counts. Hex characters have only 16 possible
-values: two characters span 256 keys. Our 63-entry group cap splits that dense
+values: two characters span 256 keys. The then-current 63-entry group cap splits that dense
 subtree where the collection's approximately 256-entry leaves retain it.
 
 On the same 100k ascending keys, raising only our experimental cap to 256 reduces
@@ -151,6 +152,24 @@ reduces a fresh 153.8 ms baseline to 136.2 ms; combining that with larger groups
 reaches 128.6 ms. Consolidation explains part of the advantage, not the whole build
 cost. Metadata work and construction strategy remain distinct targets.
 
-These are isolated prototypes; changing the stored group limit needs coordinated
-readers/schema handling. The group experiment driver accepts the `logical-final`
-source snapshot emitted by the preceding cost benchmark.
+These preceding measurements used the earlier format. The group experiment driver
+accepts the `logical-final` source snapshot emitted by the cost benchmark.
+
+## Adopt 255; leave reversed bounds to consumers
+
+The *255-cap follow-up*[~][group-cap-255] records 60 additional logical-only trials
+and direct encoder-width probes. A zero-valued vector grows from 259 to 518 encoded
+bytes at 255→256 entries (one-byte to two-byte elements). In a group containing
+two-byte key blobs and six-digit integer values, offsets/values already require
+two/four-byte elements at both lengths: the whole group grows only 2589→2601 bytes.
+
+With base reversed bounds removed, 100k ascending keys give 420 logical nodes at
+either cap; 255 uses 781 nonempty groups versus 392 at 256. Lookup is 0.384 versus
+0.371 µs; construction is 126.9 versus 125.1 ms. The earlier 63 cap gives 0.431 µs
+and 131.5 ms without reversed bounds.
+
+The shared format now caps groups at 255 and omits `reversals` from headers in
+TypeScript, Rust and Go. Consumers can aggregate reversed-key bounds through
+footer summaries. Boundary tests cover 255/256 and reject an unsplit 256-entry
+group; 129 client tests, native tests and 234 cross-language cases pass, as does
+live reservation/upload/commit/promotion/restart integration.

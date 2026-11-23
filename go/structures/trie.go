@@ -173,7 +173,7 @@ func buildRows(b *Basin, input []row, c Consumer, depth int) Built {
 	}
 	rows := make([]row, len(input))
 	summaries := make([]any, len(input))
-	keys, reversed := make([][]byte, len(input)), make([][]byte, len(input))
+	keys := make([][]byte, len(input))
 	minLen, maxLen, nullity := 0, 0, 0
 	if len(input) > 0 {
 		minLen = len(input[0].key)
@@ -182,11 +182,6 @@ func buildRows(b *Basin, input []row, c Consumer, depth int) Built {
 		rows[i] = row{key: r.key[p:], value: r.value, summary: r.summary}
 		summaries[i] = r.summary
 		keys[i] = r.key
-		rev := append([]byte{}, r.key...)
-		for a, z := 0, len(rev)-1; a < z; a, z = a+1, z-1 {
-			rev[a], rev[z] = rev[z], rev[a]
-		}
-		reversed[i] = rev
 		if len(r.key) < minLen {
 			minLen = len(r.key)
 		}
@@ -204,7 +199,7 @@ func buildRows(b *Basin, input []row, c Consumer, depth int) Built {
 	own := rows
 	var members []*member
 	var edged any
-	if len(rows) > 63 {
+	if len(rows) > 255 {
 		own = []row{}
 		for _, r := range rows {
 			if len(r.key) == 0 {
@@ -220,7 +215,7 @@ func buildRows(b *Basin, input []row, c Consumer, depth int) Built {
 				}
 			}
 			if len(bucket) > 0 {
-				if len(bucket) <= 63 {
+				if len(bucket) <= 255 {
 					members[high] = &member{group: bucket}
 				} else {
 					members[high] = &member{nodes: split(b, bucket, c, depth)}
@@ -284,7 +279,7 @@ func buildRows(b *Basin, input []row, c Consumer, depth int) Built {
 	if len(input) > 0 {
 		lengths = vector(int64(minLen), int64(maxLen))
 	}
-	header := map[string]any{"count": big.NewInt(int64(len(input))), "nullity": big.NewInt(int64(nullity)), "degree": int64(degree), "inlined": int64(inlined(own, members)), "prefix": prefix, "keys": bounds(keys), "reversals": bounds(reversed), "lengths": lengths}
+	header := map[string]any{"count": big.NewInt(int64(len(input))), "nullity": big.NewInt(int64(nullity)), "degree": int64(degree), "inlined": int64(inlined(own, members)), "prefix": prefix, "keys": bounds(keys), "lengths": lengths}
 	node := Node{"0": Symbol{Name: "species"}, "1": Domain, "2": TriePath, "3": query(edges, b.MaxDegree, b.MaxHeight), "4": int64(0), "5": header, "6": vector(c.Migration, summary, group(own), nested, edged)}
 	return Built{node, edges}
 }
@@ -313,7 +308,7 @@ func parts(r Ref, migration int64) (header any, group, members Ref, edged any) {
 	require(f.len() == 5 && integer(f.item(0).owned(0)) == migration, "unsupported trie migration")
 	header = r.get("5").owned(0)
 	group = f.item(2)
-	require(group.typ == 9 && group.get("keys").len() <= 63 && group.get("keys").len() == group.get("values").len(), "invalid group")
+	require(group.typ == 9 && group.get("keys").len() <= 255 && group.get("keys").len() == group.get("values").len(), "invalid group")
 	members = f.item(3)
 	edged = f.item(4).owned(0)
 	if edged == nil {
@@ -326,7 +321,7 @@ func parts(r Ref, migration int64) (header any, group, members Ref, edged any) {
 }
 func find(g Ref, k []byte) *Ref {
 	keys, values := g.get("keys"), g.get("values")
-	require(keys.len() <= 63 && keys.len() == values.len(), "invalid group")
+	require(keys.len() <= 255 && keys.len() == values.len(), "invalid group")
 	low, high := 0, keys.len()
 	for low < high {
 		mid := (low + high) / 2
@@ -444,7 +439,7 @@ func visitDepth(b *Basin, r Ref, base, prefix []byte, migration int64, accept fu
 	}
 	emitGroup := func(g Ref) bool {
 		keys, values := g.get("keys"), g.get("values")
-		require(keys.len() <= 63 && keys.len() == values.len(), "invalid group")
+		require(keys.len() <= 255 && keys.len() == values.len(), "invalid group")
 		for i := 0; i < keys.len(); i++ {
 			k := append(append([]byte{}, here...), keys.item(i).bytes()...)
 			if bytes.HasPrefix(k, prefix) && !checked(emit(k, values.item(i))) {

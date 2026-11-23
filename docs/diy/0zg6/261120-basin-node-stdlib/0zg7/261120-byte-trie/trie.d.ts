@@ -12,7 +12,6 @@ interface TrieNode_S0<
     inlined: U32; // count of nested values up to edge boundaries
     prefix: null | Uint8Array; // (for trie-compression)
     keys: Bounds<Uint8Array>;
-    reversals: Bounds<Uint8Array>; // min/max reverse-key
     lengths: Bounds<U32>; // min/max key-lengths
   },
   {
@@ -27,7 +26,7 @@ interface TrieNode_S0<
 > {}
 
 interface TrieGroup<ValueT> {
-  keys: Array<Uint8Array>; // 63 maximum; suffixes after consumed prefix/branch bytes
+  keys: Array<Uint8Array>; // 255 maximum; suffixes after consumed prefix/branch bytes
   values: Array<ValueT>; // (one per key)
 }
 

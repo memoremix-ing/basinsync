@@ -15,8 +15,8 @@ suffixes after consumed bytes. A high-nibble group retains its next byte; a
 low-nibble branch consumes that whole byte. Arrays use nibble indices and omit
 trailing null slots.
 
-Up to 63 entries stay in one group. On overflow, keep only a prefix-ending
-entry there; partition the rest by high nibble, retaining groups of at most 63,
+Up to 255 entries stay in one group. On overflow, keep only a prefix-ending
+entry there; partition the rest by high nibble, retaining groups of at most 255,
 then by low nibble into recursive trie nodes. If prospective inline values exceed
 1280, replace every nested node with a *basin edge*[~][strong-edge]. If value edges
 would exceed the configured *degree*[~][node-degree], also expand high-nibble
@@ -25,6 +25,7 @@ content-derived rules. Trie-header `degree` counts immediate groups/child nodes;
 `inlined` counts values before crossing *basin edges*[~][strong-edge].
 
 Consumer aggregation is ordered by full key, with a supplied empty identity.
+Reversed-key bounds, when useful, belong in consumer-defined footer summaries.
 Replicate headers and summaries across *basin edges*[~][strong-edge] for pruning.
 Volume format 0 uses 4096-byte pages for its file convenience API. Raw page maps accept arbitrary-size blobs and sparse nonnegative
 *Lexidecimal*[~][lexidecimal] page numbers, including empty blobs. Sector summaries compose *BrombergSL2*[~][bromberg-sl2]

@@ -38,15 +38,16 @@ fn published_sl2_vector_and_composition() -> Result<()> {
 }
 #[test]
 fn canonical_boundaries_and_lazy_reads() -> Result<()> {
-    for count in [0, 1, 63, 64, 1280, 1281, 5000] {
+    for count in [0, 1, 63, 64, 255, 256, 1280, 1281, 5000] {
         let mut b = basin();
         let data = rows(count);
         let a = trie::build(&mut b, data.clone(), &Count(7))?;
+        assert!(!a.at(5)?.map_ref()?.contains_key("reversals"));
         let mut reversed = data.clone();
         reversed.reverse();
         let same = trie::build(&mut b, reversed, &Count(7))?;
         assert_eq!(a, same);
-        for i in [0, 62, 63, 1279, count.saturating_sub(1)]
+        for i in [0, 62, 63, 254, 255, 1279, count.saturating_sub(1)]
             .into_iter()
             .filter(|i| *i < count)
         {

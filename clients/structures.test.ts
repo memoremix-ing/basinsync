@@ -4,6 +4,7 @@ import {
   MemoryStorage,
   concat,
   equal,
+  compare,
   utf8,
   hex,
   nodeBytes,
@@ -41,16 +42,17 @@ test("SL2 independent published vector and concatenation", () => {
   ).toEqual(sl2.hash(utf8("hello, world!")));
 });
 test("canonical groups, suffixes, edge boundaries, empty keys and null values", async () => {
-  for (const count of [0, 1, 63, 64, 1280, 1281, 5000]) {
+  for (const count of [0, 1, 63, 64, 255, 256, 1280, 1281, 5000]) {
     const storage = new MemoryStorage(),
       basin = new Basin(storage, { seed }),
       data = entries(count),
       a = await Trie.build(basin, data, sum),
       b = await Trie.build(basin, data.toReversed(), sum);
+    expect(Object.hasOwn(a.root[5] as object, "reversals")).toBe(false);
     expect(a.root[6].sha384).toEqual(b.root[6].sha384);
     expect(a.root[6][1]).toBe(BigInt(count));
     const loaded = new Trie(new Basin(storage, { seed }), a.root, sum);
-    for (const i of [0, 1, 62, 63, 1279, count - 1].filter(
+    for (const i of [0, 1, 62, 63, 254, 255, 1279, count - 1].filter(
       (i) => i >= 0 && i < count,
     ))
       expect(await loaded.get(data[i][0])).toEqual(data[i][1]);
@@ -339,4 +341,50 @@ test("borrowed metadata validation checks nested values after cache hits", async
     await expect(b.load(bad)).rejects.toThrow("summary");
   }
   await b.load(e);
+});
+
+test("consumers can summarize reversed-key bounds in footers", async () => {
+  type Bounds = [Uint8Array, Uint8Array] | null;
+  const consumer: Consumer<number, Bounds> = {
+    migration: 9,
+    empty: null,
+    entry: (key) => {
+      const reversed = key.slice().reverse();
+      return [reversed, reversed];
+    },
+    combine: (summaries) => {
+      const all = summaries.flatMap((b) => b ?? []).sort(compare);
+      return all.length ? [all[0], all.at(-1)!] : null;
+    },
+  };
+  const input: [Uint8Array, number][] = Array.from({ length: 1500 }, (_, i) => [
+    new Uint8Array([i >> 8, i & 255]),
+    i,
+  ]);
+  const trie = await Trie.build(
+    new Basin(new MemoryStorage(), { seed }),
+    input,
+    consumer,
+  );
+  expect(Object.hasOwn(trie.root[5] as object, "reversals")).toBe(false);
+  expect((trie.root[6][1] as Bounds)?.map(hex)).toEqual(["0000", "ff04"]);
+  expect(await trie.get(input[1499][0])).toBe(1499);
+});
+
+test("readers reject a 256-entry unsplit group", async () => {
+  const basin = new Basin(new MemoryStorage(), { seed });
+  const trie = await Trie.build(
+    basin,
+    Array.from(
+      { length: 255 },
+      (_, i) => [new Uint8Array([i]), i] as [Uint8Array, number],
+    ),
+    plain,
+  );
+  const node = object<Node>(await basin.load(trie.root));
+  const group = node[6][2] as { keys: Uint8Array[]; values: number[] };
+  group.keys.push(new Uint8Array([255]));
+  group.values.push(255);
+  const bad = new Trie(basin, await basin.seal(node, []), plain);
+  await expect(bad.get("00")).rejects.toThrow("group");
 });

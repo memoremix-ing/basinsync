@@ -48,7 +48,6 @@ interface TrieNode_S0<
     inlined: U32; // count of nested values up to edge boundaries
     prefix: null | Uint8Array; // (for trie-compression)
     keys: Bounds<Uint8Array>;
-    reversals: Bounds<Uint8Array>; // min/max reverse-key
     lengths: Bounds<U32>; // min/max key-lengths
   },
   {
@@ -63,7 +62,7 @@ interface TrieNode_S0<
 > {}
 
 interface TrieGroup<ValueT> {
-  keys: Array<Uint8Array>; // 63 maximum; suffixes after consumed prefix/branch bytes
+  keys: Array<Uint8Array>; // 255 maximum; suffixes after consumed prefix/branch bytes
   values: Array<ValueT>; // (one per key)
 }
 
@@ -184,8 +183,8 @@ type SyncSector_M0 = TrieNode_S0<{
 Groups store the unconsumed key suffix: after branches consume byte `ab` from
 key `ab cd`, the group stores `cd`. Common byte prefixes move into the header.
 Splitting and collapsing are canonical functions of the remaining contents;
-inserting 64 keys then deleting one yields the same shape as directly inserting
-those remaining 63. Empty structural children disappear, whether inline or behind
+inserting 256 keys then deleting one yields the same shape as directly inserting
+those remaining 255. Empty structural children disappear, whether inline or behind
 *basin edges*[~][strong-edge].
 
 Structural schema (slot 4), consumer migration (the first element of slot 6),
@@ -200,7 +199,7 @@ inclusive minimum and maximum. Aggregation ignores `null` bounds and returns
 empty byte strings, which can be genuine observations.
 
 Only a root may represent an empty trie. Its header has `count = nullity = 0n`,
-`degree = inlined = 0`, `prefix = null`, and `keys = reversals = lengths = null`.
+`degree = inlined = 0`, `prefix = null`, and `keys = lengths = null`.
 Its selected footer is `[migration, emptySummary, { keys: [], values: [] }, null, null]`.
 Each consumer migration defines its canonical `emptySummary`; it is not
 necessarily `null`.
@@ -236,7 +235,6 @@ For migration 0 with a null empty summary, the root in
     "inlined": 0,
     "prefix": null,
     "keys": null,
-    "reversals": null,
     "lengths": null
   },
   "6": [0, null, { "keys": [], "values": [] }, null, null]
@@ -321,7 +319,7 @@ const value = typeof op === "function" ? await resolveOperation(op) : op;
 Compare logical traversal separately from serialization and storage using the
 *client cost measurements*[~][client-costs].
 
-Exercise empty/null keys, 63/64 and 1280/1281 boundaries, canonical deletion,
+Exercise empty/null keys, 255/256 and 1280/1281 boundaries, canonical deletion,
 Unicode basenames, consumer migrations, shared descendants, corrupted payloads,
 partial reads, shortcut misses, and old snapshots. Cross-read every language's
 output with every other implementation. Then verify real storage, promotion,

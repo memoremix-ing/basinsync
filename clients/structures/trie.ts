@@ -89,7 +89,7 @@ function lookupGroup(g: Reference): LookupGroup {
   const keys = g.get("keys"),
     values = g.get("values");
   check(
-    g.isMap() && keys.length() === values.length() && keys.length() <= 63,
+    g.isMap() && keys.length() === values.length() && keys.length() <= 255,
     "invalid trie group",
   );
   const blobs: Uint8Array[] = [];
@@ -207,10 +207,6 @@ export class Trie<V = unknown, M = null> {
           input.map((r) => r.key),
           compare,
         ),
-        reversals: bounds(
-          input.map((r) => r.key.slice().reverse()),
-          compare,
-        ),
         lengths: bounds(
           input.map((r) => r.key.length),
           (a, b) => a - b,
@@ -235,7 +231,7 @@ export class Trie<V = unknown, M = null> {
         }
         return trim(low);
       };
-      if (rows.length > 63) {
+      if (rows.length > 255) {
         own = rows.filter((r) => r.key.length === 0);
         members = Array(16).fill(null);
         for (let high = 0; high < 16; high++) {
@@ -244,7 +240,7 @@ export class Trie<V = unknown, M = null> {
           );
           if (bucket.length)
             members[high] =
-              bucket.length <= 63 ? group(bucket) : await split(bucket);
+              bucket.length <= 255 ? group(bucket) : await split(bucket);
         }
         members = trim(members);
         edged = false;
@@ -346,7 +342,7 @@ export class Trie<V = unknown, M = null> {
     check(
       g.isMap() &&
         g.get("keys").length() === g.get("values").length() &&
-        g.get("keys").length() <= 63,
+        g.get("keys").length() <= 255,
       "invalid trie group",
     );
     const m = f.get(3),
@@ -506,7 +502,7 @@ export class Trie<V = unknown, M = null> {
         const ks = g.get("keys"),
           vs = g.get("values");
         check(
-          ks.length() === vs.length() && ks.length() <= 63,
+          ks.length() === vs.length() && ks.length() <= 255,
           "invalid group",
         );
         for (let i = 0; i < ks.length(); i++) {

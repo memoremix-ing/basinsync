@@ -201,7 +201,7 @@ fn build_rows<S: Storage, C: Consumer>(
     let mut own = rows.clone();
     let mut members = Vec::<Option<Member>>::new();
     let mut edged = Null;
-    if rows.len() > 63 {
+    if rows.len() > 255 {
         own = rows.iter().filter(|r| r.key.is_empty()).cloned().collect();
         for high in 0..16 {
             let bucket = rows
@@ -212,7 +212,7 @@ fn build_rows<S: Storage, C: Consumer>(
             members.push(if bucket.is_empty() {
                 None
             } else {
-                Some(if bucket.len() <= 63 {
+                Some(if bucket.len() <= 255 {
                     Member::Group(bucket)
                 } else {
                     Member::Nodes(split(basin, &bucket, c, depth)?)
@@ -259,12 +259,6 @@ fn build_rows<S: Storage, C: Consumer>(
         })
         .sum::<usize>();
     let keys = byte_bounds(input.iter().map(|r| r.key.clone()).collect());
-    let reversals = byte_bounds(
-        input
-            .iter()
-            .map(|r| r.key.iter().rev().copied().collect())
-            .collect(),
-    );
     let lengths = if input.is_empty() {
         Null
     } else {
@@ -283,7 +277,6 @@ fn build_rows<S: Storage, C: Consumer>(
         ("inlined", inlined.into()),
         ("prefix", prefix),
         ("keys", keys),
-        ("reversals", reversals),
         ("lengths", lengths),
     ]);
     let nested = if members.is_empty() {
@@ -419,7 +412,7 @@ fn parts(view: &View, migration: u32) -> Result<(Value, View, View, Option<bool>
     let keys = field(g.reader()?, "keys")?.get_vector()?;
     let values = field(g.reader()?, "values")?.get_vector()?;
     ensure!(
-        keys.len() <= 63 && keys.len() == values.len(),
+        keys.len() <= 255 && keys.len() == values.len(),
         "invalid trie group"
     );
     let m = footer.item(3);
@@ -438,7 +431,7 @@ fn find_group(g: &View, k: &[u8]) -> Result<Option<View>> {
     let keys = field(g.reader()?, "keys")?.get_vector()?;
     let values = field(g.reader()?, "values")?.get_vector()?;
     ensure!(
-        keys.len() == values.len() && keys.len() <= 63,
+        keys.len() == values.len() && keys.len() <= 255,
         "invalid key group"
     );
     let mut lo = 0;

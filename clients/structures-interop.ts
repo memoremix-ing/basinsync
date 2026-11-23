@@ -43,7 +43,7 @@ const cases: any[] = [
       ],
     ],
   },
-  ...[63, 64, 1280, 1281, 5000].map((n) => ({
+  ...[63, 64, 255, 256, 1280, 1281, 5000].map((n) => ({
     kind: "trie",
     seed,
     entries: Array.from({ length: n }, (_, i) => [
