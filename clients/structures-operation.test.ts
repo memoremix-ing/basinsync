@@ -123,3 +123,39 @@ test("synchronous and asynchronous consumer aggregation produce identical bytes"
   expect(a.root[6].sha384).toEqual(b.root[6].sha384);
   expect(await b.get(rows[1599][0])).toBe(1599);
 });
+
+test("offset reads preserve long prefixes across uncached node boundaries", async () => {
+  const { utf8 } = await import("./structures/core");
+  const rows: [Uint8Array, unknown][] = [];
+  for (let group = 0; group < 4; group++)
+    for (let i = 0; i < 2048; i++)
+      rows.push([
+        utf8(`root/${group}-shared/${i.toString(16).padStart(4, "0")}`),
+        i % 7 ? { n: BigInt(i), data: new Uint8Array([i & 255]) } : null,
+      ]);
+  const storage = new MemoryStorage();
+  const built = await Trie.build(new Basin(storage, { seed }), rows, plain);
+  const cold = new Trie(
+    new Basin(storage, { cacheBytes: 0 }),
+    built.root,
+    plain,
+  );
+  for (const index of [0, 1, 254, 255, 256, 2047, 2048, rows.length - 1]) {
+    const key = rows[index][0].slice(),
+      op = cold.getOrDefer(key);
+    expect(typeof op).toBe("function");
+    key.fill(255);
+    expect(await resolveOperation(op)).toEqual(rows[index][1]);
+    const view = await cold.getView(rows[index][0]);
+    expect(view).toBeDefined();
+  }
+  for (const missing of [
+    "root/1",
+    "root/1-shared",
+    "root/1-shared/",
+    "root/1-shared/00",
+    "root/1-shared/0800",
+    "root/1-shared/0000x",
+  ])
+    expect(await cold.get(utf8(missing))).toBeUndefined();
+});

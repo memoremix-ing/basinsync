@@ -16,6 +16,7 @@ const files = [
   "clients/structures/types.ts",
   "clients/structures/operation.ts",
 ];
+const donorRef = Bun.env.TRIE_COST_DONOR_REF ?? "35e4d6ac";
 const baseline: Record<string, string> = {},
   current: Record<string, string> = {};
 for (const file of files) {
@@ -27,7 +28,9 @@ for (const file of files) {
   baseline[file] = file.endsWith("/operation.ts")
     ? readFileSync(file, "utf8")
     : child.stdout.toString();
-  current[file] = readFileSync(file, "utf8");
+  const donor = Bun.spawnSync(["jj", "file", "show", "-r", donorRef, file]);
+  assert.equal(donor.exitCode, 0, donor.stderr.toString());
+  current[file] = donor.stdout.toString();
 }
 const cut = (text: string, a: string, b: string) =>
   text.slice(text.indexOf(a), text.indexOf(b, text.indexOf(a)));
@@ -242,6 +245,7 @@ const hash = (s: string) => createHash("sha384").update(s).digest("hex");
 const report = {
   recorded_at: new Date().toISOString(),
   base_ref: baseRef,
+  donor_ref: donorRef,
   base_commit: Bun.spawnSync([
     "jj",
     "log",

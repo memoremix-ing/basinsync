@@ -100,15 +100,30 @@ function lookupGroup(g: Reference): LookupGroup {
   }
   return { keys: blobs, values };
 }
-function findValue(group: LookupGroup, key: Uint8Array): Reference | undefined {
+/** Compare a stored suffix against a position in the caller's owned key. */
+function compareSuffix(a: Uint8Array, raw: Uint8Array, offset: number): number {
+  const remaining = raw.length - offset,
+    length = Math.min(a.length, remaining);
+  for (let i = 0; i < length; i++) {
+    const difference = a[i] - raw[offset + i];
+    if (difference) return difference;
+  }
+  return a.length - remaining;
+}
+function findValue(
+  group: LookupGroup,
+  key: Uint8Array,
+  offset: number,
+): Reference | undefined {
   let lo = 0,
     hi = group.keys.length;
   while (lo < hi) {
     const mid = (lo + hi) >> 1;
-    if (compare(group.keys[mid], key) < 0) lo = mid + 1;
+    if (compareSuffix(group.keys[mid], key, offset) < 0) lo = mid + 1;
     else hi = mid;
   }
-  return lo < group.keys.length && equal(group.keys[lo], key)
+  return lo < group.keys.length &&
+    compareSuffix(group.keys[lo], key, offset) === 0
     ? group.values.get(lo)
     : undefined;
 }
@@ -186,14 +201,17 @@ export class Trie<V = unknown, M = null> {
       depth = 0,
     ): Promise<TrieNode<V, M>> => {
       check(depth < 256, "trie nesting limit");
-      let prefixLength = input.length ? input[0].key.length : 0;
-      for (const r of input) {
-        prefixLength = Math.min(prefixLength, r.key.length);
-        for (let i = 0; i < prefixLength; i++)
-          if (r.key[i] !== input[0].key[i]) {
-            prefixLength = i;
-            break;
-          }
+      // Stable partitions preserve sorting: the endpoints determine the common prefix.
+      let prefixLength = 0;
+      if (input.length) {
+        const first = input[0].key,
+          last = input[input.length - 1].key;
+        const limit = Math.min(first.length, last.length);
+        while (
+          prefixLength < limit &&
+          first[prefixLength] === last[prefixLength]
+        )
+          prefixLength++;
       }
       const prefix = prefixLength ? input[0].key.slice(0, prefixLength) : null,
         rows = input.map((r) => ({ ...r, key: r.key.slice(prefixLength) }));
@@ -203,10 +221,7 @@ export class Trie<V = unknown, M = null> {
         degree: 0,
         inlined: 0,
         prefix,
-        keys: bounds(
-          input.map((r) => r.key),
-          compare,
-        ),
+        keys: input.length ? [input[0].key, input[input.length - 1].key] : null,
         lengths: bounds(
           input.map((r) => r.key.length),
           (a, b) => a - b,
@@ -221,8 +236,10 @@ export class Trie<V = unknown, M = null> {
         edged: boolean | null = null;
       const split = async (bucket: Row<V, M>[]) => {
         const low: (Local<V, M> | null)[] = Array(16).fill(null);
+        const parts: Row<V, M>[][] = Array.from({ length: 16 }, () => []);
+        for (const row of bucket) parts[row.key[0] & 15].push(row);
         for (let n = 0; n < 16; n++) {
-          const part = bucket.filter((r) => (r.key[0] & 15) === n);
+          const part = parts[n];
           if (part.length)
             low[n] = await build(
               part.map((r) => ({ ...r, key: r.key.slice(1) })),
@@ -231,13 +248,15 @@ export class Trie<V = unknown, M = null> {
         }
         return trim(low);
       };
+      let highBuckets: Row<V, M>[][] | undefined;
       if (rows.length > 255) {
         own = rows.filter((r) => r.key.length === 0);
         members = Array(16).fill(null);
+        highBuckets = Array.from({ length: 16 }, () => []);
+        for (const row of rows)
+          if (row.key.length) highBuckets[row.key[0] >> 4].push(row);
         for (let high = 0; high < 16; high++) {
-          const bucket = rows.filter(
-            (r) => r.key.length > 0 && r.key[0] >> 4 === high,
-          );
+          const bucket = highBuckets[high];
           if (bucket.length)
             members[high] =
               bucket.length <= 255 ? group(bucket) : await split(bucket);
@@ -285,9 +304,7 @@ export class Trie<V = unknown, M = null> {
           for (let high = 0; high < members.length; high++) {
             const m = members[high];
             if (m && !Array.isArray(m))
-              members[high] = await split(
-                rows.filter((r) => r.key.length > 0 && r.key[0] >> 4 === high),
-              );
+              members[high] = await split(highBuckets![high]);
           }
         for (const m of members)
           if (Array.isArray(m))
@@ -428,37 +445,46 @@ export class Trie<V = unknown, M = null> {
     edge: Edge,
     k: Uint8Array,
     depth: number,
+    offset = 0,
   ): Generator<PromiseLike<unknown>, Reference | undefined, unknown> {
     const r = (yield this.basin.load(edge)) as Reference;
-    const next = this.seek(r, k, depth);
+    const next = this.seek(r, k, depth, offset);
     return typeof next === "function" ? yield* next() : next;
   }
   private seek(
     r: Reference,
     k: Uint8Array,
     depth: number,
+    offset = 0,
   ): Operation<Reference | undefined> {
     for (;;) {
       check(depth++ < 256, "trie nesting limit");
       const p = this.lookupPlan(r),
         prefix = p.header.prefix;
       if (prefix) {
-        if (!starts(k, prefix)) return undefined;
-        k = k.subarray(prefix.length);
+        if (k.length - offset < prefix.length) return undefined;
+        for (let i = 0; i < prefix.length; i++)
+          if (prefix[i] !== k[offset + i]) return undefined;
+        offset += prefix.length;
       }
-      const own = findValue(p.group, k);
+      const own = findValue(p.group, k, offset);
       if (own !== undefined) return own;
-      if (!k.length) return undefined;
-      const child = this.lookupChild(p, k[0]);
+      if (offset === k.length) return undefined;
+      const child = this.lookupChild(p, k[offset]);
       if (!child) return undefined;
-      if ("keys" in child) return findValue(child, k);
-      k = k.subarray(1);
+      if ("keys" in child) return findValue(child, k, offset);
+      offset++;
       if ("edge" in child) {
         const h = child.header;
-        if (!h.keys || compare(k, h.keys[0]) < 0 || compare(k, h.keys[1]) > 0)
+        if (
+          !h.keys ||
+          compareSuffix(h.keys[0], k, offset) > 0 ||
+          compareSuffix(h.keys[1], k, offset) < 0
+        )
           return undefined;
         const cached = this.basin.peek(child.edge);
-        if (!cached) return () => this.resumeLookup(child.edge, k, depth);
+        if (!cached)
+          return () => this.resumeLookup(child.edge, k, depth, offset);
         r = cached;
       } else r = child.ref;
     }

@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { encode, toReference } from "../clients/flexbuffer";
 const folder = process.argv[2];
 assert(
   folder,
   "usage: bun scripts/verify-trie-logic.ts <construction snapshots> [fixtures]",
 );
 const fixtures = resolve(process.argv[3] ?? ".local/trie-lex-zero");
-const names = ["baseline", "endpoints", "partition", "endpoints-partition"];
+const names = (
+  Bun.env.TRIE_VERIFY_VARIANTS ??
+  "baseline,endpoints,partition,endpoints-partition"
+).split(",");
 const modules = await Promise.all(
   names.map(async (name) => {
     const root = resolve(`${folder}/${name}/clients/structures`);
@@ -29,13 +33,13 @@ const cases: any[][] = [
   [],
   [["", 0]],
   [
-    ["", 0],
+    ["", null],
     ["00", 1],
     ["0000", 2],
     ["000000", 3],
     ["00ff", 4],
     ["01", 5],
-    ["abcd", 6],
+    ["abcd", { symbol: Symbol.match, bytes: new Uint8Array([3]) }],
     ["abcd00", 7],
     ["ff", 8],
   ],
@@ -50,7 +54,8 @@ for (const layout of ["random", "lexidecimal"])
       .entries,
   );
 let graphs = 0,
-  queries = 0;
+  queries = 0,
+  publicReads = 0;
 for (const [ci, rows] of cases.entries()) {
   let digest: string | undefined;
   for (const { name, C, T } of modules) {
@@ -70,6 +75,27 @@ for (const [ci, rows] of cases.entries()) {
     if (digest) assert.equal(d, digest, `${ci}/${name}`);
     else digest = d;
     graphs++;
+    const expected = new Map(rows.map(([h, v]) => [h, v]));
+    const wanted = new Set([
+      "",
+      "00",
+      "00000000",
+      "ffff",
+      "abcdef",
+      "abcd00ff",
+    ]);
+    for (const [h] of rows.slice(0, 256)) {
+      wanted.add(h);
+      wanted.add(h + "ff");
+      if (h.length) wanted.add(h.slice(0, -2));
+    }
+    for (const h of wanted) {
+      const value = expected.has(h)
+        ? C.object(toReference(encode(expected.get(h))))
+        : undefined;
+      assert.deepEqual(await t.get(h), value, `${ci}/${name}/${h}`);
+      publicReads++;
+    }
   }
   const { C, T } = modules[0];
   class Store extends C.Basin {
@@ -127,10 +153,44 @@ for (const [ci, rows] of cases.entries()) {
     queries++;
   }
 }
+
+const edgeRows = JSON.parse(
+  readFileSync(`${fixtures}/random-1000.json`, "utf8"),
+).entries.slice(0, 512);
+let prior: string | undefined;
+for (const { name, C, T } of modules) {
+  const b = new C.Basin(new C.MemoryStorage(), {
+    seed: new Uint8Array(32).fill(42),
+  });
+  const consumer = {
+    migration: 7,
+    empty: 0n,
+    entry: () => 1n,
+    combine: (s: bigint[]) => s.reduce((a, b) => a + b, 0n),
+  };
+  const leaves = new Map<number, any>();
+  for (const [, v] of edgeRows)
+    leaves.set(v, (await T.build(b, [["", v]], consumer)).root);
+  const trie = await T.build(b, edgeRows, {
+    ...consumer,
+    edges: (v: number) => [leaves.get(v)],
+  });
+  const digest = C.hex(trie.root[6].sha384);
+  if (prior) assert.equal(digest, prior, `value-edge packing/${name}`);
+  else prior = digest;
+  for (const node of b.storage.objects.values())
+    assert((node as any).edges.length <= 320);
+  for (const [h, v] of edgeRows.slice(0, 32)) {
+    assert.equal(await trie.get(h), v);
+    publicReads++;
+  }
+  graphs++;
+}
 console.log(
   JSON.stringify({
     canonical_graphs: graphs,
     reader_queries: queries,
-    fixtures: cases.length,
+    public_hit_miss_reads: publicReads,
+    fixtures: cases.length + 1,
   }),
 );

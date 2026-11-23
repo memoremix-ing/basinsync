@@ -16,6 +16,7 @@ import {
   link,
   nodeKey,
   Node,
+  type Edge,
 } from "./structures/core";
 import { Trie, plain, Consumer } from "./structures/trie";
 import { Volume, PAGE_SIZE } from "./structures/volume";
@@ -387,4 +388,30 @@ test("readers reject a 256-entry unsplit group", async () => {
   group.values.push(255);
   const bad = new Trie(basin, await basin.seal(node, []), plain);
   await expect(bad.get("00")).rejects.toThrow("group");
+});
+
+test("stable buckets preserve canonical value-edge packing", async () => {
+  const storage = new MemoryStorage(),
+    basin = new Basin(storage, { seed });
+  const leaves: Edge[] = [];
+  for (let i = 0; i < 512; i++)
+    leaves.push((await Trie.build(basin, [["", i]], plain)).root);
+  const input: [Uint8Array, number][] = Array.from({ length: 512 }, (_, i) => [
+    new Uint8Array([i & 255, i >> 8]),
+    i,
+  ]);
+  const consumer: Consumer<number, null> = {
+    ...plain,
+    edges: (value) => [leaves[value]],
+  };
+  const a = await Trie.build(basin, input, consumer),
+    count = storage.objects.size;
+  const b = await Trie.build(basin, input.toReversed(), consumer);
+  expect(a.root[6].sha384).toEqual(b.root[6].sha384);
+  expect(storage.objects.size).toBe(count);
+  expect(a.root[3].height).toBe(2);
+  for (const node of storage.objects.values())
+    expect(node.edges.length).toBeLessThanOrEqual(320);
+  for (const i of [0, 1, 254, 255, 256, 511])
+    expect(await b.get(input[i][0])).toBe(i);
 });

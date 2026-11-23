@@ -18,6 +18,7 @@ prerequisites:
 [node-degree]: <../../../../../glossary/node-degree.md>
 [node-height]: <../../../../../glossary/node-height.md>
 [object-keys]: <../../../../../object-keys.md>
+[promoted-costs]: <benchmark/promoted-costs.md>
 [revision]: <../../../../../glossary/revision.md>
 [strong-edge]: <../../../../../glossary/strong-edge.md>
 [trie-format]: <../../../../../trie-format.md>
@@ -306,6 +307,9 @@ Expose borrowed values for lazy parsing, owned reads for independent data, and
 summary/prefix filters before fetching *basin nodes*[~][node]. TypeScript uses
 Web Crypto and browser APIs; the Rust structures crate builds independently for
 Wasm. Treat borrowed byte views as immutable.
+Partition nibble buckets in one pass and derive common prefixes/key bounds from
+sorted endpoints. Carry a byte offset through deferred reads. See the
+*implementation measurements*[~][promoted-costs].
 
 TypeScript's `getOrDefer` / `getViewOrDefer` return ready values synchronously,
 or a lazy generator function when I/O is needed; `get` / `getView` retain their

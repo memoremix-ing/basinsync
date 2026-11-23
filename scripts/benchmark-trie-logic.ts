@@ -64,7 +64,15 @@ const paths = [
   "clients/flexbuffer.ts",
   "clients/symbols.ts",
 ];
-const base = Object.fromEntries(paths.map((p) => [p, readFileSync(p, "utf8")]));
+// Freeze the pre-promotion sources so named ablations retain their original meaning.
+const baseRef = Bun.env.TRIE_LOGIC_BASE_REF ?? "35e4d6ac";
+const base = Object.fromEntries(
+  paths.map((p) => {
+    const child = Bun.spawnSync(["jj", "file", "show", "-r", baseRef, p]);
+    assert.equal(child.exitCode, 0, child.stderr.toString());
+    return [p, child.stdout.toString()];
+  }),
+);
 const worker = readFileSync("clients/trie-cost-worker.ts", "utf8"),
   sources: Record<string, Record<string, string>> = {};
 for (const name of names) {
@@ -129,6 +137,7 @@ writeFileSync(
     {
       recorded_at: new Date().toISOString(),
       suite,
+      base_ref: baseRef,
       rounds,
       entries: n,
       bun: Bun.version,

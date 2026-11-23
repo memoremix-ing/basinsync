@@ -5,6 +5,7 @@
 [logical-construction]: <logical-construction.json>
 [logical-readers]: <logical-readers.json>
 [logical-summary]: <logical-summary.csv>
+[promoted-costs]: <promoted-costs.md>
 
 # Bisect logical capabilities and implementation costs
 
@@ -93,3 +94,6 @@ Supply `TRIE_COST_COLLECTION_ADAPTER` to include the historical collection.
 `TRIE_LOGIC_ROUNDS` and `TRIE_LOGIC_VARIANTS` select runs. Fixtures follow the preceding
 benchmark’s layout. The recorded source snapshots match the checked-in harness’s
 outputs; all production algorithms remain unchanged by this exploration.
+
+The byte-preserving builder and offset reader are now implemented; see the
+*promotion measurements*[~][promoted-costs].
