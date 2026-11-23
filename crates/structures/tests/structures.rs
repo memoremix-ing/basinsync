@@ -240,3 +240,59 @@ fn revisions_pin_allocations_and_shared_heap_addresses() -> Result<()> {
     assert!(basin::distinct(&[first, second]).is_err());
     Ok(())
 }
+
+#[test]
+fn borrowed_metadata_matches_owned_comparisons() -> Result<()> {
+    use basinsync_structures::value;
+    let mut values = vec![
+        Null,
+        Bool(true),
+        Int(1),
+        Float(1.5),
+        Float(-0.0),
+        Text("0literal".into()),
+        Blob(vec![]),
+        Blob(vec![1, 2]),
+        Big(num_bigint::BigInt::from(1) << 200),
+        Symbol("match".into()),
+        Global("shared".into()),
+    ];
+    values.push(Array(values.clone()));
+    values.push(Value::map([
+        ("__proto__", Text("safe".into())),
+        ("values", Array(values.clone())),
+    ]));
+    for actual in &values {
+        let bytes = value::encode(actual)?;
+        let reader = flexbuffers::Reader::get_root(bytes.as_slice())?;
+        for expected in &values {
+            assert_eq!(
+                value::matches(reader.clone(), expected)?,
+                value::read(reader.clone())? == *expected
+            );
+        }
+    }
+    let mut b = basin();
+    let summary = values.last().unwrap().clone();
+    let e = b.seal(
+        Value::map([
+            ("0", Symbol("species".into())),
+            ("1", basin::DOMAIN.into()),
+            ("2", "metadata".into()),
+            ("3", basin::empty_query()),
+            ("4", 0u32.into()),
+            ("5", summary.clone()),
+            ("6", Array(vec![7u32.into(), summary])),
+        ]),
+        &[],
+    )?;
+    b.load(&e)?;
+    b.load(&e)?;
+    let mut wrong = e.clone();
+    if let Array(a) = &mut wrong {
+        a[6].set("1", Null)?;
+    }
+    assert!(b.load(&wrong).is_err());
+    b.load(&e)?;
+    Ok(())
+}

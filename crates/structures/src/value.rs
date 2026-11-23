@@ -308,6 +308,58 @@ pub fn read(r: Reader<&[u8]>) -> Result<Value> {
     }
     inner(r, 0)
 }
+/// Compare borrowed metadata without materializing owned maps, vectors, or blobs.
+pub fn matches(r: Reader<&[u8]>, expected: &Value) -> Result<bool> {
+    fn inner(r: Reader<&[u8]>, expected: &Value, depth: usize) -> Result<bool> {
+        ensure!(depth < 1024, "value nesting limit");
+        let t = r.flexbuffer_type();
+        Ok(match expected {
+            Null => t == T::Null,
+            Bool(v) => t == T::Bool && r.get_bool()? == *v,
+            Int(v) => {
+                matches!(t, T::Int | T::UInt | T::IndirectInt | T::IndirectUInt)
+                    && r.get_i64()? == *v
+            }
+            Float(v) => matches!(t, T::Float | T::IndirectFloat) && r.get_f64()? == *v,
+            Text(v) => matches!(t, T::String | T::Key) && r.get_str()? == v,
+            Blob(v) => t == T::Blob && r.get_blob()?.0 == v,
+            Big(_) | Symbol(_) | Global(_) => t == T::VectorUInt && read_extension(r)? == *expected,
+            Array(vs) => {
+                if !t.is_vector() || matches!(t, T::Map | T::VectorUInt) {
+                    return Ok(false);
+                }
+                let v = r.get_vector()?;
+                if v.len() != vs.len() {
+                    return Ok(false);
+                }
+                for (reader, expected) in v.iter().zip(vs) {
+                    if !inner(reader, expected, depth + 1)? {
+                        return Ok(false);
+                    }
+                }
+                true
+            }
+            Map(expected) => {
+                if t != T::Map {
+                    return Ok(false);
+                }
+                let m = r.get_map()?;
+                if m.len() != expected.len() {
+                    return Ok(false);
+                }
+                for ((key, reader), (expected_key, expected)) in
+                    m.iter_keys().zip(m.iter_values()).zip(expected)
+                {
+                    if key != expected_key || !inner(reader, expected, depth + 1)? {
+                        return Ok(false);
+                    }
+                }
+                true
+            }
+        })
+    }
+    inner(r, expected, 0)
+}
 pub fn field<'a>(r: Reader<&'a [u8]>, k: &str) -> Result<Reader<&'a [u8]>> {
     Ok(r.get_map()?.index(k)?)
 }

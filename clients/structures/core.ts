@@ -43,8 +43,14 @@ export function compare(a: Uint8Array, b: Uint8Array): number {
   return a.length - b.length;
 }
 export const equal = (a: Uint8Array, b: Uint8Array) => compare(a, b) === 0;
-export const hex = (b: Uint8Array) =>
-  Array.from(b, (v) => v.toString(16).padStart(2, "0")).join("");
+const hexBytes = Array.from({ length: 256 }, (_, v) =>
+  v.toString(16).padStart(2, "0"),
+);
+export function hex(b: Uint8Array): string {
+  let out = "";
+  for (const v of b) out += hexBytes[v];
+  return out;
+}
 export function key(value: Uint8Array | string): Uint8Array {
   if (value instanceof Uint8Array) return value.slice();
   check(
@@ -167,6 +173,41 @@ export function object<T = unknown>(r: Reference): T {
     return v;
   };
   return clone(r.toObject()) as T;
+}
+/** Compare metadata in-place; do not serialize or copy it on cache hits. */
+function matches(r: Reference, expected: unknown, depth = 0): boolean {
+  check(depth < 1024, "value nesting limit");
+  if (expected === null) return r.isNull();
+  if (typeof expected === "boolean") return r.boolValue() === expected;
+  if (typeof expected === "number") {
+    const n = r.numericValue();
+    return n === expected || (Number.isNaN(n) && Number.isNaN(expected));
+  }
+  if (typeof expected === "string") return r.stringValue() === expected;
+  if (typeof expected === "bigint") return r.bigintValue() === expected;
+  if (typeof expected === "symbol") return r.symbolValue() === expected;
+  if (expected instanceof Uint8Array) {
+    const b = r.blobValue();
+    return b !== null && equal(b, expected);
+  }
+  if (Array.isArray(expected))
+    return (
+      r.isVector() &&
+      !r.isExtension() &&
+      r.length() === expected.length &&
+      expected.every((v, i) => matches(r.get(i), v, depth + 1))
+    );
+  if (expected && typeof expected === "object") {
+    const keys = Object.getOwnPropertyNames(expected);
+    return (
+      r.isMap() &&
+      r.length() === keys.length &&
+      keys.every((k) =>
+        matches(r.get(k), (expected as Record<string, unknown>)[k], depth + 1),
+      )
+    );
+  }
+  return false;
 }
 export function validateNode(r: Reference, path?: string): void {
   check(r.isMap(), "basin node must be a map");
@@ -446,9 +487,9 @@ export class Basin {
           "edge species mismatch",
         );
         check(
-          equal(encode(object(r.get("3"))), encode(edge[3])) &&
-            equal(encode(object(r.get("5"))), encode(edge[5])) &&
-            equal(encode(object(r.get("6").get(1))), encode(edge[6][1])) &&
+          matches(r.get("3"), edge[3]) &&
+            matches(r.get("5"), edge[5]) &&
+            matches(r.get("6").get(1), edge[6][1]) &&
             r.get("6").get(0).intValue() === edge[6][0],
           "edge summary mismatch",
         );
@@ -480,9 +521,9 @@ export class Basin {
     }
     const r = await result;
     check(
-      equal(encode(object(r.get("3"))), encode(edge[3])) &&
-        equal(encode(object(r.get("5"))), encode(edge[5])) &&
-        equal(encode(object(r.get("6").get(1))), encode(edge[6][1])) &&
+      matches(r.get("3"), edge[3]) &&
+        matches(r.get("5"), edge[5]) &&
+        matches(r.get("6").get(1), edge[6][1]) &&
         r.get("6").get(0).intValue() === edge[6][0] &&
         r.get("1").stringValue() === edge[1] &&
         r.get("2").stringValue() === edge[2] &&

@@ -289,3 +289,54 @@ test("allocation revisions pin strong edges, shortcuts, storage identities and o
   invalid[6] = { ...second.root[6], revision: "not-a-revision" };
   await expect(new Basin(storage).load(invalid)).rejects.toThrow("revision");
 });
+
+test("borrowed metadata validation checks nested values after cache hits", async () => {
+  const summary = {
+    values: [
+      null,
+      true,
+      1,
+      1.5,
+      0n,
+      2n ** 200n,
+      "0literal",
+      Symbol.match,
+      Symbol.for("shared"),
+      new Uint8Array([1, 2]),
+    ],
+    map: { ["__proto__"]: "safe", empty: [] },
+  };
+  const b = new Basin(new MemoryStorage(), { seed });
+  const e = await b.seal(
+    {
+      0: Symbol.species,
+      1: "sync.memoremix.com",
+      2: "metadata",
+      3: query([]),
+      4: 0,
+      5: summary,
+      6: [7, summary],
+    } as Node,
+    [],
+  );
+  await b.load(e);
+  await b.load(e);
+  const mutations = [
+    { ...summary, values: [...summary.values, 3] },
+    {
+      ...summary,
+      values: summary.values.map((x, i) =>
+        i === 9 ? new Uint8Array([1, 3]) : x,
+      ),
+    },
+    { ...summary, map: { ["__proto__"]: "changed", empty: [] } },
+    { ...summary, extra: true },
+    null,
+  ];
+  for (const wrong of mutations) {
+    const bad = [...e] as typeof e;
+    bad[6] = { ...e[6], 1: wrong };
+    await expect(b.load(bad)).rejects.toThrow("summary");
+  }
+  await b.load(e);
+});

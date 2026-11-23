@@ -434,7 +434,8 @@ func (r Ref) len() int {
 	require(n <= uint64(len(r.b)), "invalid vector length")
 	return int(n)
 }
-func (r Ref) str() string {
+func (r Ref) str() string { return string(r.textBytes()) }
+func (r Ref) textBytes() []byte {
 	require(r.typ == 4 || r.typ == 5, "expected string")
 	at := r.target()
 	var b []byte
@@ -449,7 +450,7 @@ func (r Ref) str() string {
 		b = r.b[at : at+n]
 	}
 	require(utf8.Valid(b), "invalid UTF-8")
-	return string(b)
+	return b
 }
 func (r Ref) bytes() []byte {
 	require(r.typ == 25, "expected blob")
@@ -494,14 +495,14 @@ func (r Ref) get(k string) Ref {
 	low, high := 0, n
 	for low < high {
 		mid := (low + high) / 2
-		key := Ref{b: r.b, slot: keys + mid*kw, parent: kw, typ: 4, width: 1}.str()
-		if key < k {
+		key := Ref{b: r.b, slot: keys + mid*kw, parent: kw, typ: 4, width: 1}.textBytes()
+		if bytes.Compare(key, []byte(k)) < 0 {
 			low = mid + 1
 		} else {
 			high = mid
 		}
 	}
-	require(low < n && (Ref{b: r.b, slot: keys + low*kw, parent: kw, typ: 4, width: 1}).str() == k, "missing field %s", k)
+	require(low < n && bytes.Equal((Ref{b: r.b, slot: keys + low*kw, parent: kw, typ: 4, width: 1}).textBytes(), []byte(k)), "missing field %s", k)
 	return r.item(low)
 }
 func (r Ref) owned(depth int) any {
@@ -597,3 +598,69 @@ func (r Ref) Get(k string) (v Ref, err error) { defer protect(&err); return r.ge
 func (r Ref) Item(i int) (v Ref, err error)   { defer protect(&err); return r.item(i), nil }
 func (r Ref) Value() (v any, err error)       { defer protect(&err); return r.owned(0), nil }
 func (r Ref) Blob() (b []byte, err error)     { defer protect(&err); return r.bytes(), nil }
+
+// Compare borrowed metadata without JSON0 round trips or owned container copies.
+func (r Ref) matches(expected any, depth int) bool {
+	require(depth < 1024, "value nesting limit")
+	switch v := expected.(type) {
+	case nil:
+		return r.typ == 0
+	case bool:
+		return r.typ == 26 && r.owned(depth) == v
+	case int:
+		return r.matches(int64(v), depth)
+	case int64:
+		if r.typ == 1 || r.typ == 2 || r.typ == 6 || r.typ == 7 {
+			return r.owned(depth) == v
+		}
+		if r.typ == 3 || r.typ == 8 {
+			n := r.owned(depth).(float64)
+			return n >= -0x1p63 && n < 0x1p63 && int64(n) == v && float64(v) == n && !(n == 0 && math.Signbit(n))
+		}
+		return false
+	case float64:
+		if r.typ == 3 || r.typ == 8 {
+			n := r.owned(depth).(float64)
+			return n == v && (n != 0 || math.Signbit(n) == math.Signbit(v))
+		}
+		if r.typ == 1 || r.typ == 2 || r.typ == 6 || r.typ == 7 {
+			n := r.owned(depth).(int64)
+			return v >= -0x1p63 && v < 0x1p63 && int64(v) == n && float64(n) == v && !(v == 0 && math.Signbit(v))
+		}
+		return false
+	case string:
+		return (r.typ == 4 || r.typ == 5) && r.str() == v
+	case []byte:
+		return r.typ == 25 && bytes.Equal(r.bytes(), v)
+	case *big.Int:
+		if r.typ != 12 {
+			return false
+		}
+		n, ok := r.owned(depth).(*big.Int)
+		return ok && n.Cmp(v) == 0
+	case Symbol:
+		return r.typ == 12 && r.owned(depth) == v
+	case []any:
+		if r.typ == 9 || r.typ == 12 || !(r.typ >= 10 && r.typ <= 24 || r.typ == 36) || r.len() != len(v) {
+			return false
+		}
+		for i, x := range v {
+			if !r.item(i).matches(x, depth+1) {
+				return false
+			}
+		}
+		return true
+	case map[string]any:
+		if r.typ != 9 || r.len() != len(v) {
+			return false
+		}
+		for k, x := range v {
+			if !r.get(k).matches(x, depth+1) {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
+	}
+}

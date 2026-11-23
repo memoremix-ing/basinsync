@@ -298,10 +298,10 @@ func (b *Basin) load(e Edge) Ref {
 	r := rootRef(unframe(data))
 	validateNode(r, "")
 	for i := 1; i <= 5; i++ {
-		require(bytes.Equal(checked(JSON0(r.get(strconvIndex(i)).owned(0))), checked(JSON0(e[i]))), "edge summary mismatch")
+		require(r.get(strconvIndex(i)).matches(e[i], 0), "edge summary mismatch")
 	}
 	f := r.get("6")
-	require(bytes.Equal(checked(JSON0(f.item(0).owned(0))), checked(JSON0(field(e[6], "0")))) && bytes.Equal(checked(JSON0(f.item(1).owned(0))), checked(JSON0(field(e[6], "1")))), "edge summary mismatch")
+	require(f.item(0).matches(field(e[6], "0"), 0) && f.item(1).matches(field(e[6], "1"), 0), "edge summary mismatch")
 	return r
 }
 func strconvIndex(i int) string                 { return string(rune('0' + i)) }

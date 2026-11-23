@@ -13,7 +13,8 @@
     "check:docs": "python3 docs/skills/basinsync-tutorial-dag/scripts/check_dag.py",
     "test:docs": "python3 docs/skills/basinsync-tutorial-dag/scripts/test_check_dag.py",
     "test:structures:interop": "bun clients/structures-interop.ts",
-    "check:structures": "bun scripts/check-structure-types.ts"
+    "check:structures": "bun scripts/check-structure-types.ts",
+    "bench:trie": "bun clients/trie-benchmark.ts"
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "3.1075.0",

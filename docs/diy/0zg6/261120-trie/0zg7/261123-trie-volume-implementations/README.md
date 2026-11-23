@@ -12,6 +12,7 @@ prerequisites:
 [revision]: <../../../../../glossary/revision.md>
 [strong-edge]: <../../../../../glossary/strong-edge.md>
 [trie-format]: <../../../../../trie-format.md>
+[trie-performance]: <benchmark/trie-performance.md>
 [weak-link]: <../../../../../glossary/weak-link.md>
 
 # Trie and volume implementations
@@ -66,3 +67,5 @@ cargo build -p basinsync-structures --example fixture
 bun run test:structures:interop
 bun clients/structures-integration.ts
 ```
+
+Compare the three libraries using the *CPU and storage read measurements*[~][trie-performance].

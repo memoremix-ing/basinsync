@@ -32,7 +32,13 @@ pub fn valid_revision(s: &str) -> bool {
         })
 }
 pub fn hex(b: &[u8]) -> String {
-    b.iter().map(|v| format!("{v:02x}")).collect()
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(b.len() * 2);
+    for v in b {
+        out.push(HEX[(v >> 4) as usize] as char);
+        out.push(HEX[(v & 15) as usize] as char);
+    }
+    out
 }
 pub fn key(s: &str) -> Result<Vec<u8>> {
     ensure!(
@@ -434,14 +440,14 @@ impl<S: Storage> Basin<S> {
             ("5", e.at(5)?),
         ] {
             ensure!(
-                &value::read(value::field(r.clone(), k)?)? == expected,
+                value::matches(value::field(r.clone(), k)?, expected)?,
                 "edge summary mismatch"
             );
         }
         let f = value::field(r, "6")?;
         ensure!(
-            value::read(value::item(f.clone(), 0)?)? == *footer(e)?.field("0")?
-                && value::read(value::item(f, 1)?)? == *footer(e)?.field("1")?,
+            value::matches(value::item(f.clone(), 0)?, footer(e)?.field("0")?)?
+                && value::matches(value::item(f, 1)?, footer(e)?.field("1")?)?,
             "edge summary mismatch"
         );
         Ok(bytes)

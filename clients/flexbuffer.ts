@@ -1150,6 +1150,18 @@ function indirect(dataView: DataView, offset: number, width: number): number {
   return offset - step;
 }
 
+// Bound both cardinality and key length; cached bytes stay private and immutable.
+const lookupKeys = new Map<string, Uint8Array>();
+function lookupKey(key: string): Uint8Array {
+  if (key.length > 64) return toUTF8Array(key);
+  let bytes=lookupKeys.get(key);
+  if (!bytes) {
+    bytes=toUTF8Array(key);
+    if(lookupKeys.size === 128) lookupKeys.delete(lookupKeys.keys().next().value!);
+    lookupKeys.set(key,bytes);
+  }
+  return bytes;
+}
 function keyIndex(
   key: string,
   dataView: DataView,
@@ -1158,7 +1170,7 @@ function keyIndex(
   byteWidth: number,
   length: number,
 ): number | null {
-  const input = toUTF8Array(key);
+  const input = lookupKey(key);
   const keysVectorOffset = indirect(dataView, offset, parentWidth) -
     byteWidth * 3;
   const bitWidth = fromByteWidth(byteWidth);
@@ -1350,6 +1362,9 @@ class Reference {
     if (this.valueType !== VT_VECTOR_UINT || this.length() === 0) return false;
     const discriminator = this.get(0).intValue();
     return discriminator === 0x23 || discriminator === 0x24;
+  }
+  isExtension(): boolean {
+    return this.valueType === VT_VECTOR_UINT;
   }
   isVector(): boolean {
     return isAVector(this.valueType);

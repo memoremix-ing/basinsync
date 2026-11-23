@@ -3,6 +3,7 @@ package structures
 import (
 	"bytes"
 	"encoding/hex"
+	"math"
 	"math/big"
 	"reflect"
 	"testing"
@@ -270,5 +271,32 @@ func TestRevisionsPinAllocationsAndSharedHeapAddresses(t *testing.T) {
 	}
 	if _, err = b.Load(second); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestBorrowedMetadataMatchesJSON0Comparisons(t *testing.T) {
+	values := []any{nil, true, int64(1), 1.0, 1.5, math.Copysign(0, -1), "0literal", []byte{}, []byte{1, 2}, new(big.Int).Lsh(big.NewInt(1), 200), Symbol{Name: "match"}, Symbol{Name: "shared", Global: true}}
+	values = append(values, append([]any{}, values...))
+	values = append(values, map[string]any{"__proto__": "safe", "values": append([]any{}, values...)})
+	for _, actual := range values {
+		data, e := Encode(actual)
+		if e != nil {
+			t.Fatal(e)
+		}
+		r := rootRef(data)
+		owned := r.owned(0)
+		for _, expected := range values {
+			a, e := JSON0(owned)
+			if e != nil {
+				t.Fatal(e)
+			}
+			b, e := JSON0(expected)
+			if e != nil {
+				t.Fatal(e)
+			}
+			if r.matches(expected, 0) != bytes.Equal(a, b) {
+				t.Fatalf("comparison differs: %s vs %s", a, b)
+			}
+		}
 	}
 }
