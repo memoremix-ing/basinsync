@@ -6,8 +6,10 @@
 [collection-performance]: <collection-performance.md>
 [flexbuffers]: <../../../../../../glossary/flexbuffers.md>
 [lexidecimal]: <../../../../../../glossary/lexidecimal.md>
+[lexidecimal-grouping]: <lexidecimal-grouping.json>
 [node]: <../../../../../../glossary/node.md>
 [sha384]: <../../../../../../glossary/sha384.md>
+[trie]: <../../../../../../glossary/trie.md>
 
 # TypeScript client costs
 
@@ -126,3 +128,29 @@ collection benchmark to include it. `TRIE_COST_VARIANTS`, `TRIE_COST_ROUNDS`,
 `TRIE_COST_N`, `TRIE_COST_FIXTURES` and `TRIE_COST_OUT` select experiments.
 `TRIE_COST_PROFILE=1` enables crypto counters; keep those separate from throughput
 runs. Raw reports fingerprint each source variant and the worker.
+
+## Why Lexidecimal favors the collection
+
+*Follow-up measurements*[~][lexidecimal-grouping]: 90 logical-only trials, five per
+configuration, plus separate structural counts. Hex characters have only 16 possible
+values: two characters span 256 keys. Our 63-entry group cap splits that dense
+subtree where the collection's approximately 256-entry leaves retain it.
+
+On the same 100k ascending keys, raising only our experimental cap to 256 reduces
+logical *trie nodes*[~][trie] from 6,669 to 420 and nonempty groups from 6,250 to 392—matching
+the collection's counts and size histogram. Maximum logical depth falls from four
+to three. These are *trie nodes*[~][trie], not stored-object counts.
+
+Logical lookup falls from 0.436 to 0.365 µs, versus the collection's earlier
+0.279 µs: roughly half the gap. Random-key topology and lookup are unchanged.
+Returning immediately on binary-search equality alone gives only 0.424 µs.
+
+Construction improves from 153.7 to 144.4 ms, still far from the collection's
+65.7 ms. Separately, computing reversed-key bounds without reversing every key
+reduces a fresh 153.8 ms baseline to 136.2 ms; combining that with larger groups
+reaches 128.6 ms. Consolidation explains part of the advantage, not the whole build
+cost. Metadata work and construction strategy remain distinct targets.
+
+These are isolated prototypes; changing the stored group limit needs coordinated
+readers/schema handling. The group experiment driver accepts the `logical-final`
+source snapshot emitted by the preceding cost benchmark.
