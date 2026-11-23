@@ -1,3 +1,4 @@
+import { TrieMap } from "./logical-trie";
 import { type Operation, resolveOperation } from "./operation";
 import { Reference } from "../flexbuffer";
 import {
@@ -570,6 +571,12 @@ export class Trie<V = unknown, M = null> {
     )
       yield* walk(await this.readRoot(), new Uint8Array());
   }
+  /** Load once for synchronous path-copied edits; store explicitly after a batch. */
+  async edit(): Promise<TrieEditor<V, M>> {
+    const rows: [Uint8Array, V][] = [];
+    for await (const row of this.entries()) rows.push(row);
+    return TrieEditor.from(this.basin, rows, this.consumer);
+  }
   /** Full canonical rebuild, reusing immutable objects through the storage adapter. */
   async update(
     changes: Iterable<[Uint8Array | string, { set: V } | { delete: true }]>,
@@ -588,5 +595,48 @@ export class Trie<V = unknown, M = null> {
       else values.set(s, change.set);
     }
     return Trie.build(this.basin, values, this.consumer);
+  }
+}
+
+/** Immutable logical snapshots. Canonical export is a separate, full packing pass. */
+export class TrieEditor<V, M = null> {
+  private constructor(
+    readonly basin: Basin,
+    private readonly values: TrieMap<V>,
+    readonly consumer: Consumer<V, M>,
+  ) {}
+  static from<V, M>(
+    basin: Basin,
+    input: Iterable<readonly [Uint8Array | string, V]>,
+    consumer: Consumer<V, M>,
+  ): TrieEditor<V, M> {
+    return new TrieEditor(basin, TrieMap.from(input), consumer);
+  }
+  get size() {
+    return this.values.size;
+  }
+  get(k: Uint8Array | string) {
+    return this.values.get(k);
+  }
+  has(k: Uint8Array | string) {
+    return this.values.has(k);
+  }
+  set(k: Uint8Array | string, v: V): TrieEditor<V, M> {
+    const next = this.values.set(k, v);
+    return next === this.values
+      ? this
+      : new TrieEditor(this.basin, next, this.consumer);
+  }
+  delete(k: Uint8Array | string): TrieEditor<V, M> {
+    const next = this.values.delete(k);
+    return next === this.values
+      ? this
+      : new TrieEditor(this.basin, next, this.consumer);
+  }
+  entries() {
+    return this.values.entries();
+  }
+  store(): Promise<Trie<V, M>> {
+    return Trie.build(this.basin, this.entries(), this.consumer);
   }
 }

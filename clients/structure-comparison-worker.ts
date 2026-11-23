@@ -4,6 +4,7 @@ import {
   Basin,
   MemoryStorage,
   allocated,
+  hex,
   query,
   key,
   type Edge,
@@ -205,6 +206,7 @@ if (kind === "vector") assert.equal(state.value.length, start + BigInt(n));
 const footprint = logical
   ? {}
   : {
+      root_sha384: hex(state.value.root[6].sha384),
       objects: state.storage.objects.size,
       stored_bytes: [...state.storage.objects.values()].reduce(
         (s: number, v: any) => s + v.bytes.length,

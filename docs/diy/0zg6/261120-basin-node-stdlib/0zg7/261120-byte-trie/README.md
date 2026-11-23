@@ -13,6 +13,7 @@ prerequisites:
 [flow]: <../../../../../glossary/flow.md>
 [heap]: <../../../../../glossary/heap.md>
 [heap-protocol]: <../../../../../heap-protocol.md>
+[incremental-edits]: <../261123-bitmapped-vector-trie/benchmark/incremental-edits.md>
 [json0]: <../../../../../glossary/json0.md>
 [node]: <../../../../../glossary/node.md>
 [node-degree]: <../../../../../glossary/node-degree.md>
@@ -329,7 +330,20 @@ partial reads, shortcut misses, and old snapshots. Cross-read every language's
 output with every other implementation. Then verify real storage, promotion,
 staging sweeps, publication and restart against the server.
 
-Updates currently rebuild from contents; immutable objects are reused. Pruning
+Stored updates rebuild from contents; immutable objects are reused. TypeScript
+logical editing instead uses path-copied snapshots:
+
+```js
+let edit = await trie.edit(); // materializes existing contents once
+const prior = edit;
+edit = edit.set("abcd", value).delete("cdef");
+const stored = await edit.store(); // full canonical export
+```
+
+`TrieEditor.from(basin, entries, consumer)` starts without stored data. Values
+remain borrowed and must be immutable; keys are owned. Edits do no storage or
+aggregation; export recomputes summaries and packs canonically. See the
+*incremental-edit measurements*[~][incremental-edits]. Pruning
 and partial reads remain selective. Readers bound nesting to 256 trie levels;
 default object/full-file limits are 64 MiB, with a 16 MiB/128-object read cache.
 

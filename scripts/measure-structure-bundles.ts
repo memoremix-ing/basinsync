@@ -24,10 +24,14 @@ const entries = {
   collection,
 };
 const sources: Record<string, string[]> = {
-  trie: [resolve("clients/structures/trie.ts")],
+  trie: [
+    resolve("clients/structures/trie.ts"),
+    resolve("clients/structures/logical-trie.ts"),
+  ],
   vector: [
     resolve("clients/structures/vector.ts"),
     resolve("clients/structures/packed.ts"),
+    resolve("clients/structures/logical-vector.ts"),
   ],
   collection: [
     "collection.ts",

@@ -6,6 +6,7 @@ prerequisites:
 
 [comparison]: <benchmark/comparison.md>
 [diy/0zg6/261120-basin-node-stdlib]: <../../README.md>
+[incremental-edits]: <benchmark/incremental-edits.md>
 [node-height]: <../../../../../glossary/node-height.md>
 [strong-edge]: <../../../../../glossary/strong-edge.md>
 
@@ -29,7 +30,8 @@ order; consumer entry callbacks receive canonical unsigned big-endian index byte
 Pack children inline while `inlined <= 1280` and the physical degree fits; otherwise
 seal all immediate children. `shift` counts logical bit levels, independently of
 *basin-node height*[~][node-height]. A range includes its start and excludes its end.
-Updates, append and pop currently rebuild canonically, preserving earlier roots.
+Stored updates, append and pop rebuild canonically. TypeScript also offers
+synchronous, path-copied logical editors, preserving earlier snapshots:
 
 ```ts
 interface VectorNode_S0<
@@ -59,6 +61,20 @@ const sparse = await Vector.buildEntries(basin, 2n ** 200n + 1n,
   [[2n ** 200n, value]], consumer);
 const found = await sparse.get(2n ** 200n);
 ```
+
+```js
+let edit = await vector.edit(); // materializes existing contents once
+const prior = edit;
+edit = edit.push(value).set(31n, replacement);
+const stored = await edit.store(); // full canonical packing, aggregation and hashing
+```
+
+`VectorEditor.from(basin, length, entries, consumer)` starts without stored data.
+Keep values immutable; keys/structure are owned. Logical edits do no storage or
+aggregation. Export remains a full pass, rather than selective stored-node rewriting.
+Cached reads retain parsed lookup plans and defer only missing loads; consume index
+digits once instead of repeating bigint remainder operations at every level.
+See the *incremental-edit and vector measurements*[~][incremental-edits].
 
 Check empty/threshold cases, independent snapshots, canonical rebuilds, sparse or
 separator lookups, range/aggregate pruning, corrupted descriptors, and all three

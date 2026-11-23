@@ -130,8 +130,8 @@ These codecs serialize plaintext; encryption needs a separate storage representa
 - Cache immutable parsed lookup metadata; preserve validation of mutable or
   untrusted descriptors. Let synchronous work stay synchronous, suspending when
   loading actually requires it.
-- Keep logical references independent of physical packing. Incremental path-copying
-  can avoid rebuilding unchanged branches; measure before changing canonical shape.
+- Separate path-copied logical edits from canonical export; measure both. Preserve
+  consumer callback semantics when caching or regrouping summaries.
 - Inspect actual serialized widths and bytes: lengths, values and relative offsets
   can each widen representations. Keep optional expensive summaries consumer-defined.
 - For format-preserving optimizations, compare serialized bytes and cross-language

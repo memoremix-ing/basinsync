@@ -1,3 +1,5 @@
+import { VectorMap } from "./logical-vector";
+import { type Operation, resolveOperation } from "./operation";
 import {
   Basin,
   Edge,
@@ -9,6 +11,7 @@ import {
   key,
   u32,
   validateEdge,
+  isPromiseLike,
 } from "./core";
 import { Reference } from "../flexbuffer";
 import { type Consumer } from "./trie";
@@ -90,10 +93,11 @@ export class Vector<V = unknown, M = null> {
     for (const [i, value] of input) {
       index(i);
       check(i < length, "vector index outside length");
+      const summary = c.entry(indexBytes(i), value);
       rows.push({
         index: i,
         value,
-        summary: await c.entry(indexBytes(i), value),
+        summary: isPromiseLike(summary) ? await summary : summary,
       });
     }
     rows.sort((a, b) => (a.index < b.index ? -1 : a.index > b.index ? 1 : 0));
@@ -112,9 +116,13 @@ export class Vector<V = unknown, M = null> {
       const children: Built[] = [],
         values: V[] = [],
         width = 1n << BigInt(shift);
+      let position = 0;
       for (let slot = 0; slot < 32; slot++) {
         const lo = base + BigInt(slot) * width,
-          at = part.filter((r) => r.index >= lo && r.index < lo + width);
+          end = lo + width,
+          begin = position;
+        while (position < part.length && part[position].index < end) position++;
+        const at = part.slice(begin, position);
         if (!at.length) continue;
         bitmap = (bitmap | (1 << slot)) >>> 0;
         if (shift === 0) values.push(at[0].value);
@@ -133,23 +141,34 @@ export class Vector<V = unknown, M = null> {
       const refs =
           shift === 0 && c.edges ? values.flatMap((v) => c.edges!(v)) : [],
         p = await pack(basin, children, values.length, refs);
+      const aggregate = part.length
+        ? c.combine(part.map((r) => r.summary))
+        : c.empty;
+      const summary = isPromiseLike(aggregate) ? await aggregate : aggregate;
       return built(
         basin,
         VECTOR,
         { length: span, count: BigInt(part.length), shift, inlined: p.inlined },
-        [
-          c.migration,
-          part.length ? await c.combine(part.map((r) => r.summary)) : c.empty,
-          bitmap,
-          shift === 0 ? values : p.slots,
-        ],
+        [c.migration, summary, bitmap, shift === 0 ? values : p.slots],
         p.edges,
       );
     };
     const b = await build(rows, 0n, length, shift);
     return new Vector(basin, await basin.seal(b.node, b.edges), c);
   }
+  private readonly plans = new WeakMap<
+    Reference,
+    {
+      h: VectorHeader;
+      f: Reference;
+      bitmap: number;
+      slots: Reference;
+      children: Map<number, Reference | Edge>;
+    }
+  >();
   private parts(r: Reference) {
+    const cached = this.plans.get(r);
+    if (cached) return cached;
     validateNode(r, VECTOR);
     const h = checkedHeader(object<VectorHeader>(r.get("5"))),
       f = r.get("6");
@@ -165,27 +184,85 @@ export class Vector<V = unknown, M = null> {
         slots.length() === popcount(bitmap),
       "invalid vector bitmap",
     );
-    return { h, f, bitmap, slots };
+    const plan = {
+      h,
+      f,
+      bitmap,
+      slots,
+      children: new Map<number, Reference | Edge>(),
+    };
+    this.plans.set(r, plan);
+    return plan;
   }
-  async getView(i: bigint): Promise<Reference | undefined> {
+  getViewOrDefer(i: bigint): Operation<Reference | undefined> {
     index(i);
     if (i >= this.length || (this.root[5] as VectorHeader).count === 0n) return;
-    let local = i,
-      r = await this.basin.load(this.root);
-    for (let depth = 0; depth < 256; depth++) {
-      const { h, bitmap, slots } = this.parts(r);
-      const slot = Number((local >> BigInt(h.shift)) & 31n);
+    const digits: number | string =
+      i <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(i) : i.toString(32);
+    const r = this.basin.peek(this.root);
+    return r
+      ? this.seek(r, digits, 0)
+      : () => this.resume(this.root, digits, 0);
+  }
+  private *resume(
+    edge: Edge,
+    i: number | string,
+    depth: number,
+  ): Generator<PromiseLike<unknown>, Reference | undefined, unknown> {
+    const r = (yield this.basin.load(edge)) as Reference;
+    const next = this.seek(r, i, depth);
+    return typeof next === "function" ? yield* next() : next;
+  }
+  private seek(
+    r: Reference,
+    i: number | string,
+    depth: number,
+  ): Operation<Reference | undefined> {
+    for (;;) {
+      check(depth++ < 256, "vector nesting limit");
+      const p = this.parts(r),
+        { h, bitmap, slots } = p;
+      const position = h.shift / 5;
+      const digit =
+        typeof i === "string" ? i.charCodeAt(i.length - 1 - position) : 0;
+      const slot =
+        typeof i === "number"
+          ? Math.floor(i / 2 ** h.shift) % 32
+          : Number.isNaN(digit)
+            ? 0
+            : digit <= 57
+              ? digit - 48
+              : digit - 87;
       if (!has(bitmap, slot)) return;
-      const at = slots.get(rank(bitmap, slot));
-      if (h.shift === 0) return at;
-      local %= 1n << BigInt(h.shift);
-      r = at.isMap() ? at : await this.basin.load(edgeFrom(at));
+      if (h.shift === 0) return slots.get(rank(bitmap, slot));
+      let child = p.children.get(slot);
+      if (!child) {
+        const at = slots.get(rank(bitmap, slot));
+        child = at.isMap() ? at : edgeFrom(at);
+        p.children.set(slot, child);
+      }
+      if (Array.isArray(child)) {
+        const cached = this.basin.peek(child);
+        if (!cached) return () => this.resume(child as Edge, i, depth);
+        r = cached;
+      } else r = child;
     }
-    throw Error("vector nesting limit");
+  }
+  getOrDefer(i: bigint): Operation<V | undefined> {
+    const op = this.getViewOrDefer(i);
+    if (typeof op === "function")
+      return function* () {
+        const r = yield* op();
+        return r === undefined ? undefined : object<V>(r);
+      };
+    return op === undefined ? undefined : object<V>(op);
+  }
+  async getView(i: bigint): Promise<Reference | undefined> {
+    return resolveOperation(this.getViewOrDefer(i));
   }
   async get(i: bigint): Promise<V | undefined> {
-    const r = await this.getView(i);
-    return r === undefined ? undefined : object<V>(r);
+    const op = this.getOrDefer(i);
+    return typeof op === "function" ? resolveOperation(op) : op;
   }
   async *entries(
     from = 0n,
@@ -235,6 +312,12 @@ export class Vector<V = unknown, M = null> {
     )
       yield* visit(this, await this.basin.load(this.root), 0n, 0);
   }
+  /** Load once for synchronous path-copied edits; store explicitly after a batch. */
+  async edit(): Promise<VectorEditor<V, M>> {
+    const rows: [bigint, V][] = [];
+    for await (const row of this.entries()) rows.push(row);
+    return VectorEditor.from(this.basin, this.length, rows, this.consumer);
+  }
   async update(
     changes: Iterable<[bigint, { set: V } | { delete: true }]>,
     length = this.length,
@@ -261,5 +344,65 @@ export class Vector<V = unknown, M = null> {
   }
   async pop() {
     return this.update([], this.length ? this.length - 1n : 0n);
+  }
+}
+
+/** Immutable bitmap-vector snapshots. Storage is explicit and canonically repacked. */
+export class VectorEditor<V, M = null> {
+  private constructor(
+    readonly basin: Basin,
+    private readonly values: VectorMap<V>,
+    readonly consumer: Consumer<V, M>,
+  ) {}
+  static from<V, M>(
+    basin: Basin,
+    length: bigint,
+    input: Iterable<readonly [bigint, V]>,
+    consumer: Consumer<V, M>,
+  ): VectorEditor<V, M> {
+    return new VectorEditor(basin, VectorMap.from(length, input), consumer);
+  }
+  get length() {
+    return this.values.length;
+  }
+  get size() {
+    return this.values.size;
+  }
+  get(i: bigint) {
+    return this.values.get(i);
+  }
+  has(i: bigint) {
+    return this.values.has(i);
+  }
+  private changed(values: VectorMap<V>): VectorEditor<V, M> {
+    return values === this.values
+      ? this
+      : new VectorEditor(this.basin, values, this.consumer);
+  }
+  set(i: bigint, v: V) {
+    return this.changed(this.values.set(i, v));
+  }
+  delete(i: bigint) {
+    return this.changed(this.values.delete(i));
+  }
+  resize(length: bigint) {
+    return this.changed(this.values.resize(length));
+  }
+  push(v: V) {
+    return this.changed(this.values.push(v));
+  }
+  pop() {
+    return this.changed(this.values.pop());
+  }
+  entries() {
+    return this.values.entries();
+  }
+  store(): Promise<Vector<V, M>> {
+    return Vector.buildEntries(
+      this.basin,
+      this.length,
+      this.entries(),
+      this.consumer,
+    );
   }
 }

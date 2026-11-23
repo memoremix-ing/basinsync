@@ -5,11 +5,14 @@
 [diy/0zg6/261120-basin-node-stdlib]: <../../../README.md>
 [envbuf]: <../../../../../../glossary/envbuf.md>
 [flexbuffers]: <../../../../../../glossary/flexbuffers.md>
+[incremental-edits]: <incremental-edits.md>
 [lexidecimal]: <../../../../../../glossary/lexidecimal.md>
 [node]: <../../../../../../glossary/node.md>
 [strong-edge]: <../../../../../../glossary/strong-edge.md>
 
 # Incrementing positions: vector, byte trie and collection
+
+These measurements precede the *logical editors and vector optimizations*[~][incremental-edits].
 
 Apple M2 / Bun 1.4.5; five fresh-process trials per structure, tier and start,
 with alternating execution order. Medians below; *runs*[~][comparison-runs],
