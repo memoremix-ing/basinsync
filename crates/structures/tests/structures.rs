@@ -1,0 +1,242 @@
+use Value::*;
+use anyhow::Result;
+use basinsync_structures::{
+    Value,
+    basin::{self, Basin, MemoryStorage},
+    bromberg,
+    trie::{self, Count, Plain},
+    volume,
+};
+fn basin() -> Basin<MemoryStorage> {
+    Basin::new(MemoryStorage::default(), vec![42; 32]).unwrap()
+}
+fn rows(n: usize) -> Vec<(Vec<u8>, Value)> {
+    (0..n)
+        .map(|i| {
+            (
+                vec![(i >> 8) as u8, i as u8],
+                if i % 7 == 0 {
+                    Null
+                } else {
+                    Value::map([("n", Big(i.into())), ("data", Blob(vec![i as u8]))])
+                },
+            )
+        })
+        .collect()
+}
+#[test]
+fn published_sl2_vector_and_composition() -> Result<()> {
+    assert_eq!(
+        basin::hex(&bromberg::hash(b"hello, world! It's fun to hash stuff!")),
+        "01c5cf590d32654c87228c0d66441b200aec1439e54e724f05cd3c6c260634e565594b61988933e826e9705de22884ce007df0f733a371516ddd4ac9237f7a46"
+    );
+    assert_eq!(
+        bromberg::combine(&[bromberg::hash(b"hello, "), bromberg::hash(b"world!")])?,
+        bromberg::hash(b"hello, world!")
+    );
+    Ok(())
+}
+#[test]
+fn canonical_boundaries_and_lazy_reads() -> Result<()> {
+    for count in [0, 1, 63, 64, 1280, 1281, 5000] {
+        let mut b = basin();
+        let data = rows(count);
+        let a = trie::build(&mut b, data.clone(), &Count(7))?;
+        let mut reversed = data.clone();
+        reversed.reverse();
+        let same = trie::build(&mut b, reversed, &Count(7))?;
+        assert_eq!(a, same);
+        for i in [0, 62, 63, 1279, count.saturating_sub(1)]
+            .into_iter()
+            .filter(|i| *i < count)
+        {
+            assert_eq!(
+                trie::get(&mut b, &a, &data[i].0, 7)?,
+                Some(data[i].1.clone())
+            );
+        }
+        assert_eq!(trie::get(&mut b, &a, &[255; 3], 7)?, None);
+        assert_eq!(trie::entries(&mut b, &a, &[], 7)?, data);
+        b.clear_cache();
+        b.storage.reads = 0;
+        trie::visit(&mut b, &a, &[], 7, &mut |_, _| false, &mut |_, _| {
+            panic!("pruned")
+        })?;
+        assert_eq!(b.storage.reads, 0);
+    }
+    Ok(())
+}
+#[test]
+fn canonical_collapse_and_empty_null_key() -> Result<()> {
+    let mut b = basin();
+    let t = trie::build(
+        &mut b,
+        vec![
+            (vec![], Null),
+            (vec![0xab], Big(1.into())),
+            (vec![0xab, 0xcd], Big(2.into())),
+        ],
+        &Count(7),
+    )?;
+    assert_eq!(trie::get(&mut b, &t, &[], 7)?, Some(Null));
+    let empty = trie::update(
+        &mut b,
+        &t,
+        vec![(vec![], None), (vec![0xab], None), (vec![0xab, 0xcd], None)],
+        &Count(7),
+    )?;
+    assert_eq!(empty, trie::build(&mut b, vec![], &Count(7))?);
+    let a = trie::build(&mut b, rows(2000), &Count(7))?;
+    let removed = trie::update(&mut b, &a, vec![(vec![7, 207], None)], &Count(7))?;
+    assert_eq!(removed, trie::build(&mut b, rows(1999), &Count(7))?);
+    Ok(())
+}
+#[test]
+fn approximate_breadth_and_validation() -> Result<()> {
+    let mut b = basin();
+    let leaf = trie::build(&mut b, rows(1), &Plain)?;
+    let node = |path: &str| {
+        Value::map([
+            ("0", Symbol("species".into())),
+            ("1", basin::DOMAIN.into()),
+            ("2", path.into()),
+            ("3", basin::empty_query()),
+            ("4", 0u32.into()),
+            ("5", Null),
+            ("6", Array(vec![0u32.into(), Null])),
+        ])
+    };
+    let l = b.seal(node("left"), std::slice::from_ref(&leaf))?;
+    let r = b.seal(node("right"), std::slice::from_ref(&leaf))?;
+    assert_eq!(
+        basin::query(&[l, r], 320, 128)?.field("breadth")?,
+        &Big(4.into())
+    );
+    let mut bad = leaf.clone();
+    if let Array(a) = &mut bad {
+        a[5].set("count", Big(999.into()))?;
+    }
+    assert!(b.load(&bad).is_err());
+    assert!(trie::build(&mut b, vec![(vec![1], Null), (vec![1], Null)], &Plain).is_err());
+    Ok(())
+}
+#[test]
+fn filesystem_snapshots_unicode_shortcuts_and_names() -> Result<()> {
+    let mut b = basin();
+    let large = (0..8195).map(|i| i as u8).collect::<Vec<_>>();
+    let files = vec![
+        ("/a".into(), large.clone()),
+        ("/dir/empty".into(), vec![]),
+        ("/dir/__proto__".into(), b"safe".to_vec()),
+        ("/\u{ffff}".into(), b"bmp".to_vec()),
+        ("/\u{10000}".into(), b"astral".to_vec()),
+    ];
+    let v = volume::build(&mut b, files.clone())?;
+    for (name, bytes) in files {
+        assert_eq!(volume::read(&mut b, &v, &name, true)?, bytes);
+        assert_eq!(volume::read(&mut b, &v, &name, false)?, bytes);
+    }
+    assert_eq!(volume::list(&mut b, &v, "/dir")?, ["__proto__", "empty"]);
+    b.storage.capabilities.clear();
+    assert_eq!(volume::read(&mut b, &v, "/a", true)?, large);
+    let other = volume::update(
+        &mut b,
+        &v,
+        vec![("/a".into(), None), ("/b".into(), Some(large.clone()))],
+    )?;
+    assert_ne!(v, other);
+    assert_eq!(volume::read(&mut b, &v, "/a", true)?, large);
+    assert_eq!(volume::read(&mut b, &other, "/b", true)?, large);
+    Ok(())
+}
+#[test]
+fn partial_reads_and_consumer_migrations() -> Result<()> {
+    let mut b = basin();
+    let data = (0..volume::PAGE_SIZE * 1281 + 13)
+        .map(|i| i as u8)
+        .collect::<Vec<_>>();
+    let root = volume::build(&mut b, vec![("/large".into(), data.clone())])?;
+    b.clear_cache();
+    b.storage.reads = 0;
+    assert_eq!(
+        volume::read_range(&mut b, &root, "/large", 3, 17, true)?,
+        data[3..20]
+    );
+    assert!(b.storage.reads <= 3);
+    assert_eq!(
+        volume::read_range(&mut b, &root, "/large", (data.len() - 5) as u64, 40, true)?,
+        data[data.len() - 5..]
+    );
+    assert!(
+        volume::read_range(&mut b, &root, "/large", (data.len() + 10) as u64, 4, true)?.is_empty()
+    );
+    b.storage.capabilities.clear();
+    assert_eq!(
+        volume::read_range(&mut b, &root, "/large", 3, 17, true)?,
+        data[3..20]
+    );
+    let old = trie::build(&mut b, rows(1400), &Count(7))?;
+    let entries = trie::entries(&mut b, &old, &[], 7)?
+        .into_iter()
+        .map(|(k, v)| (k, Value::map([("old", v)])))
+        .collect();
+    let new = trie::build(&mut b, entries, &Count(8))?;
+    assert_eq!(new.at(4)?, &Int(0));
+    assert_eq!(new.at(6)?.field("version")?, &Int(0));
+    assert_eq!(new.at(6)?.field("0")?, &Int(8));
+    assert!(trie::get(&mut b, &new, &[0, 1], 7).is_err());
+    assert_eq!(
+        trie::get(&mut b, &new, &[0, 1], 8)?,
+        Some(Value::map([("old", rows(2)[1].1.clone())]))
+    );
+    assert_eq!(
+        trie::get(&mut b, &old, &[0, 1], 7)?,
+        Some(rows(2)[1].1.clone())
+    );
+    Ok(())
+}
+#[test]
+fn empty_directories_survive_file_updates() -> Result<()> {
+    let mut b = basin();
+    let root = volume::build_with_directories(
+        &mut b,
+        vec![("/kept/file".into(), b"x".to_vec())],
+        vec!["/empty".into(), "/deep/empty".into()],
+    )?;
+    assert!(volume::list(&mut b, &root, "/empty")?.is_empty());
+    let next = volume::update(&mut b, &root, vec![("/kept/file".into(), None)])?;
+    assert!(volume::list(&mut b, &next, "/kept")?.is_empty());
+    Ok(())
+}
+
+#[test]
+fn revisions_pin_allocations_and_shared_heap_addresses() -> Result<()> {
+    let mut b = basin();
+    let first = trie::build(&mut b, rows(1), &Plain)?;
+    let pointer = basin::weak(&first)?;
+    assert_eq!(pointer.field("revision")?, first.at(6)?.field("revision")?);
+    let (token, _, _) = basin::derive(&first)?;
+    assert_eq!(
+        basin::node_key(&pointer, "old")?,
+        format!(
+            "userspace/heap/old/n-0yvf/v.0zg0/t.0zh20/d_{}/{}",
+            basin::hex(&basin::sha384(&token)),
+            pointer.field("revision")?.text()?
+        )
+    );
+    b.storage.objects.remove(&basin::capability(&first)?);
+    let second = trie::build(&mut b, rows(1), &Plain)?;
+    assert_eq!(
+        first.at(6)?.field("sha384")?,
+        second.at(6)?.field("sha384")?
+    );
+    assert_ne!(
+        first.at(6)?.field("revision")?,
+        second.at(6)?.field("revision")?
+    );
+    b.clear_cache();
+    assert!(b.load(&first).is_err());
+    assert!(b.load(&second).is_ok());
+    assert!(basin::distinct(&[first, second]).is_err());
+    Ok(())
+}

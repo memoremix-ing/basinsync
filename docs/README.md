@@ -43,7 +43,7 @@ Build deeper graphs with *Deep Heap support*[~][diy/0zg5/261112-deep-heap-suppor
 Retain and promote committed graphs with
 *CommitMarker edges with node promotion*[~][diy/0zg6/261112-commit-marker-edges-with-node-promotion].
 
-Explore *Tries and shortcut links*[~][diy/0zg6/261120-trie] in an ongoing design discussion.
+Build byte-key graphs with *Tries and shortcut links*[~][diy/0zg6/261120-trie].
 
 Coalesce and retrieve history with *Timeline recovery acceleration*[~][diy/0zg4/261117-timeline-recovery-acceleration].
 

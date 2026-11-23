@@ -5,7 +5,7 @@
 [node-height]: <node-height.md>
 [object-keys]: <../object-keys.md>
 
-# Node
+# Basin node
 
 An opaque blob with transparent outgoing edges and an id composed of
 *height*[~][node-height], version, *access token*[~][access-token] byte length,

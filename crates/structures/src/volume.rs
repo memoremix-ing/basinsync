@@ -1,0 +1,673 @@
+use crate::{
+    Value,
+    basin::{self, Basin, DOMAIN, Edge, Storage},
+    bromberg,
+    trie::{self, Consumer, View},
+    value,
+};
+use Value::*;
+use anyhow::{Context, Result, ensure};
+use std::collections::BTreeMap;
+pub const PATH: &str = ".sync-volume/";
+pub const BLOCK: &str = ".sync-block/";
+pub const PAGE_SIZE: usize = 4096;
+pub struct Sectors;
+impl Consumer for Sectors {
+    fn empty(&self) -> Value {
+        Value::map([("brombergSL2", Blob(bromberg::bytes(bromberg::IDENTITY)))])
+    }
+    fn entry(&self, _: &[u8], v: &Value) -> Result<Value> {
+        ensure!(v.array()?.len() == 1, "invalid page");
+        Ok(Value::map([(
+            "brombergSL2",
+            Blob(bromberg::hash(v.at(0)?.blob()?)),
+        )]))
+    }
+    fn combine(&self, s: &[Value]) -> Result<Value> {
+        let parts = s
+            .iter()
+            .map(|v| Ok(v.field("brombergSL2")?.blob()?.to_vec()))
+            .collect::<Result<Vec<_>>>()?;
+        Ok(Value::map([(
+            "brombergSL2",
+            Blob(bromberg::combine(&parts)?),
+        )]))
+    }
+}
+pub struct Devices;
+impl Consumer for Devices {
+    fn empty(&self) -> Value {
+        Null
+    }
+    fn entry(&self, _: &[u8], _: &Value) -> Result<Value> {
+        Ok(Null)
+    }
+    fn combine(&self, _: &[Value]) -> Result<Value> {
+        Ok(Null)
+    }
+    fn edges(&self, v: &Value) -> Result<Vec<Edge>> {
+        ensure!(v.array()?.len() == 1, "invalid device value");
+        basin::validate_edge(v.at(0)?)?;
+        Ok(vec![v.at(0)?.clone()])
+    }
+}
+pub fn lex(n: &num_bigint::BigInt) -> Result<String> {
+    ensure!(n.sign() != num_bigint::Sign::Minus, "negative page");
+    let digits = format!("{n:x}");
+    let s = format!("{:x}", digits.len() - 1);
+    let width = s.len().next_power_of_two();
+    ensure!(width <= 16, "page encoding overflow");
+    let magnitude = if width == 1 {
+        String::new()
+    } else {
+        "wxyz"
+            .chars()
+            .nth(width.ilog2() as usize - 1)
+            .unwrap()
+            .to_string()
+    };
+    let size = format!("{s:0>width$}")
+        .bytes()
+        .map(|b| {
+            char::from(
+                b'g' + if b.is_ascii_digit() {
+                    b - b'0'
+                } else {
+                    b - b'a' + 10
+                },
+            )
+        })
+        .collect::<String>();
+    Ok(format!("0z{magnitude}{size}{digits}"))
+}
+pub fn unlex(s: &str) -> Result<num_bigint::BigInt> {
+    ensure!(s.starts_with("0z"), "invalid page key");
+    let b = s.as_bytes();
+    ensure!(b.len() >= 4, "truncated page key");
+    let (mut at, mut width) = (2, 1);
+    if let Some(m) = b"wxyz".iter().position(|v| *v == b[at]) {
+        width = 1 << (1 + m);
+        at += 1;
+    }
+    ensure!(at + width < s.len(), "truncated page size");
+    let mut size = 0usize;
+    for c in &b[at..at + width] {
+        ensure!((b'g'..=b'v').contains(c), "invalid page size");
+        size = size
+            .checked_mul(16)
+            .and_then(|v| v.checked_add((c - b'g') as usize))
+            .context("page size overflow")?;
+    }
+    let h = &s[at + width..];
+    ensure!(
+        size.checked_add(1) == Some(h.len())
+            && h.bytes()
+                .all(|v| v.is_ascii_digit() || (b'a'..=b'f').contains(&v)),
+        "invalid page payload"
+    );
+    let n = num_bigint::BigInt::parse_bytes(h.as_bytes(), 16).context("invalid page")?;
+    ensure!(lex(&n)? == s, "noncanonical page key");
+    Ok(n)
+}
+fn path(name: &str) -> Result<Vec<&str>> {
+    ensure!(
+        name.starts_with('/') && !name.contains('\0'),
+        "invalid absolute pathname"
+    );
+    let p = name[1..].split('/').collect::<Vec<_>>();
+    ensure!(
+        p.iter().all(|n| !n.is_empty() && *n != "." && *n != ".."),
+        "invalid pathname component"
+    );
+    Ok(p)
+}
+fn framed(b: &[u8]) -> Result<Vec<u8>> {
+    Ok([u32::try_from(b.len())?.to_le_bytes().as_slice(), b].concat())
+}
+fn directory(contents: BTreeMap<String, Value>) -> Result<Value> {
+    let mut bytes = vec![];
+    for (name, v) in &contents {
+        bytes.extend(framed(name.as_bytes())?);
+        bytes.push(u8::from(v.at(0)?.boolean()?));
+        bytes.extend(framed(v.at(1)?.blob()?)?);
+    }
+    Ok(Array(vec![
+        Bool(true),
+        Blob(basin::sha384(&bytes)),
+        Map(contents),
+    ]))
+}
+enum Tree {
+    Directory(BTreeMap<String, Tree>),
+    File(Value),
+}
+fn insert(tree: &mut BTreeMap<String, Tree>, parts: &[&str], v: Value) -> Result<()> {
+    if parts.len() == 1 {
+        ensure!(!tree.contains_key(parts[0]), "file/directory collision");
+        tree.insert(parts[0].into(), Tree::File(v));
+    } else {
+        let entry = tree
+            .entry(parts[0].into())
+            .or_insert_with(|| Tree::Directory(BTreeMap::new()));
+        let Tree::Directory(next) = entry else {
+            anyhow::bail!("file/directory collision")
+        };
+        insert(next, &parts[1..], v)?;
+    }
+    Ok(())
+}
+fn finish(t: BTreeMap<String, Tree>) -> Result<Value> {
+    directory(
+        t.into_iter()
+            .map(|(k, v)| {
+                Ok((
+                    k,
+                    match v {
+                        Tree::File(v) => v,
+                        Tree::Directory(d) => finish(d)?,
+                    },
+                ))
+            })
+            .collect::<Result<_>>()?,
+    )
+}
+fn collect<S: Storage>(
+    basin: &mut Basin<S>,
+    n: &Value,
+    base: &[u8],
+    leaves: &mut Vec<Value>,
+) -> Result<()> {
+    let h = n.index(5)?;
+    let p = if h.field("prefix")?.is_null() {
+        &[][..]
+    } else {
+        h.field("prefix")?.blob()?
+    };
+    let here = [base, p].concat();
+    let m = n.index(6)?.at(3)?;
+    if m.is_null() {
+        return Ok(());
+    }
+    for (high, m) in m.array()?.iter().enumerate() {
+        if let Array(children) = m {
+            for (low, ch) in children.iter().enumerate() {
+                if ch.is_null() {
+                    continue;
+                }
+                let next = [here.as_slice(), &[(high as u8) << 4 | low as u8]].concat();
+                if matches!(ch, Array(_)) {
+                    let h = ch.at(5)?;
+                    if ch.at(3)?.field("degree")?.number()? == 0 && !h.field("keys")?.is_null() {
+                        let keys = h.field("keys")?;
+                        let lo = unlex(std::str::from_utf8(
+                            &[next.as_slice(), keys.at(0)?.blob()?].concat(),
+                        )?)?;
+                        let hi = unlex(std::str::from_utf8(
+                            &[next.as_slice(), keys.at(1)?.blob()?].concat(),
+                        )?)? + 1;
+                        let span: &num_bigint::BigInt = &(&hi - &lo);
+                        if let Ok(n) = u32::try_from(span.clone()) {
+                            leaves.push(Array(vec![Big(lo), n.into(), basin::weak(ch)?]));
+                        }
+                    } else {
+                        let bytes = basin.load(ch)?;
+                        let node = value::read(basin::node_reader(&bytes)?)?;
+                        collect(basin, &node, &next, leaves)?;
+                    }
+                } else {
+                    collect(basin, ch, &next, leaves)?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+pub fn build<S: Storage>(basin: &mut Basin<S>, files: Vec<(String, Vec<u8>)>) -> Result<Edge> {
+    build_with_directories(basin, files, vec![])
+}
+fn make_directory(tree: &mut BTreeMap<String, Tree>, parts: &[&str]) -> Result<()> {
+    if parts.is_empty() {
+        return Ok(());
+    }
+    let item = tree
+        .entry(parts[0].into())
+        .or_insert_with(|| Tree::Directory(BTreeMap::new()));
+    let Tree::Directory(child) = item else {
+        anyhow::bail!("file/directory collision")
+    };
+    make_directory(child, &parts[1..])
+}
+#[derive(Clone)]
+pub struct BlockRoot {
+    pub edge: Edge,
+    pub digest: Vec<u8>,
+}
+pub fn build_block<S: Storage>(
+    basin: &mut Basin<S>,
+    input: Vec<(num_bigint::BigInt, Vec<u8>)>,
+) -> Result<BlockRoot> {
+    let pages = input
+        .into_iter()
+        .map(|(n, b)| Ok((lex(&n)?.into_bytes(), Array(vec![Blob(b)]))))
+        .collect::<Result<Vec<_>>>()?;
+    let t = trie::build_node(basin, pages, &Sectors)?;
+    let mut leaves = vec![];
+    collect(basin, &t.node, &[], &mut leaves)?;
+    leaves.sort_by_key(|v| v.at(0).and_then(Value::big).unwrap());
+    leaves.truncate(64);
+    let digest = t.node.index(6)?.at(1)?.field("brombergSL2")?.clone();
+    let node = Value::map([
+        ("0", Symbol("species".into())),
+        ("1", DOMAIN.into()),
+        ("2", BLOCK.into()),
+        ("3", t.node.index(3)?.clone()),
+        ("4", 0u32.into()),
+        ("5", Null),
+        ("6", Array(vec![0u32.into(), Null, t.node, Array(leaves)])),
+    ]);
+    let edge = basin.seal(node, &t.edges)?;
+    Ok(BlockRoot {
+        edge,
+        digest: digest.blob()?.to_vec(),
+    })
+}
+pub fn build_with_directories<S: Storage>(
+    basin: &mut Basin<S>,
+    files: Vec<(String, Vec<u8>)>,
+    directories: Vec<String>,
+) -> Result<Edge> {
+    let blocks = files
+        .into_iter()
+        .map(|(name, data)| {
+            path(&name)?;
+            let pages = data
+                .chunks(PAGE_SIZE)
+                .enumerate()
+                .map(|(i, b)| (i.into(), b.to_vec()))
+                .collect();
+            Ok((name, build_block(basin, pages)?))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    from_blocks(basin, blocks, directories)
+}
+pub fn from_blocks<S: Storage>(
+    basin: &mut Basin<S>,
+    blocks: Vec<(String, BlockRoot)>,
+    directories: Vec<String>,
+) -> Result<Edge> {
+    let mut file_map = BTreeMap::new();
+    for (name, block) in blocks {
+        path(&name)?;
+        ensure!(!file_map.contains_key(&name), "duplicate pathname");
+        ensure!(
+            block.edge.at(2)?.text()? == BLOCK && block.digest.len() == 64,
+            "invalid block descriptor"
+        );
+        file_map.insert(name, (block.edge, Blob(block.digest)));
+    }
+    let device = trie::build_node(
+        basin,
+        file_map
+            .iter()
+            .map(|(name, (e, _))| (name.as_bytes().to_vec(), Array(vec![e.clone()])))
+            .collect(),
+        &Devices,
+    )?;
+    let mut tree = BTreeMap::new();
+    for dir in directories {
+        if dir != "/" {
+            make_directory(&mut tree, &path(&dir)?)?;
+        }
+    }
+    for (name, (edge, digest)) in &file_map {
+        insert(
+            &mut tree,
+            &path(name)?,
+            Array(vec![Bool(false), digest.clone(), basin::weak(edge)?]),
+        )?;
+    }
+    let root = finish(tree)?;
+    let node = Value::map([
+        ("0", Symbol("species".into())),
+        ("1", DOMAIN.into()),
+        ("2", PATH.into()),
+        ("3", device.node.index(3)?.clone()),
+        ("4", 0u32.into()),
+        ("5", Null),
+        ("6", Array(vec![0u32.into(), Null, device.node, root])),
+    ]);
+    basin.seal(node, &device.edges)
+}
+fn data<S: Storage>(basin: &mut Basin<S>, root: &Edge) -> Result<View> {
+    let v = View::root(basin.load(root)?);
+    basin::validate_node(v.reader()?, Some(PATH))?;
+    let footer = v.field("6");
+    ensure!(
+        footer.reader()?.get_vector()?.len() == 4
+            && value::item(footer.reader()?, 0)?.get_i64()? == 0,
+        "unsupported volume migration"
+    );
+    Ok(footer)
+}
+pub fn list<S: Storage>(basin: &mut Basin<S>, root: &Edge, name: &str) -> Result<Vec<String>> {
+    let d = data(basin, root)?;
+    let mut value = d.item(3).owned()?;
+    if name != "/" {
+        for p in path(name)? {
+            ensure!(value.at(0)?.boolean()?, "not a directory");
+            value = value.at(2)?.field(p)?.clone();
+        }
+    }
+    ensure!(value.at(0)?.boolean()?, "not a directory");
+    Ok(value.at(2)?.map_ref()?.keys().cloned().collect())
+}
+fn open_block<S: Storage>(
+    basin: &mut Basin<S>,
+    root: &Edge,
+    name: &str,
+    shortcuts: bool,
+) -> Result<(View, Vec<u8>)> {
+    let f = data(basin, root)?;
+    let mut file = f.item(3).owned()?;
+    for p in path(name)? {
+        ensure!(file.at(0)?.boolean()?, "not a directory");
+        file = file.at(2)?.field(p)?.clone();
+    }
+    ensure!(!file.at(0)?.boolean()?, "not a file");
+    let expected = file.at(1)?.blob()?.to_vec();
+    let mut edge = None;
+    if shortcuts
+        && let Ok(Some(candidate)) = basin.storage.resolve(file.at(2)?)
+        && basin::capability(&candidate)? == basin::weak_key(file.at(2)?)?
+        && let Ok(bytes) = basin.load(&candidate)
+    {
+        let b = View::root(bytes);
+        if basin::validate_node(b.reader()?, Some(BLOCK)).is_ok() {
+            let digest = b
+                .field("6")
+                .item(2)
+                .field("6")
+                .item(1)
+                .field("brombergSL2")
+                .owned()?;
+            if digest.blob()? == expected {
+                edge = Some(candidate);
+            }
+        }
+    }
+    let edge = if let Some(edge) = edge {
+        edge
+    } else {
+        let found = trie::get_inline(basin, f.item(2), name.as_bytes().to_vec(), 0)?
+            .context("missing retained block")?
+            .owned()?;
+        found.at(0)?.clone()
+    };
+    let block = View::root(basin.load(&edge)?);
+    basin::validate_node(block.reader()?, Some(BLOCK))?;
+    let footer = block.field("6");
+    ensure!(
+        footer.reader()?.get_vector()?.len() == 4
+            && value::item(footer.reader()?, 0)?.get_i64()? == 0,
+        "unsupported block migration"
+    );
+    ensure!(
+        footer
+            .item(2)
+            .field("6")
+            .item(1)
+            .field("brombergSL2")
+            .owned()?
+            .blob()?
+            == expected,
+        "block summary mismatch"
+    );
+    Ok((footer, expected))
+}
+pub fn read<S: Storage>(
+    basin: &mut Basin<S>,
+    root: &Edge,
+    name: &str,
+    shortcuts: bool,
+) -> Result<Vec<u8>> {
+    let (footer, expected) = open_block(basin, root, name, shortcuts)?;
+    let mut pages = vec![];
+    trie::visit_inline(
+        basin,
+        footer.item(2),
+        &[],
+        &[],
+        0,
+        &mut |_, _| true,
+        &mut |k, v| {
+            let n = unlex(std::str::from_utf8(&k)?)?;
+            let value = v.owned()?;
+            let blob = value.at(0)?.blob()?;
+            ensure!(
+                value.array()?.len() == 1 && !blob.is_empty() && blob.len() <= PAGE_SIZE,
+                "invalid page"
+            );
+            pages.push((n, blob.to_vec()));
+            Ok(true)
+        },
+    )?;
+    let mut end = 0usize;
+    for (p, b) in &pages {
+        let pos = usize::try_from(p.clone())?
+            .checked_mul(PAGE_SIZE)
+            .context("file offset overflow")?;
+        end = end.max(pos.checked_add(b.len()).context("file length overflow")?);
+    }
+    ensure!(end <= basin.max_bytes, "file read byte limit");
+    let mut bytes = vec![0; end];
+    for (p, b) in pages {
+        let at = usize::try_from(p)? * PAGE_SIZE;
+        bytes[at..at + b.len()].copy_from_slice(&b);
+    }
+    ensure!(bromberg::hash(&bytes) == expected, "file checksum mismatch");
+    Ok(bytes)
+}
+fn shortcut_page<S: Storage>(
+    basin: &mut Basin<S>,
+    leaves: &View,
+    page: &num_bigint::BigInt,
+    full: &[u8],
+) -> Result<Option<Value>> {
+    let list = leaves.reader()?.get_vector()?;
+    ensure!(list.len() <= 64, "invalid shortcut cache");
+    let (mut lo, mut hi) = (0, list.len());
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        let start = leaves.item(mid).item(0).owned()?.big()?;
+        if start <= *page {
+            lo = mid + 1
+        } else {
+            hi = mid
+        }
+    }
+    if lo == 0 {
+        return Ok(None);
+    }
+    let record = leaves.item(lo - 1);
+    let low = record.item(0).owned()?.big()?;
+    let span = record.item(1).owned()?.number()?;
+    if page >= &(&low + span) {
+        return Ok(None);
+    }
+    let link = record.item(2).owned()?;
+    let Some(edge) = basin.storage.resolve(&link)? else {
+        return Ok(None);
+    };
+    ensure!(
+        basin::capability(&edge)? == basin::weak_key(&link)?,
+        "shortcut capability mismatch"
+    );
+    let view = View::root(basin.load(&edge)?);
+    basin::validate_node(view.reader()?, Some(trie::PATH))?;
+    let header = view.field("5").owned()?;
+    let keys = header.field("keys")?;
+    if keys.is_null() {
+        return Ok(None);
+    }
+    let minimum = lex(&low)?.into_bytes();
+    let suffix = keys.at(0)?.blob()?;
+    ensure!(minimum.len() >= suffix.len(), "invalid shortcut prefix");
+    let base = &minimum[..minimum.len() - suffix.len()];
+    ensure!(
+        [base, suffix].concat() == minimum
+            && [base, keys.at(1)?.blob()?].concat() == lex(&(&low + span - 1u32))?.into_bytes(),
+        "shortcut span mismatch"
+    );
+    if !full.starts_with(base) {
+        return Ok(None);
+    }
+    trie::get_inline(basin, view, full[base.len()..].to_vec(), 0)?
+        .map(|v| v.owned())
+        .transpose()
+}
+/// Read a raw sparse page, independently of file byte-offset conventions.
+pub fn page<S: Storage>(
+    basin: &mut Basin<S>,
+    root: &Edge,
+    name: &str,
+    index: &num_bigint::BigInt,
+    shortcuts: bool,
+) -> Result<Option<Vec<u8>>> {
+    let (footer, _) = open_block(basin, root, name, shortcuts)?;
+    let full = lex(index)?.into_bytes();
+    let found = if shortcuts {
+        shortcut_page(basin, &footer.item(3), index, &full)
+            .ok()
+            .flatten()
+    } else {
+        None
+    };
+    let value = if let Some(v) = found {
+        Some(v)
+    } else {
+        trie::get_inline(basin, footer.item(2), full, 0)?
+            .map(|v| v.owned())
+            .transpose()?
+    };
+    value
+        .map(|v| {
+            ensure!(v.array()?.len() == 1, "invalid page");
+            Ok(v.at(0)?.blob()?.to_vec())
+        })
+        .transpose()
+}
+/// Partial reads verify fetched basin-object SHA-384s; full reads also verify SL2.
+pub fn read_range<S: Storage>(
+    basin: &mut Basin<S>,
+    root: &Edge,
+    name: &str,
+    start: u64,
+    length: usize,
+    shortcuts: bool,
+) -> Result<Vec<u8>> {
+    ensure!(length <= basin.max_bytes, "file read byte limit");
+    let (footer, _) = open_block(basin, root, name, shortcuts)?;
+    if length == 0 {
+        return Ok(vec![]);
+    }
+    let pages = footer.item(2);
+    let header = pages.field("5").owned()?;
+    let keys = header.field("keys")?;
+    if keys.is_null() {
+        return Ok(vec![]);
+    }
+    let highest = unlex(std::str::from_utf8(keys.at(1)?.blob()?)?)?;
+    let first = num_bigint::BigInt::from(start / PAGE_SIZE as u64);
+    if first > highest {
+        return Ok(vec![]);
+    }
+    let end = start
+        .checked_add(length as u64)
+        .context("file range overflow")?;
+    let last = num_bigint::BigInt::from((end - 1) / PAGE_SIZE as u64).min(highest.clone());
+    let window =
+        ((last.clone() + 1u32) * PAGE_SIZE - num_bigint::BigInt::from(start)).min(length.into());
+    let mut out = vec![0; usize::try_from(window)?];
+    let mut actual = out.len();
+    let mut page = first;
+    while page <= last {
+        let full = lex(&page)?.into_bytes();
+        let fast = if shortcuts {
+            shortcut_page(basin, &footer.item(3), &page, &full)
+                .ok()
+                .flatten()
+        } else {
+            None
+        };
+        let value = if let Some(v) = fast {
+            v
+        } else {
+            trie::get_inline(basin, pages.clone(), full, 0)?
+                .context("missing page")?
+                .owned()?
+        };
+        ensure!(value.array()?.len() == 1, "invalid page");
+        let bytes = value.at(0)?.blob()?;
+        ensure!(
+            !bytes.is_empty() && bytes.len() <= PAGE_SIZE,
+            "invalid page"
+        );
+        let offset = &page * PAGE_SIZE - num_bigint::BigInt::from(start);
+        let offset = i64::try_from(offset)?;
+        let from = usize::try_from((-offset).max(0))?;
+        let target = usize::try_from(offset.max(0))?;
+        let count = bytes
+            .len()
+            .saturating_sub(from)
+            .min(out.len().saturating_sub(target));
+        if count > 0 {
+            out[target..target + count].copy_from_slice(&bytes[from..from + count]);
+        }
+        if page == highest {
+            actual = actual.min(usize::try_from((offset + bytes.len() as i64).max(0))?);
+        }
+        page += 1;
+    }
+    out.truncate(actual);
+    Ok(out)
+}
+pub fn update<S: Storage>(
+    basin: &mut Basin<S>,
+    root: &Edge,
+    changes: Vec<(String, Option<Vec<u8>>)>,
+) -> Result<Edge> {
+    fn walk<S: Storage>(
+        b: &mut Basin<S>,
+        root: &Edge,
+        dir: &str,
+        out: &mut BTreeMap<String, Vec<u8>>,
+        directories: &mut Vec<String>,
+    ) -> Result<()> {
+        for n in list(b, root, dir)? {
+            let p = if dir == "/" {
+                format!("/{n}")
+            } else {
+                format!("{dir}/{n}")
+            };
+            if list(b, root, &p).is_ok() {
+                directories.push(p.clone());
+                walk(b, root, &p, out, directories)?;
+            } else {
+                out.insert(p.clone(), read(b, root, &p, true)?);
+            }
+        }
+        Ok(())
+    }
+    let mut files = BTreeMap::new();
+    let mut directories = vec![];
+    walk(basin, root, "/", &mut files, &mut directories)?;
+    for (k, v) in changes {
+        path(&k)?;
+        if let Some(v) = v {
+            files.insert(k, v);
+        } else {
+            files.remove(&k);
+        }
+    }
+    build_with_directories(basin, files.into_iter().collect(), directories)
+}

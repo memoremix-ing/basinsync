@@ -295,6 +295,7 @@ mod tests {
 
     fn reserve(flow: &str, nodes: &[u8]) -> heap::Request {
         heap::Request {
+            revisions: Default::default(),
             flow: flow.into(),
             viewpoint: Viewpoint::zero(),
             proofs: BTreeMap::new(),

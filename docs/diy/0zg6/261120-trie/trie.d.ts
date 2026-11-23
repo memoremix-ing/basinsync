@@ -1,6 +1,6 @@
 type U32 = number;
 
-// Proposed: null denotes no observations; nonempty bounds include both ends.
+// null denotes no observations; nonempty bounds include both ends.
 type Bounds<T> = null | [floor: T, ceiling: T];
 
 type SCHEMA_0 = 0;
@@ -30,7 +30,7 @@ interface BasinNode_S0<
 type BasinQuery_S0 = {
   height: U32; // (for DAG inaviants and basin ids)
   degree: U32; // shallow count of edges
-  breadth: bigint; // deep aggregate degree
+  breadth: bigint; // approximate deep degree; shared descendants may contribute repeatedly
   rotations: Bounds<U32>; // deep aggregate from edges
   versions: Bounds<U32>; // deep aggregate from edges
   schemas: Bounds<U32>; // deep aggregate over edges
@@ -63,6 +63,7 @@ type BasinEdge_S0<
       1: FootersT[IndexT][0];
 
       version: U32; // node-id encoding version number
+      revision: string; // UUIDv4 allocation revision in the shared heap
       length: U32; // shallow byte-length of basin-node in object storage
       weight: bigint; // deep approximate byte-length of basin-node graph in object storage (may include duplicates)
       sha384: Uint8Array; // digest of basin-node in object storage
@@ -176,6 +177,7 @@ type SyncLink_M0<LazyT extends BasinNode_S0<string, string>> = {
   height: U32;
   version: U32;
   entropy: Uint8Array;
+  revision: string; // node allocation revision
 
   [Symbol.unscopables]?: LazyT;
 };

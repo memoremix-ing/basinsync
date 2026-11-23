@@ -150,6 +150,7 @@ impl App {
 }
 
 struct Commit {
+    revisions: std::collections::BTreeMap<String, String>,
     proofs: heap::Proofs,
     flow: String,
     marker: Marker,
@@ -186,7 +187,7 @@ impl Commit {
         } = serde_json::from_slice(&details.ok_or_else(|| Failure::bad("missing details"))?)
             .map_err(|_| Failure::bad("invalid commit details"))?;
         basinsync::details::context_headers(&context).map_err(Failure::bad)?;
-        let edges = heap::authenticate_edges(edges, limits, None)
+        let (edges, revisions) = heap::authenticate_pinned_edges(edges, limits, None)
             .map_err(|e| Failure::new(StatusCode::UNPROCESSABLE_ENTITY, e.code, e.message))?;
         let flow = event::normalize_flow(&flow).map_err(Failure::bad)?;
         basinsync::epilogue::check_flow_key(&flow, &viewpoint).map_err(Failure::bad)?;
@@ -200,6 +201,7 @@ impl Commit {
             ));
         }
         Ok(Self {
+            revisions,
             proofs: Default::default(),
             flow,
             marker: Marker {

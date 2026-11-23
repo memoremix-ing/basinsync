@@ -34,10 +34,7 @@ impl Extension {
 }
 
 fn well_known(name: &str) -> bool {
-    matches!(
-        name,
-        "asyncIterator" | "iterator" | "match" | "species" | "unscopables"
-    )
+    basinsync_structures::value::well_known(name)
 }
 
 pub fn read(reader: Reader<&[u8]>) -> Result<Extension> {

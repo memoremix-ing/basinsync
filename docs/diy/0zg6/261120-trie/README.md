@@ -4,17 +4,21 @@ prerequisites:
 ---
 
 [access-token]: <../../../glossary/access-token.md>
+[diy/0zg6/261120-trie/0zg7/261123-trie-volume-implementations]: <0zg7/261123-trie-volume-implementations/README.md>
 [envbuf]: <../../../glossary/envbuf.md>
 [flexbuffers]: <../../../glossary/flexbuffers.md>
+[flow]: <../../../glossary/flow.md>
 [heap]: <../../../glossary/heap.md>
 [json0]: <../../../glossary/json0.md>
 [node]: <../../../glossary/node.md>
 [node-degree]: <../../../glossary/node-degree.md>
 [node-height]: <../../../glossary/node-height.md>
+[revision]: <../../../glossary/revision.md>
 [strong-edge]: <../../../glossary/strong-edge.md>
+[trie-format]: <../../../trie-format.md>
 [weak-link]: <../../../glossary/weak-link.md>
 
-# Tries and shortcut links — design discussion
+# Tries and shortcut links
 
 Explore versioned data structures for storage and incremental loading from
 basinsync. Distinguish *basin nodes*[~][node] and their *basin edges*[~][strong-edge]
@@ -31,14 +35,16 @@ aggregation. The declarations below track the proposal for refinement.
 `"0"` through `"6"`. *Basin edges*[~][strong-edge] are vectors; their footer
 descriptor remains a map. `Symbol.match` identifies an edge in both
 *JSON0*[~][json0] and *FlexBuffers*[~][flexbuffers]. The default
-*basin-edge degree limit*[~][node-degree] is 320.
+*basin-edge degree limit*[~][node-degree] is 320. Store node allocation
+*revisions*[~][revision] in both edges and shortcut links; the shared heap does
+not require *Flow*[~][flow] revisions in these pointers.
 
 ## Basin nodes and edges
 
 ```ts
 type U32 = number;
 
-// Proposed: null denotes no observations; nonempty bounds include both ends.
+// null denotes no observations; nonempty bounds include both ends.
 type Bounds<T> = null | [floor: T, ceiling: T];
 
 type SCHEMA_0 = 0;
@@ -68,7 +74,7 @@ interface BasinNode_S0<
 type BasinQuery_S0 = {
   height: U32; // (for DAG inaviants and basin ids)
   degree: U32; // shallow count of edges
-  breadth: bigint; // deep aggregate degree
+  breadth: bigint; // approximate deep degree; shared descendants may contribute repeatedly
   rotations: Bounds<U32>; // deep aggregate from edges
   versions: Bounds<U32>; // deep aggregate from edges
   schemas: Bounds<U32>; // deep aggregate over edges
@@ -101,6 +107,7 @@ type BasinEdge_S0<
       1: FootersT[IndexT][0];
 
       version: U32; // node-id encoding version number
+      revision: string; // UUIDv4 allocation revision in the shared heap
       length: U32; // shallow byte-length of basin-node in object storage
       weight: bigint; // deep approximate byte-length of basin-node graph in object storage (may include duplicates)
       sha384: Uint8Array; // digest of basin-node in object storage
@@ -224,6 +231,7 @@ type SyncLink_M0<LazyT extends BasinNode_S0<string, string>> = {
   height: U32;
   version: U32;
   entropy: Uint8Array;
+  revision: string; // node allocation revision
 
   [Symbol.unscopables]?: LazyT;
 };
@@ -274,7 +282,7 @@ Structural schema (slot 4), consumer migration (the first element of slot 6),
 and *basin-node*[~][node] id version (`edge.footer.version`) are independent.
 Slot 6 stores the selected migration, not all footer variants.
 
-## Proposed empty aggregates
+## Empty aggregates
 
 `Bounds<T>` is `null` when there are no observations; otherwise it contains the
 inclusive minimum and maximum. Aggregation ignores `null` bounds and returns
@@ -293,7 +301,7 @@ The root's *basin query*[~][node] has *height*[~][node-height] and
 are also null on a nonempty node with no *basin edges*[~][strong-edge]; they
 aggregate edge targets, not the current node's own version tags.
 
-For migration 0 with a null empty summary, the proposed root in
+For migration 0 with a null empty summary, the root in
 *JSON0*[~][json0] is:
 
 ```json
@@ -329,15 +337,12 @@ An empty-byte key with a null value is a nonempty trie: `count = nullity = 1n`,
 key and reverse-key bounds each contain two empty byte strings, and length bounds
 are `[0, 0]`. Its group contains one empty suffix and one null value.
 
-## Remaining packing details
+## Implementation
 
-Specify indexed nibble slots and omitted/null slots, and the 1280-inline
-transition. `edged: true` makes every nested node a *basin edge*[~][strong-edge],
-including small siblings. *Degree*[~][node-degree] 320 accommodates the 256
-structural slots, but value count alone does not bound serialized bytes.
-Runtime readers still validate integer bounds, capacities, unique/sorted keys,
-and equal key/value array lengths. For a shared child reached by two paths,
-clarify whether `breadth` counts its contribution twice.
+The *implementation milestone*[~][diy/0zg6/261120-trie/0zg7/261123-trie-volume-implementations]
+records TypeScript/Rust/Go interoperability and storage tests. The
+*format reference*[~][trie-format] defines packing and aggregation rules, including
+approximate `breadth` that may count shared descendants repeatedly.
 
 ## Strong retention and weak shortcuts
 
