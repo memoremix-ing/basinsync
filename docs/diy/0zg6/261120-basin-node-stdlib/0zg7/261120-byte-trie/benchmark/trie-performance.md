@@ -3,6 +3,7 @@
 [flexbuffers]: <../../../../../../glossary/flexbuffers.md>
 [json0]: <../../../../../../glossary/json0.md>
 [legacy-probe]: <legacy-probe.json>
+[lexidecimal-keys]: <lexidecimal-keys.md>
 [node]: <../../../../../../glossary/node.md>
 [optimized]: <optimized.json>
 [sha384]: <../../../../../../glossary/sha384.md>
@@ -27,6 +28,7 @@ runs, rotating language order. *Interactive results*[~][comparison],
 Cached lookup, before → after: TypeScript 90.9 → 38.4 µs (2.37×),
 Rust 24.5 → 17.2 µs (1.43×), Go 47.2 → 31.2 µs (1.51×). Across all
 100k-entry key layouts, gains are 1.9–2.4× / 1.2–1.4× / 1.3–1.5× respectively.
+These compare our own pre-/post-optimization implementations; `dictionary.ts` has no score.
 
 ## What was measured
 
@@ -89,3 +91,5 @@ bun scripts/probe-legacy-dictionary.ts /path/to/dictionary.ts
 `TRIE_BENCH_ROUNDS`, `TRIE_BENCH_LABEL` and `TRIE_BENCH_OUT` select runs.
 Raw reports include per-phase timings, fetch counts/bytes, whole-process peak
 RSS, machine/toolchain details, and production-source *SHA-384*[~][sha384] fingerprints.
+
+Follow-up: *increasing Lexidecimal keys and sequential reads*[~][lexidecimal-keys].

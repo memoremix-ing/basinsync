@@ -127,6 +127,26 @@ fn main() -> Result<()> {
         }
         Ok(())
     })?;
+    b.clear_cache();
+    let sequential = req["sequential"]
+        .as_array()
+        .map(|v| {
+            v.iter()
+                .map(|i| i.as_u64().unwrap() as usize)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    phase(&mut b, &mut out, "sequential", |b| {
+        for i in &sequential {
+            ensure!(trie::get(b, &root, &rows[*i].0, 7)? == Some(rows[*i].1.clone()));
+        }
+        Ok(())
+    })?;
+    out.insert("sequential_ops".into(), sequential.len().into());
+    out.insert(
+        "root_sha384".into(),
+        basin::hex(root.at(6)?.field("sha384")?.blob()?).into(),
+    );
     phase(&mut b, &mut out, "scan", |b| {
         let mut count = 0usize;
         let mut sum = 0u64;

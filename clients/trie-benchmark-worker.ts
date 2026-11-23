@@ -1,10 +1,5 @@
 import assert from "node:assert/strict";
-import {
-  Basin,
-  MemoryStorage,
-  key,
-  type Edge,
-} from "./structures/core";
+import { Basin, MemoryStorage, key, hex, type Edge } from "./structures/core";
 import { Trie, type Consumer } from "./structures/trie";
 const input = JSON.parse(await Bun.stdin.text());
 const rows: [Uint8Array, number][] = input.entries.map(
@@ -84,6 +79,11 @@ await phase("cold", async () => {
     assert.equal(await trie.get(rows[i][0]), rows[i][1]);
   }
 });
+basin.clearCache();
+await phase("sequential", async () => {
+  for (const i of input.sequential ?? [])
+    assert.equal(await trie.get(rows[i][0]), rows[i][1]);
+});
 await phase("scan", async () => {
   let count = 0,
     sum = 0;
@@ -124,6 +124,8 @@ for (const size of [1, 100])
 console.log(
   JSON.stringify({
     implementation: "typescript",
+    root_sha384: hex(trie.root[6].sha384),
+    sequential_ops: (input.sequential ?? []).length,
     ...samples,
     objects,
     stored_bytes,

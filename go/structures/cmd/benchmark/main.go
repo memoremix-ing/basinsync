@@ -14,6 +14,7 @@ import (
 type Input struct {
 	Entries     [][2]json.RawMessage
 	Queries     []int
+	Sequential  []int
 	Prefix      string
 	PrefixCount int `json:"prefix_count"`
 	Hot, Cold   int
@@ -127,6 +128,14 @@ func main() {
 			get(i)
 		}
 	})
+	b.ClearCache()
+	phase("sequential", func() {
+		for _, i := range input.Sequential {
+			get(i)
+		}
+	})
+	out["sequential_ops"] = len(input.Sequential)
+	out["root_sha384"] = hex.EncodeToString(root[6].(map[string]any)["sha384"].([]byte))
 	phase("scan", func() {
 		count, sum := 0, int64(0)
 		check(s.Visit(b, root, nil, 7, func(any, any) bool { return true }, func(_ []byte, r s.Ref) (bool, error) {

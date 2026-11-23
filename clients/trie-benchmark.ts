@@ -3,22 +3,35 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { cpus, arch, platform, release, totalmem } from "node:os";
 import { resolve } from "node:path";
-import { hex, utf8 } from "./structures/core";
+import { encode as lex } from "./lexidecimal";
+import { hex, utf8, compare } from "./structures/core";
 const sizes = (Bun.env.TRIE_BENCH_SIZES ?? "1000,10000,100000")
     .split(",")
     .map(Number),
-  layouts = (Bun.env.TRIE_BENCH_LAYOUTS ?? "random,paths,clustered").split(","),
+  layouts = (
+    Bun.env.TRIE_BENCH_LAYOUTS ?? "random,paths,clustered,lexidecimal"
+  ).split(","),
   rounds = Number(Bun.env.TRIE_BENCH_ROUNDS ?? 3);
 assert(
   sizes.every((n) => Number.isSafeInteger(n) && n >= 256 && n <= 0xffffffff),
   "sizes must be integers between 256 and 2^32-1",
 );
 assert(
-  layouts.every((n) => ["random", "paths", "clustered"].includes(n)),
+  layouts.every((n) =>
+    [
+      "random",
+      "paths",
+      "clustered",
+      "lexidecimal",
+      "lexidecimal-shuffled",
+    ].includes(n),
+  ),
   "unknown layout",
 );
+const lexStart = BigInt(Bun.env.TRIE_BENCH_LEX_START ?? "0");
+assert(lexStart >= 0n, "Lexidecimal start must be nonnegative");
 assert(Number.isSafeInteger(rounds) && rounds > 0, "rounds must be positive");
-const label = Bun.env.TRIE_BENCH_LABEL ?? "baseline",
+const label = Bun.env.TRIE_BENCH_LABEL ?? "current",
   dir = resolve(
     Bun.env.TRIE_BENCH_OUT ?? `.local/trie-benchmark-${label}-${Date.now()}`,
   );
@@ -39,7 +52,8 @@ function dataset(layout: string, n: number) {
   const rows: [Uint8Array, number][] = [];
   for (let i = 0; i < n; i++) {
     let k: Uint8Array;
-    if (layout === "paths")
+    if (layout.startsWith("lexidecimal")) k = utf8(lex(lexStart + BigInt(i)));
+    else if (layout === "paths")
       k = utf8(
         `/work/projects/p-${String(i >> 7).padStart(5, "0")}/file-${String(i).padStart(7, "0")}.dat`,
       );
@@ -53,20 +67,37 @@ function dataset(layout: string, n: number) {
     }
     rows.push([k, i]);
   }
-  const prefix =
-      layout === "paths"
+  const prefix = layout.startsWith("lexidecimal")
+      ? utf8(lex(lexStart + 16n).slice(0, -1))
+      : layout === "paths"
         ? utf8("/work/projects/p-00000/")
         : rows[0][0].slice(0, layout === "random" ? 1 : 35),
     prefix_count = rows.filter(([k]) =>
       prefix.every((v, i) => k[i] === v),
     ).length;
-  for (let i = n - 1; i > 0; i--) {
-    const j = random() % (i + 1);
-    [rows[i], rows[j]] = [rows[j], rows[i]];
-  }
+  if (layout.startsWith("lexidecimal"))
+    for (let i = 1; i < n; i++)
+      assert(
+        compare(rows[i - 1][0], rows[i][0]) < 0,
+        "Lexidecimal order mismatch",
+      );
+  if (layout !== "lexidecimal")
+    for (let i = n - 1; i > 0; i--) {
+      const j = random() % (i + 1);
+      [rows[i], rows[j]] = [rows[j], rows[i]];
+    }
+  const byValue = new Map(rows.map(([, v], i) => [v, i]));
   return {
     entries: rows.map(([k, v]) => [hex(k), v]),
-    queries: Array.from({ length: 1024 }, (_, i) => (i * 2654435761) % n),
+    queries: Array.from({ length: 1024 }, (_, i) =>
+      layout.startsWith("lexidecimal")
+        ? byValue.get((i * 2654435761) % n)!
+        : (i * 2654435761) % n,
+    ),
+    sequential: Array.from(
+      { length: Math.min(n, 1024) },
+      (_, i) => byValue.get(i)!,
+    ),
     hot: 4096,
     cold: 128,
     prefix: hex(prefix),
@@ -117,6 +148,7 @@ for (const n of sizes)
           "mixed",
           "miss",
           "cold",
+          "sequential",
           "scan",
           "prefix",
           "pruned",
@@ -124,6 +156,32 @@ for (const n of sizes)
           "update100",
         ])
           assert(Number.isFinite(result[`${name}_ms`]));
+        assert.match(
+          result.root_sha384,
+          /^[0-9a-f]{96}$/,
+          "worker is missing root digest instrumentation; rebuild it",
+        );
+        const prior = samples.find(
+          (s) =>
+            s.n === n &&
+            s.implementation === implementation &&
+            (s.layout === layout ||
+              (s.layout.startsWith("lexidecimal") &&
+                layout.startsWith("lexidecimal"))),
+        );
+        if (prior)
+          for (const field of [
+            "root_sha384",
+            "objects",
+            "stored_bytes",
+            "height",
+            "prefix_count",
+          ])
+            assert.equal(
+              result[field],
+              prior[field],
+              `canonical ${field}: ${layout}/${implementation}/${n}`,
+            );
         assert.equal(result.hot_reads, 0, "hot working set did not fit cache");
         assert.equal(result.pruned_reads, 0);
         samples.push({
@@ -145,6 +203,8 @@ for (const n of sizes)
     }
   }
 const sourceFiles = [
+  "clients/lexidecimal.ts",
+  "clients/trie-benchmark.ts",
   "clients/flexbuffer.ts",
   "clients/structures/core.ts",
   "clients/structures/trie.ts",
@@ -156,6 +216,7 @@ const sourceFiles = [
   "go/structures/trie.go",
 ];
 const report = {
+  benchmark_version: 2,
   source_sha384: Object.fromEntries(
     sourceFiles.map((path) => [
       path,
@@ -163,6 +224,7 @@ const report = {
     ]),
   ),
   label,
+  lexidecimal_start: lexStart.toString(),
   recorded_at: new Date().toISOString(),
   rounds,
   machine: {
