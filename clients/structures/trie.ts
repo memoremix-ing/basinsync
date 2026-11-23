@@ -1,3 +1,4 @@
+import { type Operation, resolveOperation } from "./operation";
 import { Reference } from "../flexbuffer";
 import {
   Basin,
@@ -15,6 +16,7 @@ import {
   query,
   distinct,
   u32,
+  isPromiseLike,
 } from "./core";
 import type { TrieNode_S0, TrieGroup, Bounds } from "./types";
 export const TRIE = ".trie-node/";
@@ -73,6 +75,44 @@ function intersects(base: Uint8Array, h: Header, p: Uint8Array): boolean {
     end = nextPrefix(p);
   return compare(hi, p) >= 0 && (!end || compare(lo, end) < 0);
 }
+type LookupGroup = { keys: Uint8Array[]; values: Reference };
+type LookupChild = { ref: Reference } | { edge: Edge; header: Header };
+type LookupPlan = {
+  header: Header;
+  group: LookupGroup;
+  members: Reference;
+  edged: boolean | null;
+  groups: Map<number, LookupGroup>;
+  children: Map<number, LookupChild | null>;
+};
+function lookupGroup(g: Reference): LookupGroup {
+  const keys = g.get("keys"),
+    values = g.get("values");
+  check(
+    g.isMap() && keys.length() === values.length() && keys.length() <= 63,
+    "invalid trie group",
+  );
+  const blobs: Uint8Array[] = [];
+  for (let i = 0; i < keys.length(); i++) {
+    const b = keys.get(i).blobValue();
+    check(b, "invalid key blob");
+    blobs.push(b);
+  }
+  return { keys: blobs, values };
+}
+function findValue(group: LookupGroup, key: Uint8Array): Reference | undefined {
+  let lo = 0,
+    hi = group.keys.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (compare(group.keys[mid], key) < 0) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo < group.keys.length && equal(group.keys[lo], key)
+    ? group.values.get(lo)
+    : undefined;
+}
+
 /** Sorted key groups and two indexed nibble levels. Writes never depend on insertion history. */
 export class Trie<V = unknown, M = null> {
   constructor(
@@ -129,7 +169,13 @@ export class Trie<V = unknown, M = null> {
     const rows: Row<V, M>[] = [];
     for (const [raw, value] of input) {
       const k = key(raw);
-      rows.push({ key: k, full: k, value, summary: await c.entry(k, value) });
+      const summary = c.entry(k, value);
+      rows.push({
+        key: k,
+        full: k,
+        value,
+        summary: isPromiseLike(summary) ? await summary : summary,
+      });
     }
     rows.sort((a, b) => compare(a.key, b.key));
     for (let i = 1; i < rows.length; i++)
@@ -170,9 +216,10 @@ export class Trie<V = unknown, M = null> {
           (a, b) => a - b,
         ),
       };
-      const summary = input.length
-        ? await c.combine(input.map((r) => r.summary))
+      const combined = input.length
+        ? c.combine(input.map((r) => r.summary))
         : c.empty;
+      const summary = isPromiseLike(combined) ? await combined : combined;
       let own = rows,
         members: (TrieGroup<V> | (Local<V, M> | null)[] | null)[] | null = null,
         edged: boolean | null = null;
@@ -314,73 +361,127 @@ export class Trie<V = unknown, M = null> {
     );
     return { header: h, footer: f, group: g, members: m, edged: e };
   }
-  async getView(raw: Uint8Array | string): Promise<Reference | undefined> {
-    let k = key(raw);
-    const [header] = this.rootInfo();
+  private readonly lookups = new WeakMap<Reference, LookupPlan>();
+  private lookupPlan(r: Reference): LookupPlan {
+    let p = this.lookups.get(r);
+    if (!p) {
+      const raw = this.parts(r);
+      p = {
+        header: raw.header,
+        group: lookupGroup(raw.group),
+        members: raw.members,
+        edged: raw.edged,
+        groups: new Map(),
+        children: new Map(),
+      };
+      this.lookups.set(r, p);
+    }
+    return p;
+  }
+  private lookupChild(
+    p: LookupPlan,
+    byte: number,
+  ): LookupChild | LookupGroup | null {
+    const high = byte >> 4;
+    if (p.members.isNull() || high >= p.members.length()) return null;
+    const known = p.groups.get(high);
+    if (known) return known;
+    if (p.children.has(byte)) return p.children.get(byte)!;
+    const m = p.members.get(high);
+    if (m.isNull()) {
+      p.children.set(byte, null);
+      return null;
+    }
+    if (m.isMap()) {
+      const g = lookupGroup(m);
+      p.groups.set(high, g);
+      return g;
+    }
+    check(m.isVector() && m.length() <= 16, "invalid nibble slots");
+    const low = byte & 15;
+    let result: LookupChild | null = null;
+    if (low < m.length()) {
+      const child = m.get(low);
+      if (!child.isNull()) {
+        if (p.edged) {
+          const edge = edgeFrom(child);
+          result = { edge, header: edge[5] as Header };
+        } else result = { ref: child };
+      }
+    }
+    p.children.set(byte, result);
+    return result;
+  }
+  /** Does no I/O until a returned generator is resumed; ready reads allocate no Promise. */
+  getViewOrDefer(raw: Uint8Array | string): Operation<Reference | undefined> {
+    const k = key(raw),
+      [header] = this.rootInfo();
     if (
       !header.keys ||
       compare(k, header.keys[0]) < 0 ||
       compare(k, header.keys[1]) > 0
     )
       return undefined;
-    let r = await this.readRoot();
-    for (let depth = 0; ; depth++) {
-      check(depth < 256, "trie nesting limit");
-      const p = this.parts(r),
-        prefix = p.header.prefix ?? new Uint8Array();
-      if (!starts(k, prefix)) return undefined;
-      k = k.subarray(prefix.length);
-      const keys = p.group.get("keys");
-      let lo = 0,
-        hi = keys.length();
-      while (lo < hi) {
-        const mid = (lo + hi) >> 1,
-          at = keys.get(mid).blobValue();
-        check(at, "invalid key blob");
-        if (compare(at, k) < 0) lo = mid + 1;
-        else hi = mid;
+    if (!Array.isArray(this.source)) return this.seek(this.source, k, 0);
+    const r = this.basin.peek(this.source);
+    return r
+      ? this.seek(r, k, 0)
+      : () => this.resumeLookup(this.source as Edge, k, 0);
+  }
+  private *resumeLookup(
+    edge: Edge,
+    k: Uint8Array,
+    depth: number,
+  ): Generator<PromiseLike<unknown>, Reference | undefined, unknown> {
+    const r = (yield this.basin.load(edge)) as Reference;
+    const next = this.seek(r, k, depth);
+    return typeof next === "function" ? yield* next() : next;
+  }
+  private seek(
+    r: Reference,
+    k: Uint8Array,
+    depth: number,
+  ): Operation<Reference | undefined> {
+    for (;;) {
+      check(depth++ < 256, "trie nesting limit");
+      const p = this.lookupPlan(r),
+        prefix = p.header.prefix;
+      if (prefix) {
+        if (!starts(k, prefix)) return undefined;
+        k = k.subarray(prefix.length);
       }
-      if (lo < keys.length() && equal(keys.get(lo).blobValue()!, k))
-        return p.group.get("values").get(lo);
-      if (!k.length || p.members.isNull() || k[0] >> 4 >= p.members.length())
-        return undefined;
-      const m = p.members.get(k[0] >> 4);
-      if (m.isNull()) return undefined;
-      if (m.isMap()) {
-        const ks = m.get("keys"),
-          vs = m.get("values");
-        check(
-          ks.length() === vs.length() && ks.length() <= 63,
-          "invalid child group",
-        );
-        let a = 0,
-          b = ks.length();
-        while (a < b) {
-          const mid = (a + b) >> 1;
-          if (compare(ks.get(mid).blobValue()!, k) < 0) a = mid + 1;
-          else b = mid;
-        }
-        return a < ks.length() && equal(ks.get(a).blobValue()!, k)
-          ? vs.get(a)
-          : undefined;
-      }
-      check(m.isVector() && m.length() <= 16, "invalid nibble slots");
-      const low = k[0] & 15;
-      if (low >= m.length() || m.get(low).isNull()) return undefined;
-      const next = m.get(low);
+      const own = findValue(p.group, k);
+      if (own !== undefined) return own;
+      if (!k.length) return undefined;
+      const child = this.lookupChild(p, k[0]);
+      if (!child) return undefined;
+      if ("keys" in child) return findValue(child, k);
       k = k.subarray(1);
-      if (p.edged) {
-        const edge = edgeFrom(next);
-        const h = edge[5] as Header;
+      if ("edge" in child) {
+        const h = child.header;
         if (!h.keys || compare(k, h.keys[0]) < 0 || compare(k, h.keys[1]) > 0)
           return undefined;
-        r = await this.basin.load(edge);
-      } else r = next;
+        const cached = this.basin.peek(child.edge);
+        if (!cached) return () => this.resumeLookup(child.edge, k, depth);
+        r = cached;
+      } else r = child.ref;
     }
   }
-  async get(raw: Uint8Array | string): Promise<V | undefined> {
-    const r = await this.getView(raw);
+  getOrDefer(raw: Uint8Array | string): Operation<V | undefined> {
+    const r = this.getViewOrDefer(raw);
+    if (typeof r === "function")
+      return function* () {
+        const value = yield* r();
+        return value === undefined ? undefined : object<V>(value);
+      };
     return r === undefined ? undefined : object<V>(r);
+  }
+  async getView(raw: Uint8Array | string): Promise<Reference | undefined> {
+    return resolveOperation(this.getViewOrDefer(raw));
+  }
+  async get(raw: Uint8Array | string): Promise<V | undefined> {
+    const op = this.getOrDefer(raw);
+    return typeof op === "function" ? resolveOperation(op) : op;
   }
   async *entries(
     prefix: Uint8Array | string = new Uint8Array(),

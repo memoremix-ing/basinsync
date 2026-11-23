@@ -6,3 +6,4 @@ export * from "./basinsync";
 export * as bromberg from "./bromberg";
 export * from "./vector";
 export * from "./btree";
+export * from "./operation";

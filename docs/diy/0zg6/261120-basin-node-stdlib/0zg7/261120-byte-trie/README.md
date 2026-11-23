@@ -6,6 +6,7 @@ prerequisites:
 
 [access-token]: <../../../../../glossary/access-token.md>
 [basin]: <../../../../../glossary/basin.md>
+[client-costs]: <benchmark/client-costs.md>
 [diy/0zg6/261120-basin-node-stdlib]: <../../README.md>
 [envbuf]: <../../../../../glossary/envbuf.md>
 [flexbuffers]: <../../../../../glossary/flexbuffers.md>
@@ -307,6 +308,18 @@ Expose borrowed values for lazy parsing, owned reads for independent data, and
 summary/prefix filters before fetching *basin nodes*[~][node]. TypeScript uses
 Web Crypto and browser APIs; the Rust structures crate builds independently for
 Wasm. Treat borrowed byte views as immutable.
+
+TypeScript's `getOrDefer` / `getViewOrDefer` return ready values synchronously,
+or a lazy generator function when I/O is needed; `get` / `getView` retain their
+Promise APIs. Resume deferred reads with:
+
+```js
+const op = trie.getOrDefer(key);
+const value = typeof op === "function" ? await resolveOperation(op) : op;
+```
+
+Compare logical traversal separately from serialization and storage using the
+*client cost measurements*[~][client-costs].
 
 Exercise empty/null keys, 63/64 and 1280/1281 boundaries, canonical deletion,
 Unicode basenames, consumer migrations, shared descendants, corrupted payloads,

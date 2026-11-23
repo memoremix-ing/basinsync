@@ -1,3 +1,4 @@
+[client-costs]: <client-costs.md>
 [collection-comparison]: <collection-comparison.html>
 [collection-runs]: <collection-runs.json>
 [collection-summary]: <collection-summary.csv>
@@ -85,3 +86,5 @@ patch occurrence counts, and fingerprints originals and timed sources with
 *SHA-384*[~][sha384]. It requires the sibling `matter.ts`, `change-management/` and
 `result-types/` files. `TRIE_BENCH_SIZES` and `COLLECTION_BENCH_ROUNDS` reduce or
 expand runs; the defaults produce the recorded 126 trials.
+
+Follow-up: *client-only traversal, hashing and scheduling costs*[~][client-costs].

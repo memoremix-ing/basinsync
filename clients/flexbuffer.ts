@@ -1308,28 +1308,7 @@ class Reference {
     this.byteWidth = 1 << (packedType & 3);
     this.valueType = packedType >> 2 as never;
 
-    this.blobValue = blobValue;
-    this.bigintValue = bigintValue;
-    this.boolValue = boolValue;
-    this.floatValue = floatValue;
-    this.get = get;
-    this.intValue = intValue;
-    this.isBlob = isBlob;
-    this.isBigint = isBigint;
-    this.isBool = isBool;
-    this.isFloat = isFloat;
-    this.isInt = isInt;
-    this.isMap = isMap;
-    this.isNull = isNull;
-    this.isNumber = isNumber;
-    this.isString = isString;
-    this.isSymbol = isSymbol;
-    this.isVector = isVector;
-    this.length = sizeof;
-    this.numericValue = numericValue;
-    this.stringValue = stringValue;
-    this.symbolValue = symbolValue;
-    this.toObject = parse;
+
   }
 
   isNull(): boolean {

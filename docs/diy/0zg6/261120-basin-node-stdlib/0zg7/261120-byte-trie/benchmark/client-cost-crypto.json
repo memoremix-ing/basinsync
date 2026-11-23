@@ -1,0 +1,1552 @@
+{
+  "recorded_at": "2026-11-23T19:39:10.050Z",
+  "base_ref": "@-",
+  "base_commit": "e0014e0c0e737888cd43ce06c2528578f272a744",
+  "rounds": 3,
+  "n": 100000,
+  "bun": "1.4.5",
+  "machine": {
+    "cpu": "Apple M2",
+    "platform": "darwin",
+    "arch": "arm64",
+    "memory": 25769803776
+  },
+  "baseline_sha384": {
+    "clients/flexbuffer.ts": "b6747d912b4b6ec470f0ce64a0a6fa0ab6db89cb505bd2e06146c382e21275e7a9c2d808bff6ab7d94919c69011b3593",
+    "clients/lexidecimal.ts": "9b7a7e0871e5bb49c8477abf0573d01bace48e785584092775fa2ec9333d117b4c46377a879513e68c244fedb148fcf0",
+    "clients/symbols.ts": "c6ff4588514524a3ca397067c3c95b5871cb93f6905f46865b82435c7a4f1717719e97be8d782e7af2e089f4736d4f47",
+    "clients/structures/core.ts": "0c53a3b2099a246c28f7966279cde513f3aa8f9500b7cdfba3b787cb0f77369c3ac8d79e558f17361821b89f3718bc25",
+    "clients/structures/trie.ts": "8e159d99e2220a58cfe98ba5c7a2113ea3c50b348c21b94c3ef6da9cd7c98572b0d68dcc11ea82dd3545b659eb258453",
+    "clients/structures/types.ts": "f9c81bb8664010d6356abf444659a4d71944ede419a1becdcb449f49bdac35a4734ebf0a311358c925f0adc727ca1234",
+    "clients/structures/operation.ts": "a9aabb03bdabe8bc7a559a142160a99a2384234732d47cde6ef6997eb461aa120c5ec4d4eafb0d44e4b15082b63e99ed"
+  },
+  "variant_sha384": {
+    "baseline": {
+      "clients/flexbuffer.ts": "b6747d912b4b6ec470f0ce64a0a6fa0ab6db89cb505bd2e06146c382e21275e7a9c2d808bff6ab7d94919c69011b3593",
+      "clients/lexidecimal.ts": "9b7a7e0871e5bb49c8477abf0573d01bace48e785584092775fa2ec9333d117b4c46377a879513e68c244fedb148fcf0",
+      "clients/symbols.ts": "c6ff4588514524a3ca397067c3c95b5871cb93f6905f46865b82435c7a4f1717719e97be8d782e7af2e089f4736d4f47",
+      "clients/structures/core.ts": "0c53a3b2099a246c28f7966279cde513f3aa8f9500b7cdfba3b787cb0f77369c3ac8d79e558f17361821b89f3718bc25",
+      "clients/structures/trie.ts": "8e159d99e2220a58cfe98ba5c7a2113ea3c50b348c21b94c3ef6da9cd7c98572b0d68dcc11ea82dd3545b659eb258453",
+      "clients/structures/types.ts": "f9c81bb8664010d6356abf444659a4d71944ede419a1becdcb449f49bdac35a4734ebf0a311358c925f0adc727ca1234",
+      "clients/structures/operation.ts": "a9aabb03bdabe8bc7a559a142160a99a2384234732d47cde6ef6997eb461aa120c5ec4d4eafb0d44e4b15082b63e99ed"
+    },
+    "combined-final": {
+      "clients/flexbuffer.ts": "5b653f93b7fd4c02cfc697cbcda15486c8f8dddc490e67470d33f679a0f3af5d6f2403fd91cde8f63d5749aeac88abd3",
+      "clients/lexidecimal.ts": "9b7a7e0871e5bb49c8477abf0573d01bace48e785584092775fa2ec9333d117b4c46377a879513e68c244fedb148fcf0",
+      "clients/symbols.ts": "c6ff4588514524a3ca397067c3c95b5871cb93f6905f46865b82435c7a4f1717719e97be8d782e7af2e089f4736d4f47",
+      "clients/structures/core.ts": "d7be8220ce819c74a90f534184ef09df1e847c026bd3de1d983df82b3ab9d57ab71351744ea769fa163fe15f61f9f2e3",
+      "clients/structures/trie.ts": "8d2968f56c620b953a981eb37c9fbcdfdb9c8be95c53c82fa4ae0264d775d3fa698a0b481f3e60ddaa0ccae93d4cc701",
+      "clients/structures/types.ts": "f9c81bb8664010d6356abf444659a4d71944ede419a1becdcb449f49bdac35a4734ebf0a311358c925f0adc727ca1234",
+      "clients/structures/operation.ts": "a9aabb03bdabe8bc7a559a142160a99a2384234732d47cde6ef6997eb461aa120c5ec4d4eafb0d44e4b15082b63e99ed"
+    }
+  },
+  "worker_sha384": "5cf9654a2b13f2a279e09eb2609e4bc513b396492bd9acb4e8438fb88ebb4e02561d1cee2bdee2d5f20ab34c3ebca847",
+  "samples": [
+    {
+      "variant": "baseline",
+      "layout": "random",
+      "n": 100000,
+      "round": 0,
+      "build_ms": 208.41454099999999,
+      "build_reads": 0,
+      "build_crypto": {
+        "digest": {
+          "calls": 257,
+          "ms": 6.445125000000331,
+          "bytes": 2594112
+        },
+        "importKey": {
+          "calls": 257,
+          "ms": 0.5281319999998288,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 257,
+          "ms": 2.9440049999998905,
+          "bytes": 20046
+        }
+      },
+      "hot_ms": 161.91220900000002,
+      "hot_reads": 0,
+      "hot_crypto": {
+        "digest": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "mixed_ms": 60.37720800000005,
+      "mixed_reads": 503,
+      "mixed_crypto": {
+        "digest": {
+          "calls": 503,
+          "ms": 13.516758999999297,
+          "bytes": 5245240
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "cold_ms": 23.77754200000004,
+      "cold_reads": 256,
+      "cold_crypto": {
+        "digest": {
+          "calls": 256,
+          "ms": 13.563781000000517,
+          "bytes": 13159688
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "scan_ms": 74.24658399999998,
+      "scan_reads": 256,
+      "scan_crypto": {
+        "digest": {
+          "calls": 256,
+          "ms": 9.559382000000028,
+          "bytes": 2501072
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "root_sha384": "ee182e61c0358a25f34366a7880fe50b4cb0a8aa84a717a847aef1afc55a42f2ee0d554f1a77ec4284745e736440db3c",
+      "objects": 257,
+      "hot_ops": 4096,
+      "mixed_ops": 1024,
+      "cold_ops": 128
+    },
+    {
+      "variant": "combined-final",
+      "layout": "random",
+      "n": 100000,
+      "round": 0,
+      "build_ms": 188.52391699999998,
+      "build_reads": 0,
+      "build_crypto": {
+        "digest": {
+          "calls": 257,
+          "ms": 7.320246000000509,
+          "bytes": 2594112
+        },
+        "importKey": {
+          "calls": 257,
+          "ms": 0.5731749999998783,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 257,
+          "ms": 3.7290890000003287,
+          "bytes": 20046
+        }
+      },
+      "hot_ms": 10.45995899999997,
+      "hot_reads": 0,
+      "hot_crypto": {
+        "digest": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "mixed_ms": 38.64695900000004,
+      "mixed_reads": 503,
+      "mixed_crypto": {
+        "digest": {
+          "calls": 503,
+          "ms": 10.168036000000257,
+          "bytes": 5245240
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "cold_ms": 27.66187500000001,
+      "cold_reads": 256,
+      "cold_crypto": {
+        "digest": {
+          "calls": 256,
+          "ms": 13.731135000000677,
+          "bytes": 13159688
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "hot_generator_ms": 118.361042,
+      "hot_generator_reads": 0,
+      "hot_generator_crypto": {
+        "digest": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "hot_await_ms": 118.04312499999997,
+      "hot_await_reads": 0,
+      "hot_await_crypto": {
+        "digest": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "hot_direct_ops": 65536,
+      "scan_ms": 73.15479200000004,
+      "scan_reads": 232,
+      "scan_crypto": {
+        "digest": {
+          "calls": 232,
+          "ms": 11.204709999999977,
+          "bytes": 2267336
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "root_sha384": "ee182e61c0358a25f34366a7880fe50b4cb0a8aa84a717a847aef1afc55a42f2ee0d554f1a77ec4284745e736440db3c",
+      "objects": 257,
+      "hot_ops": 4096,
+      "mixed_ops": 1024,
+      "cold_ops": 128
+    },
+    {
+      "variant": "combined-final",
+      "layout": "random",
+      "n": 100000,
+      "round": 1,
+      "build_ms": 176.548375,
+      "build_reads": 0,
+      "build_crypto": {
+        "digest": {
+          "calls": 257,
+          "ms": 5.780009999999976,
+          "bytes": 2594112
+        },
+        "importKey": {
+          "calls": 257,
+          "ms": 0.5362960000001351,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 257,
+          "ms": 3.2989179999997873,
+          "bytes": 20046
+        }
+      },
+      "hot_ms": 10.422041000000036,
+      "hot_reads": 0,
+      "hot_crypto": {
+        "digest": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "mixed_ms": 42.26687499999997,
+      "mixed_reads": 503,
+      "mixed_crypto": {
+        "digest": {
+          "calls": 503,
+          "ms": 10.850379999999006,
+          "bytes": 5245240
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "cold_ms": 23.529499999999985,
+      "cold_reads": 256,
+      "cold_crypto": {
+        "digest": {
+          "calls": 256,
+          "ms": 13.464133000000572,
+          "bytes": 13159688
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "hot_await_ms": 119.32070900000002,
+      "hot_await_reads": 0,
+      "hot_await_crypto": {
+        "digest": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "hot_generator_ms": 115.07966700000003,
+      "hot_generator_reads": 0,
+      "hot_generator_crypto": {
+        "digest": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "hot_direct_ops": 65536,
+      "scan_ms": 73.91258299999993,
+      "scan_reads": 232,
+      "scan_crypto": {
+        "digest": {
+          "calls": 232,
+          "ms": 11.342621000000122,
+          "bytes": 2267336
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "root_sha384": "ee182e61c0358a25f34366a7880fe50b4cb0a8aa84a717a847aef1afc55a42f2ee0d554f1a77ec4284745e736440db3c",
+      "objects": 257,
+      "hot_ops": 4096,
+      "mixed_ops": 1024,
+      "cold_ops": 128
+    },
+    {
+      "variant": "baseline",
+      "layout": "random",
+      "n": 100000,
+      "round": 1,
+      "build_ms": 207.68550000000002,
+      "build_reads": 0,
+      "build_crypto": {
+        "digest": {
+          "calls": 257,
+          "ms": 7.3312029999999595,
+          "bytes": 2594112
+        },
+        "importKey": {
+          "calls": 257,
+          "ms": 0.522287999999719,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 257,
+          "ms": 2.977998999999926,
+          "bytes": 20046
+        }
+      },
+      "hot_ms": 158.104084,
+      "hot_reads": 0,
+      "hot_crypto": {
+        "digest": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "mixed_ms": 59.92820899999998,
+      "mixed_reads": 503,
+      "mixed_crypto": {
+        "digest": {
+          "calls": 503,
+          "ms": 13.022082000000012,
+          "bytes": 5245240
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "cold_ms": 24.912625000000048,
+      "cold_reads": 256,
+      "cold_crypto": {
+        "digest": {
+          "calls": 256,
+          "ms": 14.394956999999863,
+          "bytes": 13159688
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "scan_ms": 72.69695899999999,
+      "scan_reads": 256,
+      "scan_crypto": {
+        "digest": {
+          "calls": 256,
+          "ms": 8.598413000000505,
+          "bytes": 2501072
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "root_sha384": "ee182e61c0358a25f34366a7880fe50b4cb0a8aa84a717a847aef1afc55a42f2ee0d554f1a77ec4284745e736440db3c",
+      "objects": 257,
+      "hot_ops": 4096,
+      "mixed_ops": 1024,
+      "cold_ops": 128
+    },
+    {
+      "variant": "baseline",
+      "layout": "random",
+      "n": 100000,
+      "round": 2,
+      "build_ms": 206.519792,
+      "build_reads": 0,
+      "build_crypto": {
+        "digest": {
+          "calls": 257,
+          "ms": 6.2334160000001475,
+          "bytes": 2594112
+        },
+        "importKey": {
+          "calls": 257,
+          "ms": 0.5135399999995514,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 257,
+          "ms": 3.386042999999944,
+          "bytes": 20046
+        }
+      },
+      "hot_ms": 156.32412499999998,
+      "hot_reads": 0,
+      "hot_crypto": {
+        "digest": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "mixed_ms": 59.69625000000002,
+      "mixed_reads": 503,
+      "mixed_crypto": {
+        "digest": {
+          "calls": 503,
+          "ms": 13.056954000001042,
+          "bytes": 5245240
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "cold_ms": 24.48345900000004,
+      "cold_reads": 256,
+      "cold_crypto": {
+        "digest": {
+          "calls": 256,
+          "ms": 14.159912999999278,
+          "bytes": 13159688
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "scan_ms": 73.45566700000006,
+      "scan_reads": 256,
+      "scan_crypto": {
+        "digest": {
+          "calls": 256,
+          "ms": 8.121442000000002,
+          "bytes": 2501072
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "root_sha384": "ee182e61c0358a25f34366a7880fe50b4cb0a8aa84a717a847aef1afc55a42f2ee0d554f1a77ec4284745e736440db3c",
+      "objects": 257,
+      "hot_ops": 4096,
+      "mixed_ops": 1024,
+      "cold_ops": 128
+    },
+    {
+      "variant": "combined-final",
+      "layout": "random",
+      "n": 100000,
+      "round": 2,
+      "build_ms": 175.792416,
+      "build_reads": 0,
+      "build_crypto": {
+        "digest": {
+          "calls": 257,
+          "ms": 5.817541000000375,
+          "bytes": 2594112
+        },
+        "importKey": {
+          "calls": 257,
+          "ms": 0.4984509999998181,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 257,
+          "ms": 3.187959000000461,
+          "bytes": 20046
+        }
+      },
+      "hot_ms": 10.213750000000005,
+      "hot_reads": 0,
+      "hot_crypto": {
+        "digest": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "mixed_ms": 41.03283300000004,
+      "mixed_reads": 503,
+      "mixed_crypto": {
+        "digest": {
+          "calls": 503,
+          "ms": 12.6420370000003,
+          "bytes": 5245240
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "cold_ms": 23.55129199999999,
+      "cold_reads": 256,
+      "cold_crypto": {
+        "digest": {
+          "calls": 256,
+          "ms": 13.53061799999989,
+          "bytes": 13159688
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "hot_generator_ms": 118.15558299999998,
+      "hot_generator_reads": 0,
+      "hot_generator_crypto": {
+        "digest": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "hot_await_ms": 117.93308300000001,
+      "hot_await_reads": 0,
+      "hot_await_crypto": {
+        "digest": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "hot_direct_ops": 65536,
+      "scan_ms": 75.92216700000006,
+      "scan_reads": 232,
+      "scan_crypto": {
+        "digest": {
+          "calls": 232,
+          "ms": 12.342838000000938,
+          "bytes": 2267336
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "root_sha384": "ee182e61c0358a25f34366a7880fe50b4cb0a8aa84a717a847aef1afc55a42f2ee0d554f1a77ec4284745e736440db3c",
+      "objects": 257,
+      "hot_ops": 4096,
+      "mixed_ops": 1024,
+      "cold_ops": 128
+    },
+    {
+      "variant": "baseline",
+      "layout": "lexidecimal",
+      "n": 100000,
+      "round": 0,
+      "build_ms": 383.866833,
+      "build_reads": 0,
+      "build_crypto": {
+        "digest": {
+          "calls": 396,
+          "ms": 10.357117000000073,
+          "bytes": 1993664
+        },
+        "importKey": {
+          "calls": 396,
+          "ms": 1.6089599999997972,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 396,
+          "ms": 6.103915999999458,
+          "bytes": 30888
+        }
+      },
+      "hot_ms": 297.73495899999995,
+      "hot_reads": 0,
+      "hot_crypto": {
+        "digest": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "mixed_ms": 111.62254099999996,
+      "mixed_reads": 990,
+      "mixed_crypto": {
+        "digest": {
+          "calls": 990,
+          "ms": 21.028381000001445,
+          "bytes": 5566232
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "cold_ms": 29.033582999999908,
+      "cold_reads": 383,
+      "cold_crypto": {
+        "digest": {
+          "calls": 383,
+          "ms": 12.340122999999835,
+          "bytes": 8446944
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "scan_ms": 142.50079200000005,
+      "scan_reads": 394,
+      "scan_crypto": {
+        "digest": {
+          "calls": 394,
+          "ms": 13.201011000003291,
+          "bytes": 1917048
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "root_sha384": "f23514c8a9871379f2a0614f490527f8fec5856657006df7b4bd5cda42072a3c42da87f9cb1e6acf3a14e3ecc0b9016e",
+      "objects": 396,
+      "hot_ops": 4096,
+      "mixed_ops": 1024,
+      "cold_ops": 128
+    },
+    {
+      "variant": "combined-final",
+      "layout": "lexidecimal",
+      "n": 100000,
+      "round": 0,
+      "build_ms": 299.911208,
+      "build_reads": 0,
+      "build_crypto": {
+        "digest": {
+          "calls": 396,
+          "ms": 11.831589000000292,
+          "bytes": 1993664
+        },
+        "importKey": {
+          "calls": 396,
+          "ms": 0.900797999999611,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 396,
+          "ms": 7.195068999999776,
+          "bytes": 30888
+        }
+      },
+      "hot_ms": 14.922750000000008,
+      "hot_reads": 0,
+      "hot_crypto": {
+        "digest": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "mixed_ms": 71.93366700000001,
+      "mixed_reads": 990,
+      "mixed_crypto": {
+        "digest": {
+          "calls": 990,
+          "ms": 15.56177700000029,
+          "bytes": 5566232
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "cold_ms": 29.35337499999997,
+      "cold_reads": 383,
+      "cold_crypto": {
+        "digest": {
+          "calls": 383,
+          "ms": 11.754061999999408,
+          "bytes": 8446944
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "hot_generator_ms": 183.11787500000003,
+      "hot_generator_reads": 0,
+      "hot_generator_crypto": {
+        "digest": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "hot_await_ms": 180.75291700000002,
+      "hot_await_reads": 0,
+      "hot_await_crypto": {
+        "digest": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "hot_direct_ops": 65536,
+      "scan_ms": 136.723166,
+      "scan_reads": 372,
+      "scan_crypto": {
+        "digest": {
+          "calls": 372,
+          "ms": 13.579464000000598,
+          "bytes": 1823360
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "root_sha384": "f23514c8a9871379f2a0614f490527f8fec5856657006df7b4bd5cda42072a3c42da87f9cb1e6acf3a14e3ecc0b9016e",
+      "objects": 396,
+      "hot_ops": 4096,
+      "mixed_ops": 1024,
+      "cold_ops": 128
+    },
+    {
+      "variant": "combined-final",
+      "layout": "lexidecimal",
+      "n": 100000,
+      "round": 1,
+      "build_ms": 306.64370799999995,
+      "build_reads": 0,
+      "build_crypto": {
+        "digest": {
+          "calls": 396,
+          "ms": 10.144379999999344,
+          "bytes": 1993664
+        },
+        "importKey": {
+          "calls": 396,
+          "ms": 0.9022050000001656,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 396,
+          "ms": 11.045216999999894,
+          "bytes": 30888
+        }
+      },
+      "hot_ms": 14.843958999999984,
+      "hot_reads": 0,
+      "hot_crypto": {
+        "digest": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "mixed_ms": 72.59412500000002,
+      "mixed_reads": 990,
+      "mixed_crypto": {
+        "digest": {
+          "calls": 990,
+          "ms": 19.722681000000875,
+          "bytes": 5566232
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "cold_ms": 29.532083999999998,
+      "cold_reads": 383,
+      "cold_crypto": {
+        "digest": {
+          "calls": 383,
+          "ms": 13.16675099999975,
+          "bytes": 8446944
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "hot_await_ms": 179.01187500000003,
+      "hot_await_reads": 0,
+      "hot_await_crypto": {
+        "digest": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "hot_generator_ms": 174.9805,
+      "hot_generator_reads": 0,
+      "hot_generator_crypto": {
+        "digest": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "hot_direct_ops": 65536,
+      "scan_ms": 139.9602920000001,
+      "scan_reads": 372,
+      "scan_crypto": {
+        "digest": {
+          "calls": 372,
+          "ms": 16.167203000000995,
+          "bytes": 1823360
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "root_sha384": "f23514c8a9871379f2a0614f490527f8fec5856657006df7b4bd5cda42072a3c42da87f9cb1e6acf3a14e3ecc0b9016e",
+      "objects": 396,
+      "hot_ops": 4096,
+      "mixed_ops": 1024,
+      "cold_ops": 128
+    },
+    {
+      "variant": "baseline",
+      "layout": "lexidecimal",
+      "n": 100000,
+      "round": 1,
+      "build_ms": 378.293584,
+      "build_reads": 0,
+      "build_crypto": {
+        "digest": {
+          "calls": 396,
+          "ms": 13.976367000000977,
+          "bytes": 1993664
+        },
+        "importKey": {
+          "calls": 396,
+          "ms": 0.9872519999995433,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 396,
+          "ms": 4.929538999999295,
+          "bytes": 30888
+        }
+      },
+      "hot_ms": 307.68979199999995,
+      "hot_reads": 0,
+      "hot_crypto": {
+        "digest": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "mixed_ms": 114.379458,
+      "mixed_reads": 990,
+      "mixed_crypto": {
+        "digest": {
+          "calls": 990,
+          "ms": 20.948147000000972,
+          "bytes": 5566232
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "cold_ms": 30.139290999999957,
+      "cold_reads": 383,
+      "cold_crypto": {
+        "digest": {
+          "calls": 383,
+          "ms": 11.89587500000141,
+          "bytes": 8446944
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "scan_ms": 147.65575,
+      "scan_reads": 394,
+      "scan_crypto": {
+        "digest": {
+          "calls": 394,
+          "ms": 13.680279000001633,
+          "bytes": 1917048
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "root_sha384": "f23514c8a9871379f2a0614f490527f8fec5856657006df7b4bd5cda42072a3c42da87f9cb1e6acf3a14e3ecc0b9016e",
+      "objects": 396,
+      "hot_ops": 4096,
+      "mixed_ops": 1024,
+      "cold_ops": 128
+    },
+    {
+      "variant": "baseline",
+      "layout": "lexidecimal",
+      "n": 100000,
+      "round": 2,
+      "build_ms": 394.922,
+      "build_reads": 0,
+      "build_crypto": {
+        "digest": {
+          "calls": 396,
+          "ms": 17.97583999999999,
+          "bytes": 1993664
+        },
+        "importKey": {
+          "calls": 396,
+          "ms": 0.972837000000581,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 396,
+          "ms": 4.993540000000152,
+          "bytes": 30888
+        }
+      },
+      "hot_ms": 300.98008400000003,
+      "hot_reads": 0,
+      "hot_crypto": {
+        "digest": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "mixed_ms": 111.19404099999997,
+      "mixed_reads": 990,
+      "mixed_crypto": {
+        "digest": {
+          "calls": 990,
+          "ms": 19.92664099999945,
+          "bytes": 5566232
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "cold_ms": 31.171916999999894,
+      "cold_reads": 383,
+      "cold_crypto": {
+        "digest": {
+          "calls": 383,
+          "ms": 13.292839000000413,
+          "bytes": 8446944
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "scan_ms": 157.5553749999999,
+      "scan_reads": 394,
+      "scan_crypto": {
+        "digest": {
+          "calls": 394,
+          "ms": 15.2311729999983,
+          "bytes": 1917048
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "root_sha384": "f23514c8a9871379f2a0614f490527f8fec5856657006df7b4bd5cda42072a3c42da87f9cb1e6acf3a14e3ecc0b9016e",
+      "objects": 396,
+      "hot_ops": 4096,
+      "mixed_ops": 1024,
+      "cold_ops": 128
+    },
+    {
+      "variant": "combined-final",
+      "layout": "lexidecimal",
+      "n": 100000,
+      "round": 2,
+      "build_ms": 289.013958,
+      "build_reads": 0,
+      "build_crypto": {
+        "digest": {
+          "calls": 396,
+          "ms": 9.995910999999495,
+          "bytes": 1993664
+        },
+        "importKey": {
+          "calls": 396,
+          "ms": 0.809991999999994,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 396,
+          "ms": 4.721533000000349,
+          "bytes": 30888
+        }
+      },
+      "hot_ms": 15.180958999999973,
+      "hot_reads": 0,
+      "hot_crypto": {
+        "digest": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "mixed_ms": 72.46875,
+      "mixed_reads": 990,
+      "mixed_crypto": {
+        "digest": {
+          "calls": 990,
+          "ms": 18.46090899999973,
+          "bytes": 5566232
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "cold_ms": 26.182915999999977,
+      "cold_reads": 383,
+      "cold_crypto": {
+        "digest": {
+          "calls": 383,
+          "ms": 11.337962000000402,
+          "bytes": 8446944
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "hot_generator_ms": 181.40374999999995,
+      "hot_generator_reads": 0,
+      "hot_generator_crypto": {
+        "digest": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "hot_await_ms": 176.36029199999996,
+      "hot_await_reads": 0,
+      "hot_await_crypto": {
+        "digest": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "hot_direct_ops": 65536,
+      "scan_ms": 139.04829200000006,
+      "scan_reads": 372,
+      "scan_crypto": {
+        "digest": {
+          "calls": 372,
+          "ms": 14.487966000000597,
+          "bytes": 1823360
+        },
+        "importKey": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        },
+        "sign": {
+          "calls": 0,
+          "ms": 0,
+          "bytes": 0
+        }
+      },
+      "root_sha384": "f23514c8a9871379f2a0614f490527f8fec5856657006df7b4bd5cda42072a3c42da87f9cb1e6acf3a14e3ecc0b9016e",
+      "objects": 396,
+      "hot_ops": 4096,
+      "mixed_ops": 1024,
+      "cold_ops": 128
+    }
+  ]
+}

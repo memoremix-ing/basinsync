@@ -34,6 +34,15 @@ export function allocated(edge: PendingEdge, revision: string): Edge {
   return [...edge.slice(0, 6), { ...edge[6], revision }] as Edge;
 }
 export const DOMAIN = "sync.memoremix.com";
+export function isPromiseLike<T>(
+  value: T | PromiseLike<T>,
+): value is PromiseLike<T> {
+  return (
+    value !== null &&
+    (typeof value === "object" || typeof value === "function") &&
+    typeof (value as PromiseLike<T>).then === "function"
+  );
+}
 export function check(ok: unknown, message = "invalid structure"): asserts ok {
   if (!ok) throw Error(message);
 }
@@ -47,6 +56,8 @@ const hexBytes = Array.from({ length: 256 }, (_, v) =>
   v.toString(16).padStart(2, "0"),
 );
 export function hex(b: Uint8Array): string {
+  if (typeof Uint8Array.prototype.toHex === "function")
+    return Uint8Array.prototype.toHex.call(b);
   let out = "";
   for (const v of b) out += hexBytes[v];
   return out;
@@ -173,41 +184,6 @@ export function object<T = unknown>(r: Reference): T {
     return v;
   };
   return clone(r.toObject()) as T;
-}
-/** Compare metadata in-place; do not serialize or copy it on cache hits. */
-function matches(r: Reference, expected: unknown, depth = 0): boolean {
-  check(depth < 1024, "value nesting limit");
-  if (expected === null) return r.isNull();
-  if (typeof expected === "boolean") return r.boolValue() === expected;
-  if (typeof expected === "number") {
-    const n = r.numericValue();
-    return n === expected || (Number.isNaN(n) && Number.isNaN(expected));
-  }
-  if (typeof expected === "string") return r.stringValue() === expected;
-  if (typeof expected === "bigint") return r.bigintValue() === expected;
-  if (typeof expected === "symbol") return r.symbolValue() === expected;
-  if (expected instanceof Uint8Array) {
-    const b = r.blobValue();
-    return b !== null && equal(b, expected);
-  }
-  if (Array.isArray(expected))
-    return (
-      r.isVector() &&
-      !r.isExtension() &&
-      r.length() === expected.length &&
-      expected.every((v, i) => matches(r.get(i), v, depth + 1))
-    );
-  if (expected && typeof expected === "object") {
-    const keys = Object.getOwnPropertyNames(expected);
-    return (
-      r.isMap() &&
-      r.length() === keys.length &&
-      keys.every((k) =>
-        matches(r.get(k), (expected as Record<string, unknown>)[k], depth + 1),
-      )
-    );
-  }
-  return false;
 }
 export function validateNode(r: Reference, path?: string): void {
   check(r.isMap(), "basin node must be a map");
@@ -360,6 +336,7 @@ export class MemoryStorage implements Storage {
   >();
   reads = 0;
   private nextRevision = 0;
+  private allocationIndex = new Map<string, string>();
   readonly capabilities = new Map<string, Edge>();
   async put(
     pending: PendingEdge,
@@ -371,9 +348,9 @@ export class MemoryStorage implements Storage {
       version: pending[6].version,
       entropy: pending[6].entropy,
     };
-    const old = [...this.objects.values()].find(
-      (v) => authKey(link(v.edge)) === authKey(auth),
-    );
+    const authId = authKey(auth),
+      prior = this.allocationIndex.get(authId);
+    const old = prior ? this.objects.get(prior) : undefined;
     if (old) {
       check(equal(old.bytes, bytes), "immutable storage conflict");
       return old.edge[6].revision;
@@ -393,6 +370,9 @@ export class MemoryStorage implements Storage {
     check(!old || equal(old.bytes, bytes), "immutable storage conflict");
     this.objects.set(k, { edge, bytes: bytes.slice(), edges: [...edges] });
     this.capabilities.set(k, edge);
+    const auth = authKey(link(edge)),
+      prior = this.allocationIndex.get(auth);
+    if (!prior || !this.objects.has(prior)) this.allocationIndex.set(auth, k);
   }
   async resolve(link: Link) {
     return this.capabilities.get(capability(link));
@@ -412,9 +392,75 @@ export interface Options {
   maxBytes?: number;
   cacheBytes?: number;
 }
+/** Private, owned metadata snapshot; callers may mutate their descriptors safely. */
+type LoadedNode = { ref: Reference; length: number; descriptor: unknown[] };
+function sameMetadata(actual: unknown, expected: unknown, depth = 0): boolean {
+  check(depth < 1024, "value nesting limit");
+  if (actual === expected) return true;
+  if (typeof actual === "number" && typeof expected === "number")
+    return Number.isNaN(actual) && Number.isNaN(expected);
+  if (actual instanceof Uint8Array)
+    return expected instanceof Uint8Array && equal(actual, expected);
+  if (Array.isArray(actual))
+    return (
+      Array.isArray(expected) &&
+      actual.length === expected.length &&
+      actual.every((v, i) => sameMetadata(v, expected[i], depth + 1))
+    );
+  if (
+    actual &&
+    expected &&
+    typeof actual === "object" &&
+    typeof expected === "object" &&
+    !Array.isArray(expected) &&
+    !(expected instanceof Uint8Array)
+  ) {
+    const keys = Object.getOwnPropertyNames(actual);
+    return (
+      keys.length === Object.getOwnPropertyNames(expected).length &&
+      keys.every(
+        (k) =>
+          Object.hasOwn(expected, k) &&
+          sameMetadata(
+            (actual as Record<string, unknown>)[k],
+            (expected as Record<string, unknown>)[k],
+            depth + 1,
+          ),
+      )
+    );
+  }
+  return false;
+}
+function descriptor(ref: Reference): unknown[] {
+  return [
+    object(ref.get("3")),
+    object(ref.get("5")),
+    object(ref.get("6").get(1)),
+    ref.get("6").get(0).intValue(),
+    ref.get("1").stringValue(),
+    ref.get("2").stringValue(),
+    ref.get("4").intValue(),
+  ];
+}
+function checkDescriptor(node: LoadedNode, edge: Edge): Reference {
+  check(node.length === edge[6].length, "basin node digest/length mismatch");
+  const d = node.descriptor;
+  check(
+    sameMetadata(d[0], edge[3]) &&
+      sameMetadata(d[1], edge[5]) &&
+      sameMetadata(d[2], edge[6][1]) &&
+      d[3] === edge[6][0] &&
+      d[4] === edge[1] &&
+      d[5] === edge[2] &&
+      d[6] === edge[4],
+    "edge summary mismatch",
+  );
+  return node.ref;
+}
+
 export class Basin {
   readonly seed: Uint8Array;
-  private readonly cache = new Map<string, Promise<Reference>>();
+  private readonly cache = new Map<string, LoadedNode | Promise<LoadedNode>>();
   private costs = new Map<string, number>();
   clearCache() {
     this.cache.clear();
@@ -468,68 +514,65 @@ export class Basin {
     ];
     return allocated(edge, await this.storage.put(edge, bytes, unique));
   }
-  async load(edge: Edge): Promise<Reference> {
+  /** Inspect a verified ready cache entry without initiating I/O. */
+  peek(edge: Edge): Reference | undefined {
+    validateEdge(edge);
+    const cached = this.cache.get(
+      `${capability(link(edge))}/${hex(edge[6].sha384)}`,
+    );
+    return cached && !(cached instanceof Promise)
+      ? checkDescriptor(cached, edge)
+      : undefined;
+  }
+  /** Ready cache hits remain synchronous; misses retain integrity verification. */
+  private loadMaybe(edge: Edge): Reference | Promise<Reference> {
     validateEdge(edge);
     const k = `${capability(link(edge))}/${hex(edge[6].sha384)}`;
-    let result = this.cache.get(k);
-    if (!result) {
-      result = (async () => {
-        const b = await this.storage.get(edge);
-        check(
-          b.length === edge[6].length && equal(await sha384(b), edge[6].sha384),
-          "basin node digest/length mismatch",
-        );
-        const r = nodeView(b);
-        check(
-          r.get("1").stringValue() === edge[1] &&
-            r.get("2").stringValue() === edge[2] &&
-            r.get("4").intValue() === edge[4],
-          "edge species mismatch",
-        );
-        check(
-          matches(r.get("3"), edge[3]) &&
-            matches(r.get("5"), edge[5]) &&
-            matches(r.get("6").get(1), edge[6][1]) &&
-            r.get("6").get(0).intValue() === edge[6][0],
-          "edge summary mismatch",
-        );
-        return r;
-      })();
-      const budget = this.options.cacheBytes ?? 16 * 1024 * 1024;
-      if (edge[6].length <= budget) {
-        while (
-          this.cache.size &&
-          (this.cache.size >= 128 ||
-            [...this.costs.values()].reduce((a, b) => a + b, 0) +
-              edge[6].length >
-              budget)
-        ) {
-          const oldest = this.cache.keys().next().value!;
-          this.cache.delete(oldest);
-          this.costs.delete(oldest);
-        }
-        this.cache.set(k, result);
-        this.costs.set(k, edge[6].length);
-        const inserted = result;
-        result.catch(() => {
-          if (this.cache.get(k) === inserted) {
+    const cached = this.cache.get(k);
+    if (cached)
+      return cached instanceof Promise
+        ? cached.then((node) => checkDescriptor(node, edge))
+        : checkDescriptor(cached, edge);
+    const pending = (async (): Promise<LoadedNode> => {
+      const b = await this.storage.get(edge);
+      check(
+        b.length === edge[6].length && equal(await sha384(b), edge[6].sha384),
+        "basin node digest/length mismatch",
+      );
+      const ref = nodeView(b);
+      const node = { ref, length: b.length, descriptor: descriptor(ref) };
+      checkDescriptor(node, edge);
+      return node;
+    })();
+    const budget = this.options.cacheBytes ?? 16 * 1024 * 1024;
+    if (edge[6].length <= budget) {
+      while (
+        this.cache.size &&
+        (this.cache.size >= 128 ||
+          [...this.costs.values()].reduce((a, b) => a + b, 0) + edge[6].length >
+            budget)
+      ) {
+        const oldest = this.cache.keys().next().value!;
+        this.cache.delete(oldest);
+        this.costs.delete(oldest);
+      }
+      this.cache.set(k, pending);
+      this.costs.set(k, edge[6].length);
+      pending.then(
+        (node) => {
+          if (this.cache.get(k) === pending) this.cache.set(k, node);
+        },
+        () => {
+          if (this.cache.get(k) === pending) {
             this.cache.delete(k);
             this.costs.delete(k);
           }
-        });
-      }
+        },
+      );
     }
-    const r = await result;
-    check(
-      matches(r.get("3"), edge[3]) &&
-        matches(r.get("5"), edge[5]) &&
-        matches(r.get("6").get(1), edge[6][1]) &&
-        r.get("6").get(0).intValue() === edge[6][0] &&
-        r.get("1").stringValue() === edge[1] &&
-        r.get("2").stringValue() === edge[2] &&
-        r.get("4").intValue() === edge[4],
-      "edge summary mismatch",
-    );
-    return r;
+    return pending.then((node) => checkDescriptor(node, edge));
+  }
+  async load(edge: Edge): Promise<Reference> {
+    return this.loadMaybe(edge);
   }
 }
