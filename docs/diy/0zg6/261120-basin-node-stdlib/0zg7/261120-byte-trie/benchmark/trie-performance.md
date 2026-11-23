@@ -1,4 +1,5 @@
 [baseline]: <baseline.json>
+[collection-performance]: <collection-performance.md>
 [comparison]: <comparison.html>
 [flexbuffers]: <../../../../../../glossary/flexbuffers.md>
 [json0]: <../../../../../../glossary/json0.md>
@@ -93,3 +94,5 @@ Raw reports include per-phase timings, fetch counts/bytes, whole-process peak
 RSS, machine/toolchain details, and production-source *SHA-384*[~][sha384] fingerprints.
 
 Follow-up: *increasing Lexidecimal keys and sequential reads*[~][lexidecimal-keys].
+
+Follow-up: *adapted historical collection comparison*[~][collection-performance].

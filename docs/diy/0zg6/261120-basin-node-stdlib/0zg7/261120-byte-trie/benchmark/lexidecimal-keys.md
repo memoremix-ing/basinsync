@@ -1,3 +1,4 @@
+[collection-performance]: <collection-performance.md>
 [legacy-probe]: <legacy-probe.json>
 [lexidecimal]: <../../../../../../glossary/lexidecimal.md>
 [lexidecimal-comparison]: <lexidecimal-comparison.html>
@@ -55,3 +56,5 @@ TRIE_BENCH_LAYOUTS=lexidecimal,lexidecimal-shuffled bun run bench:trie
 
 Set `TRIE_BENCH_LEX_START` to a nonnegative decimal or hexadecimal bigint for
 other starting positions. Raw reports record that offset and source fingerprints.
+
+Follow-up: *adapted historical collection comparison*[~][collection-performance].
