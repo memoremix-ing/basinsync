@@ -1,125 +1,34 @@
 ---
 prerequisites:
-  - 0zg5/261112-deep-heap-support
+  - 0zg6/261120-basin-node-stdlib
+  - 0zg6/261112-commit-marker-edges-with-node-promotion
 ---
 
-[access-token]: <../../../glossary/access-token.md>
-[diy/0zg6/261120-trie/0zg7/261123-trie-volume-implementations]: <0zg7/261123-trie-volume-implementations/README.md>
-[envbuf]: <../../../glossary/envbuf.md>
-[flexbuffers]: <../../../glossary/flexbuffers.md>
-[flow]: <../../../glossary/flow.md>
-[heap]: <../../../glossary/heap.md>
-[json0]: <../../../glossary/json0.md>
-[node]: <../../../glossary/node.md>
-[node-degree]: <../../../glossary/node-degree.md>
-[node-height]: <../../../glossary/node-height.md>
-[revision]: <../../../glossary/revision.md>
-[strong-edge]: <../../../glossary/strong-edge.md>
-[trie-format]: <../../../trie-format.md>
-[weak-link]: <../../../glossary/weak-link.md>
+[access-token]: <../../../../../glossary/access-token.md>
+[basin]: <../../../../../glossary/basin.md>
+[diy/0zg6/261120-basin-node-stdlib]: <../../README.md>
+[envbuf]: <../../../../../glossary/envbuf.md>
+[flexbuffers]: <../../../../../glossary/flexbuffers.md>
+[flow]: <../../../../../glossary/flow.md>
+[heap]: <../../../../../glossary/heap.md>
+[heap-protocol]: <../../../../../heap-protocol.md>
+[json0]: <../../../../../glossary/json0.md>
+[node]: <../../../../../glossary/node.md>
+[node-degree]: <../../../../../glossary/node-degree.md>
+[node-height]: <../../../../../glossary/node-height.md>
+[object-keys]: <../../../../../object-keys.md>
+[revision]: <../../../../../glossary/revision.md>
+[strong-edge]: <../../../../../glossary/strong-edge.md>
+[trie-format]: <../../../../../trie-format.md>
+[trie-performance]: <benchmark/trie-performance.md>
+[weak-link]: <../../../../../glossary/weak-link.md>
 
-# Tries and shortcut links
+# Byte trie and volume
 
-Explore versioned data structures for storage and incremental loading from
-basinsync. Distinguish *basin nodes*[~][node] and their *basin edges*[~][strong-edge]
-from logical trie nodes. Serialize each stored *basin node*[~][node] as an
-*EnvBuf*[~][envbuf] wrapping a *FlexBuffer*[~][flexbuffers].
-
-The proposal combines compressed byte keys, two nibble levels for 256-way
-branching, small sorted key/value groups, and consumer-defined summaries.
-Replicated headers and summaries permit pruning before fetching a target.
-Values stay at their ordinary trie positions; hashing belongs to consumer
-aggregation. The declarations below track the proposal for refinement.
-
-*Basin nodes*[~][node] are *FlexBuffers maps*[~][flexbuffers], with string keys
-`"0"` through `"6"`. *Basin edges*[~][strong-edge] are vectors; their footer
-descriptor remains a map. `Symbol.match` identifies an edge in both
-*JSON0*[~][json0] and *FlexBuffers*[~][flexbuffers]. The default
-*basin-edge degree limit*[~][node-degree] is 320. Store node allocation
-*revisions*[~][revision] in both edges and shortcut links; the shared heap does
-not require *Flow*[~][flow] revisions in these pointers.
-
-## Basin nodes and edges
-
-```ts
-type U32 = number;
-
-// null denotes no observations; nonempty bounds include both ends.
-type Bounds<T> = null | [floor: T, ceiling: T];
-
-type SCHEMA_0 = 0;
-
-type Footers = {
-  [index: number]: [summary: unknown, ...data: Array<unknown>];
-};
-
-interface BasinNode_S0<
-  DomainT extends string,
-  PathT extends string,
-  HeaderT = any,
-  FootersT extends Footers = any,
-> {
-  [Symbol.iterator]?: never; // FlexBuffers map, not a vector
-  0: typeof Symbol.species;
-  1: DomainT;
-  2: PathT;
-  3: BasinQuery_S0;
-  4: SCHEMA_0; // structural schema, independent of consumer migration
-  5: HeaderT;
-  6: {
-    [IndexT in U32 & keyof FootersT]: [migration: IndexT, ...FootersT[IndexT]];
-  }[U32 & keyof FootersT];
-}
-
-type BasinQuery_S0 = {
-  height: U32; // (for DAG inaviants and basin ids)
-  degree: U32; // shallow count of edges
-  breadth: bigint; // approximate deep degree; shared descendants may contribute repeatedly
-  rotations: Bounds<U32>; // deep aggregate from edges
-  versions: Bounds<U32>; // deep aggregate from edges
-  schemas: Bounds<U32>; // deep aggregate over edges
-  migrations: Bounds<U32>; // deep aggregate over edges
-};
-
-type BasinEdge_S0<
-  LazyT extends BasinNode_S0<string, string>,
-  HeaderT = LazyT[5],
-  FootersT extends {
-    [IndexT in U32 & LazyT[6][0]]: [unknown, ...Array<unknown>];
-  } = {
-    [IndexT in U32 & LazyT[6][0]]: Extract<
-      LazyT[6],
-      [IndexT, ...unknown[]]
-    > extends [IndexT, infer TSummary, ...infer TData]
-      ? [TSummary, ...TData]
-      : never;
-  },
-> = [ // FlexBuffers vector; its footer is a map
-  protocol: typeof Symbol.match,
-  domain: LazyT[1],
-  path: LazyT[2],
-  query: LazyT[3],
-  schema: { 0: SCHEMA_0 }[LazyT[4]],
-  header: HeaderT,
-  footer: {
-    [IndexT in U32 & keyof FootersT]: {
-      0: IndexT;
-      1: FootersT[IndexT][0];
-
-      version: U32; // node-id encoding version number
-      revision: string; // UUIDv4 allocation revision in the shared heap
-      length: U32; // shallow byte-length of basin-node in object storage
-      weight: bigint; // deep approximate byte-length of basin-node graph in object storage (may include duplicates)
-      sha384: Uint8Array; // digest of basin-node in object storage
-      entropy: Uint8Array; // 256-bits of confidential key material for HKDFing a token, secret, and nonce
-      rotation: U32; // KMS-specific hint of the key for the root that introduced the referenced node
-
-      [Symbol.unscopables]?: LazyT; // lazy-loaded (never embedded in serializations)
-    };
-  }[U32 & keyof FootersT],
-];
-
-```
+Use compressed byte keys, two nibble levels for 256-way branching, small sorted
+key/value groups, and consumer-defined summaries. Values remain at their ordinary
+trie positions. Headers and summaries permit pruning before fetching targets.
+The *parent*[~][diy/0zg6/261120-basin-node-stdlib] defines the common node/edge contract.
 
 ## Trie layout
 
@@ -337,13 +246,6 @@ An empty-byte key with a null value is a nonempty trie: `count = nullity = 1n`,
 key and reverse-key bounds each contain two empty byte strings, and length bounds
 are `[0, 0]`. Its group contains one empty suffix and one null value.
 
-## Implementation
-
-The *implementation milestone*[~][diy/0zg6/261120-trie/0zg7/261123-trie-volume-implementations]
-records TypeScript/Rust/Go interoperability and storage tests. The
-*format reference*[~][trie-format] defines packing and aggregation rules, including
-approximate `breadth` that may count shared descendants repeatedly.
-
 ## Strong retention and weak shortcuts
 
 Use *strong basin edges*[~][strong-edge] as the retention graph declared to the
@@ -371,3 +273,58 @@ the corresponding child digests, so a rename changes directory identity.
 Before choosing a shortcut layout, measure first-useful-result latency, fetched
 bytes, request count, and update churn against ordinary trie traversal. Keep
 content identity and consumer aggregation independent of allocation details.
+
+## Implementations
+
+Implement *format 0*[~][trie-format]
+in TypeScript, Rust, then Go. Share fixtures rather than assuming that agreement
+within one encoder proves interchange.
+
+```js
+const basin = new Basin(storage);
+const trie = await Trie.build(basin, [["abcd", value]], consumer);
+const found = await trie.get("abcd");
+const next = await trie.update([["abcd", { delete: true }]]);
+
+const volume = await Volume.build(basin, [["/notes/a", bytes]]);
+const part = await volume.read("/notes/a", { start: 4090, length: 30 });
+
+const block = await buildBlock(basin, [[2n ** 200n, bytes]]);
+const sparse = await Volume.fromBlocks(basin, [["/pages", block]]);
+const page = await sparse.page("/pages", 2n ** 200n);
+```
+
+Storage accepts bytes plus outgoing *strong basin edges*[~][strong-edge]; publish
+parents only after their children are stored and their allocation
+*revisions*[~][revision] are known. The Fetch adapter uses
+*reservations*[~][heap-protocol], conditional uploads, and marker publication.
+Cold clients can derive *object keys*[~][object-keys] from pointers and obtain
+signed reads from an edge service without a central *Basin*[~][basin] lookup. Inject a
+capability resolver into the Fetch adapter when read actions are not cached. *Weak shortcuts*[~][weak-link] accelerate navigation without
+contributing retainers.
+
+Expose borrowed values for lazy parsing, owned reads for independent data, and
+summary/prefix filters before fetching *basin nodes*[~][node]. TypeScript uses
+Web Crypto and browser APIs; the Rust structures crate builds independently for
+Wasm. Treat borrowed byte views as immutable.
+
+Exercise empty/null keys, 63/64 and 1280/1281 boundaries, canonical deletion,
+Unicode basenames, consumer migrations, shared descendants, corrupted payloads,
+partial reads, shortcut misses, and old snapshots. Cross-read every language's
+output with every other implementation. Then verify real storage, promotion,
+staging sweeps, publication and restart against the server.
+
+Updates currently rebuild from contents; immutable objects are reused. Pruning
+and partial reads remain selective. Readers bound nesting to 256 trie levels;
+default object/full-file limits are 64 MiB, with a 16 MiB/128-object read cache.
+
+```sh
+cargo test -p basinsync-structures
+cargo check -p basinsync-structures --target wasm32-unknown-unknown
+cargo build -p basinsync-structures --example fixture
+(cd go/structures && go test ./... && go build -o ../../.local/structures-go ./cmd/fixture)
+bun run test:structures:interop
+bun clients/structures-integration.ts
+```
+
+Compare the three libraries using the *CPU and storage read measurements*[~][trie-performance].

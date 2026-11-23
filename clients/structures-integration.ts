@@ -15,6 +15,8 @@ import {
   type Edge,
   type Storage,
 } from "./structures/core";
+import { Vector } from "./structures/vector";
+import { BTree } from "./structures/btree";
 import { Trie } from "./structures/trie";
 import { count } from "./structure-fixture";
 import { Volume, BLOCK, type Directory, type File } from "./structures/volume";
@@ -91,6 +93,16 @@ try {
   const volume = await Volume.build(basin, files);
   await storage.publish(volume.root);
   viewpoint++;
+  const ordered = await BTree.build(basin, rows, count);
+  await storage.publish(ordered.root);
+  viewpoint++;
+  const indexed = await Vector.build(
+    basin,
+    rows.map(([, v]) => v),
+    count,
+  );
+  await storage.publish(indexed.root);
+  viewpoint++;
   // Wait for old-generation copies, then open new readers using only the actions.
   await eventually(
     () =>
@@ -136,6 +148,14 @@ try {
       }),
       data,
     );
+  assert.deepEqual(
+    await new BTree(new Basin(direct), ordered.root, count).get(rows[1999][0]),
+    rows[1999][1],
+  );
+  assert.deepEqual(
+    await new Vector(new Basin(direct), indexed.root, count).get(1999n),
+    rows[1999][1],
+  );
   const directory = object<Node>(
     await basin.load(volume.root),
   )[6][3] as Directory;
@@ -159,7 +179,15 @@ try {
   });
   assert.equal(
     (await epilogueStatus(restarted.url, "structures")).latest!.viewpoint,
-    1n,
+    viewpoint - 1n,
+  );
+  assert.deepEqual(
+    await new BTree(new Basin(storage), ordered.root, count).get(rows[1000][0]),
+    rows[1000][1],
+  );
+  assert.deepEqual(
+    await new Vector(new Basin(storage), indexed.root, count).get(1000n),
+    rows[1000][1],
   );
   // Earlier marker graphs survive staging sweeps and promotion while retained.
   assert.deepEqual(

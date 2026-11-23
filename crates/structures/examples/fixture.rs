@@ -3,7 +3,7 @@ use anyhow::{Context, Result};
 use basinsync_structures::{
     Value,
     basin::{self, Basin, MemoryStorage},
-    trie, volume,
+    btree, trie, vector, volume,
 };
 use std::io::{Read, Write};
 fn main() -> Result<()> {
@@ -17,7 +17,28 @@ fn main() -> Result<()> {
         let kind = req.field("kind")?.text()?;
         let seed = req.field("seed")?.blob()?.to_vec();
         let mut basin = Basin::new(MemoryStorage::default(), seed)?;
-        let root = if kind == "trie" {
+        let root = if kind == "vector" {
+            let rows = req
+                .field("items")?
+                .array()?
+                .iter()
+                .map(|v| Ok((v.at(0)?.big()?, v.at(1)?.clone())))
+                .collect::<Result<Vec<_>>>()?;
+            vector::build_entries(
+                &mut basin,
+                req.field("length")?.big()?,
+                rows,
+                &trie::Count(7),
+            )?
+        } else if kind == "btree" {
+            let rows = req
+                .field("entries")?
+                .array()?
+                .iter()
+                .map(|v| Ok((basin::key(v.at(0)?.text()?)?, v.at(1)?.clone())))
+                .collect::<Result<Vec<_>>>()?;
+            btree::build(&mut basin, rows, &trie::Count(7))?
+        } else if kind == "trie" {
             let rows = req
                 .field("entries")?
                 .array()?
@@ -84,7 +105,17 @@ fn main() -> Result<()> {
         }
         let mut basin = Basin::new(storage, vec![42; 32])?;
         let root = req.field("root")?;
-        let rows = if kind == "trie" {
+        let rows = if kind == "vector" {
+            vector::entries(&mut basin, root, 7)?
+                .into_iter()
+                .map(|(i, v)| Array(vec![Big(i), v]))
+                .collect()
+        } else if kind == "btree" {
+            btree::entries(&mut basin, root, 7)?
+                .into_iter()
+                .map(|(k, v)| Array(vec![basin::hex(&k).as_str().into(), v]))
+                .collect()
+        } else if kind == "trie" {
             trie::entries(&mut basin, root, &[], 7)?
                 .into_iter()
                 .map(|(k, v)| {
@@ -143,13 +174,24 @@ fn main() -> Result<()> {
             .map(|v| basin::node_key(&basin::weak(v.at(0)?)?, "old"))
             .collect::<Result<Vec<_>>>()?;
         keys.sort();
-        Value::map([
+        let mut output = Value::map([
             ("keys", Array(keys.into_iter().map(Text).collect())),
             ("kind", kind.into()),
             ("rows", Array(rows)),
             ("query", root.at(3)?.clone()),
             ("header", root.at(5)?.clone()),
-        ])
+        ]);
+        if kind == "vector" {
+            let mut probes = vec![];
+            if let Some(Array(queries)) = req.map_ref()?.get("queries") {
+                for i in queries {
+                    let v = vector::get(&mut basin, root, &i.big()?, 7)?;
+                    probes.push(Array(vec![i.clone(), Bool(v.is_some()), v.unwrap_or(Null)]));
+                }
+            }
+            output.set("probes", Array(probes))?;
+        }
+        output
     };
     let json = serde_json::to_vec(&result.json())?;
     std::io::stdout().write_all(&json)?;

@@ -28,7 +28,7 @@ export interface BasinNode_S0<
 }
 
 export type BasinQuery_S0 = {
-  height: U32; // (for DAG inaviants and basin ids)
+  height: U32; // (for DAG invariants and basin ids)
   degree: U32; // shallow count of edges
   breadth: bigint; // approximate deep degree; shared descendants may contribute repeatedly
   rotations: Bounds<U32>; // deep aggregate from edges
@@ -207,3 +207,40 @@ export type SyncSector_M0 = TrieNode_S0<{
     Value: [data: Uint8Array];
   };
 }>;
+
+export interface VectorNode_S0<
+  MigrationsT extends { [index: number]: { Summary: unknown; Value: unknown } },
+> extends BasinNode_S0<
+    "sync.memoremix.com",
+    ".vector-node/",
+    { length: bigint; count: bigint; shift: U32; inlined: U32 },
+    {
+      [I in U32 & keyof MigrationsT]: [
+        summary: MigrationsT[I]["Summary"],
+        bitmap: U32,
+        slots: Array<
+          | MigrationsT[I]["Value"]
+          | VectorNode_S0<MigrationsT>
+          | BasinEdge_S0<VectorNode_S0<MigrationsT>>
+        >,
+      ];
+    }
+  > {}
+
+export interface BTreeNode_S0<
+  MigrationsT extends { [index: number]: { Summary: unknown; Value: unknown } },
+> extends BasinNode_S0<
+    "sync.memoremix.com",
+    ".btree-node/",
+    { count: bigint; depth: U32; inlined: U32; keys: Bounds<Uint8Array> },
+    {
+      [I in U32 & keyof MigrationsT]: [
+        summary: MigrationsT[I]["Summary"],
+        keys: Array<Uint8Array>,
+        values: Array<MigrationsT[I]["Value"]>,
+        children: null | Array<
+          BTreeNode_S0<MigrationsT> | BasinEdge_S0<BTreeNode_S0<MigrationsT>>
+        >,
+      ];
+    }
+  > {}

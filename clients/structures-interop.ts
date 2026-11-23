@@ -79,6 +79,37 @@ cases.push({
   ],
   queries: [0n, 1n, 7n, 2n ** 200n + 57n],
 });
+for (const n of [0, 31, 32, 1024, 1281, 32768]) {
+  cases.push({
+    kind: "btree",
+    seed,
+    entries: Array.from({ length: n }, (_, i) => [
+      i.toString(16).padStart(6, "0"),
+      i % 7 === 0 ? null : BigInt(i),
+    ]),
+  });
+  cases.push({
+    kind: "vector",
+    seed,
+    length: BigInt(n),
+    items: Array.from({ length: n }, (_, i) => [
+      BigInt(i),
+      i % 7 === 0 ? null : BigInt(i),
+    ]),
+    queries: [0n, 31n, 32n, BigInt(n)],
+  });
+}
+cases.push({
+  kind: "vector",
+  seed,
+  length: 2n ** 200n + 32n,
+  items: [
+    [0n, null],
+    [31n, Symbol.match],
+    [2n ** 200n + 31n, new Uint8Array([1, 2])],
+  ],
+  queries: [0n, 1n, 31n, 2n ** 200n + 31n],
+});
 mkdirSync(".local/trie-interop", { recursive: true });
 const writers = ["typescript", "rust", "go"],
   readers = [...writers];

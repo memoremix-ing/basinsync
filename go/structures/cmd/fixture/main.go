@@ -40,7 +40,25 @@ func run() error {
 	var result any
 	if os.Args[1] == "build" {
 		var root s.Edge
-		if kind == "trie" {
+		if kind == "vector" {
+			rows := []s.VectorEntry{}
+			for _, v := range req["items"].([]any) {
+				a := v.([]any)
+				rows = append(rows, s.VectorEntry{Index: a[0].(*big.Int), Value: a[1]})
+			}
+			root, err = s.BuildVectorEntries(basin, req["length"].(*big.Int), rows, s.CountConsumer(7))
+		} else if kind == "btree" {
+			rows := []s.Entry{}
+			for _, v := range req["entries"].([]any) {
+				a := v.([]any)
+				key, e := hex.DecodeString(a[0].(string))
+				if e != nil {
+					return e
+				}
+				rows = append(rows, s.Entry{Key: key, Value: a[1]})
+			}
+			root, err = s.BuildBTree(basin, rows, s.CountConsumer(7))
+		} else if kind == "trie" {
 			rows := []s.Entry{}
 			for _, v := range req["entries"].([]any) {
 				a := v.([]any)
@@ -99,7 +117,23 @@ func run() error {
 		}
 		root := req["root"].([]any)
 		rows := []any{}
-		if kind == "trie" {
+		if kind == "vector" {
+			entries, e := s.VectorEntries(basin, root, 7)
+			if e != nil {
+				return e
+			}
+			for _, r := range entries {
+				rows = append(rows, []any{r.Index, r.Value})
+			}
+		} else if kind == "btree" {
+			entries, e := s.BTreeEntries(basin, root, 7)
+			if e != nil {
+				return e
+			}
+			for _, r := range entries {
+				rows = append(rows, []any{hex.EncodeToString(r.Key), r.Value})
+			}
+		} else if kind == "trie" {
 			entries, err := s.Entries(basin, root, nil, 7)
 			if err != nil {
 				return err
@@ -171,6 +205,19 @@ func run() error {
 		sort.Strings(keys)
 		result = map[string]any{"kind": kind, "rows": rows, "query": root[3], "header": root[5]}
 		result.(map[string]any)["keys"] = keys
+		if kind == "vector" {
+			probes := []any{}
+			if queries, ok := req["queries"].([]any); ok {
+				for _, i := range queries {
+					v, found, e := s.GetVector(basin, root, i.(*big.Int), 7)
+					if e != nil {
+						return e
+					}
+					probes = append(probes, []any{i, found, v})
+				}
+			}
+			result.(map[string]any)["probes"] = probes
+		}
 	}
 	out, err := s.JSON0(result)
 	if err != nil {

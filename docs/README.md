@@ -7,7 +7,7 @@
 [diy/0zg4/261117-timeline-recovery-acceleration]: <diy/0zg4/261117-timeline-recovery-acceleration/README.md>
 [diy/0zg5/261112-deep-heap-support]: <diy/0zg5/261112-deep-heap-support/README.md>
 [diy/0zg6/261112-commit-marker-edges-with-node-promotion]: <diy/0zg6/261112-commit-marker-edges-with-node-promotion/README.md>
-[diy/0zg6/261120-trie]: <diy/0zg6/261120-trie/README.md>
+[diy/0zg6/261120-basin-node-stdlib]: <diy/0zg6/261120-basin-node-stdlib/README.md>
 [diy/0zg7/261118-shallow-basin-backup-nodes]: <diy/0zg7/261118-shallow-basin-backup-nodes/README.md>
 [diy/0zg8/261119-observability]: <diy/0zg8/261119-observability/README.md>
 [diy/0zg9/261121-durable-test-suites]: <diy/0zg9/261121-durable-test-suites/README.md>
@@ -43,7 +43,7 @@ Build deeper graphs with *Deep Heap support*[~][diy/0zg5/261112-deep-heap-suppor
 Retain and promote committed graphs with
 *CommitMarker edges with node promotion*[~][diy/0zg6/261112-commit-marker-edges-with-node-promotion].
 
-Build byte-key graphs with *Tries and shortcut links*[~][diy/0zg6/261120-trie].
+Build storage-friendly structures with the *Basin node standard library*[~][diy/0zg6/261120-basin-node-stdlib].
 
 Coalesce and retrieve history with *Timeline recovery acceleration*[~][diy/0zg4/261117-timeline-recovery-acceleration].
 
