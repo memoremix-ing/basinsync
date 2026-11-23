@@ -36,7 +36,7 @@ impl Extension {
 fn well_known(name: &str) -> bool {
     matches!(
         name,
-        "asyncIterator" | "iterator" | "species" | "unscopables"
+        "asyncIterator" | "iterator" | "match" | "species" | "unscopables"
     )
 }
 

@@ -5,7 +5,7 @@ export const WELL_KNOWN_BY_NAME: Record<string, symbol> = {
   // hasInstance: Symbol.hasInstance,
   // isConcatSpreadable: Symbol.isConcatSpreadable,
   iterator: Symbol.iterator,
-  // match: Symbol.match,
+  match: Symbol.match,
   // matchAll: Symbol.matchAll,
   // replace: Symbol.replace,
   // search: Symbol.search,

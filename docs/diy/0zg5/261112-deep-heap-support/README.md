@@ -26,7 +26,7 @@ empty-edge restrictions. Each edge supplies `{ auth: [height, version, token] }`
 derive the child's *node*[~][node] id without persisting its *access token*[~][access-token].
 Require parent *height*[~][node-height] greater than every child *height*[~][node-height]. Version remains zero;
 existing *height*[~][node-height] and token-size limits apply. Make `BASINSYNC_NODE_MAX_DEGREE`
-configurable (128), counting distinct children; edge order and duplicates do not change the child set.
+configurable (320), counting distinct children; edge order and duplicates do not change the child set.
 
 For an existing parent, require identical content length, *context*[~][context], and child-id set,
 including when other *nodes*[~][node] already retain it. For a new parent,

@@ -561,7 +561,7 @@ async fn main() -> Result<()> {
     let (queue, receiver) = mpsc::channel(capacity);
     let heap_limits = heap::Limits {
         max_degree: env::var("BASINSYNC_NODE_MAX_DEGREE")
-            .unwrap_or_else(|_| "128".into())
+            .unwrap_or_else(|_| heap::Limits::default().max_degree.to_string())
             .parse()?,
         max_height: env::var("BASINSYNC_HEAP_MAX_HEIGHT")
             .unwrap_or_else(|_| "128".into())

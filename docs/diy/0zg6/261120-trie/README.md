@@ -25,7 +25,13 @@ The proposal combines compressed byte keys, two nibble levels for 256-way
 branching, small sorted key/value groups, and consumer-defined summaries.
 Replicated headers and summaries permit pruning before fetching a target.
 Values stay at their ordinary trie positions; hashing belongs to consumer
-aggregation. The declarations below preserve the proposal verbatim for refinement.
+aggregation. The declarations below track the proposal for refinement.
+
+*Basin nodes*[~][node] are *FlexBuffers maps*[~][flexbuffers], with string keys
+`"0"` through `"6"`. *Basin edges*[~][strong-edge] are vectors; their footer
+descriptor remains a map. `Symbol.match` identifies an edge in both
+*JSON0*[~][json0] and *FlexBuffers*[~][flexbuffers]. The default
+*basin-edge degree limit*[~][node-degree] is 320.
 
 ## Basin nodes and edges
 
@@ -44,6 +50,7 @@ interface BasinNode_S0<
   HeaderT = any,
   FootersT extends Footers = any,
 > {
+  [Symbol.iterator]?: never; // FlexBuffers map, not a vector
   0: typeof Symbol.species;
   1: DomainT;
   2: PathT;
@@ -78,7 +85,7 @@ type BasinEdge_S0<
       ? [TSummary, ...TData]
       : never;
   },
-> = [
+> = [ // FlexBuffers vector; its footer is a map
   protocol: typeof Symbol.match,
   domain: LazyT[1],
   path: LazyT[2],
@@ -115,7 +122,6 @@ interface TrieNode_S0<
   "sync.memoremix.com",
   ".trie-node/",
   {
-    edition: bigint; // (inherited from ancestors, incremented at root after every update)
     count: bigint; // number of values
     nullity: bigint; // number of values that are null
     degree: U32; // number of trie-handles (distinct from basin-degree)
@@ -199,7 +205,7 @@ interface SyncVolume_S0 extends BasinNode_S0<
 
 type SyncDirectory_M0 = [
   folder: true,
-  sha384: Uint8Array, // (digest of lexicographically ordered contents' own digests concatenated together)
+  sha384: Uint8Array, // digest of UTF-8 basename-byte-sorted pairs: length-framed basename + child digest
   contents: {
     [basename: string]: SyncDirectory_M0 | SyncFile_M0;
   },
@@ -226,7 +232,7 @@ type SyncLink_M0<LazyT extends BasinNode_S0<string, string>> = {
 ```ts
 interface SyncBlock_M0 extends BasinNode_S0<
   "sync.memoremix.com",
-  ".sync-volume/",
+  ".sync-block/",
   null,
   {
     0: [
@@ -252,43 +258,31 @@ type SyncSector_M0 = TrieNode_S0<{
 }>;
 ```
 
-## Review notes
+## Open design questions
 
-The overall separation is promising: bounded groups keep small subtries local,
-edge descriptors expose pruning metadata, and footer variants distinguish consumer
-migrations from the structural schema. A few decisions need sharpening:
-
-- **Wire shape.** Numeric-property interfaces accept both objects and arrays,
-  which our *FlexBuffers*[~][flexbuffers] writer encodes differently. Specify
-  vectors versus maps explicitly, including the mixed numeric/named edge footer.
-  `Symbol.match` currently fails our *JSON0*[~][json0] and
-  *FlexBuffers*[~][flexbuffers] symbol allowlists. Keep lazy caches out of serialized data.
-- **Versions.** Define the roles of slot 4, the selected slot-6 footer tag, and
-  `footer.version` separately: structural schema, consumer migration, and
-  *basin-node*[~][node] id version. Slot 6 currently selects one variant, rather
-  than storing several footers. Specify whether footer tags are dense ordinals or
-  stable identifiers, how readers handle unknown versions, and how nodes of
-  different migrations coexist. The `SyncBlock_M0` path repeats `.sync-volume/`;
-  it appears to need its own discriminator.
-- **Packing.** Sixteen by sixteen slots permit 256 distinct *basin edges*[~][strong-edge],
-  exceeding both the earlier 240 target and the current default
-  *degree limit*[~][node-degree] of 128. Specify sorted/unique group keys, equal
-  key/value lengths, slot numbering and trailing-null rules. Make packing a
-  function of contents, not insertion history; define the 63-value and 1280-inline
-  transitions, root exceptions, and whether `edged` switching makes every nested
-  sibling a separate *basin node*[~][node]. Value-count limits do not bound bytes.
-  Readers need runtime validation: `U32 = number` and unrestricted arrays do not
-  enforce numeric bounds, capacities, or parallel-array lengths.
-- **Prefixes.** Define whether group keys are full keys or suffixes and which
-  nibbles each nesting level consumes. A `Uint8Array` header prefix cannot express
-  an odd nibble count alone; either compress whole bytes only or carry the count.
-  Distinguish an empty key, a key ending at the prefix, and a null value.
-- **Aggregates and reuse.** Define empty ranges, inclusive/exclusive ceilings,
-  whether ranges include the current node, and whether deep counts include shared
-  descendants repeatedly. *Height*[~][node-height] follows *basin edges*[~][strong-edge],
-  not inline trie nesting. An inherited `edition` should be traversal context, or
-  describe when a node changed; requiring every stored descendant to match a new
-  root edition would defeat subtree reuse.
+- **Version labels.** Slot 4 identifies the structural schema; the first element
+  of slot 6 selects the consumer migration; an edge footer's `version` identifies
+  the *basin-node*[~][node] id encoding. For example, structural schema 0 can
+  carry migration 7 while still referencing node-id version 0. Are migration
+  labels permanent identifiers, so deleting migration 1 never renumbers 2?
+  Slot 6 currently stores one selected migration, not all footer variants.
+- **Key consumption.** For key bytes `ab cd`, a branch can consume nibble `a`
+  then nibble `b`, leaving suffix `cd`. Specify whether groups store that suffix
+  or the full key. The proposal already calls for common byte-prefix compression,
+  which fits `Uint8Array`; no extra nibble count is needed. Define how a key
+  ending at the prefix is stored.
+- **Deterministic packing.** Inserting 64 keys and then deleting one should
+  produce the same representation as inserting the remaining 63 directly.
+  Specify collapse as well as split rules, indexed nibble slots and omitted/null
+  slots, and the 1280-inline transition. Does `edged: true` externalize every
+  nested sibling, even a small one? *Degree*[~][node-degree] 320 accommodates the
+  256 structural slots, but value count alone does not bound serialized bytes.
+  Runtime readers still validate integer bounds, capacities, unique/sorted keys,
+  and equal key/value array lengths.
+- **Aggregate meaning.** For a shared child reached by two paths, is its
+  contribution counted twice in `breadth`? Specify whether ceilings are inclusive
+  and how empty ranges are represented. *Height*[~][node-height] follows
+  *basin edges*[~][strong-edge], not inline trie nesting.
 
 ## Strong retention and weak shortcuts
 
@@ -311,9 +305,8 @@ Their address may still carry the target's *height*[~][node-height].
 The shortcut layout itself needs a size boundary: an entirely inline directory
 tree or `leaves` array can grow without bound. Partitioning or partial caches
 can preserve direct access without duplicating the whole index at every root.
-The proposed directory digest also omits basenames: renaming a sole child leaves
-it unchanged. Its consumer-defined digest should cover names, entry kinds, and
-unambiguous framing if it is meant to identify directory contents.
+Directory digests include UTF-8 byte-sorted, length-framed basenames and
+the corresponding child digests, so a rename changes directory identity.
 
 Before choosing a shortcut layout, measure first-useful-result latency, fetched
 bytes, request count, and update churn against ordinary trie traversal. Keep

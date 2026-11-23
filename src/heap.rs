@@ -29,7 +29,7 @@ impl Default for Limits {
     fn default() -> Self {
         Self {
             max_height: 128,
-            max_degree: 128,
+            max_degree: 320,
             max_token_bytes: 64,
         }
     }
@@ -642,6 +642,20 @@ mod tests {
             ),
         ] {
             assert_eq!(parse(edges).nodes[0].as_ref().unwrap_err().code, code);
+        }
+        for degree in [320, 321] {
+            let edges: Vec<_> = (0..degree)
+                .map(|i| serde_json::json!({"auth":auth(0,format!("child-{i}").as_bytes())}))
+                .collect();
+            let request = Request::parse(
+                serde_json::json!({"flow":"f","viewpoint":"0x0","nodes":[{"auth":auth(1,b"parent"),"length":1,"edges":edges}]}).to_string().as_bytes(),
+                &Limits::default(),
+            ).unwrap();
+            if degree == 320 {
+                assert_eq!(request.nodes[0].as_ref().unwrap().edges.len(), 320);
+            } else {
+                assert_eq!(request.nodes[0].as_ref().unwrap_err().code, "degree_limit");
+            }
         }
     }
 }
