@@ -23,7 +23,7 @@ numeric-keyed *FlexBuffers maps*[~][flexbuffers] in *EnvBufs*[~][envbuf];
 *revisions*[~][revision] for direct shared-storage addressing.
 
 Replicate bounds and consumer summaries across *basin edges*[~][strong-edge] so
-readers can prune without fetching. Hashing is consumer-defined. Structural
+readers can prune without fetching. Content hashing is consumer-defined; stored-node integrity checks remain independent. Structural
 schema, consumer migration and node-id version remain independent.
 `breadth` and `weight` are approximate and may count shared descendants repeatedly.
 The default physical *degree limit*[~][node-degree] is 320.
@@ -117,3 +117,22 @@ type BasinEdge_S0<
 The *format reference*[~][node-format] records shared capability derivation and storage conventions.
 
 These codecs serialize plaintext; encryption needs a separate storage representation.
+
+## Implementation considerations
+
+- Measure logical construction/traversal separately from packing, serialization,
+  integrity hashing and storage. Compare matching capabilities, not just method names.
+- Bisect costs with coarse feature controls, then isolate changes and their
+  interactions. Use repeated fresh-process trials and sufficiently long read loops.
+- Exploit sorted input: derive bounds from endpoints and partition once instead of
+  repeatedly filtering. Prefer offsets/ranges to temporary suffix allocations,
+  while retaining ownership at public input boundaries.
+- Cache immutable parsed lookup metadata; preserve validation of mutable or
+  untrusted descriptors. Let synchronous work stay synchronous, suspending when
+  loading actually requires it.
+- Keep logical references independent of physical packing. Incremental path-copying
+  can avoid rebuilding unchanged branches; measure before changing canonical shape.
+- Inspect actual serialized widths and bytes: lengths, values and relative offsets
+  can each widen representations. Keep optional expensive summaries consumer-defined.
+- For format-preserving optimizations, compare serialized bytes and cross-language
+  reads, including uncached loads, snapshots, prefixes and packing boundaries.

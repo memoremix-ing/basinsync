@@ -1,0 +1,83 @@
+{
+  "bun": "1.4.5",
+  "target": "browser",
+  "format": "esm",
+  "source": {
+    "trie": {
+      "files": [
+        "clients/structures/trie.ts"
+      ],
+      "lines": 592,
+      "bytes": 19222
+    },
+    "vector": {
+      "files": [
+        "clients/structures/vector.ts",
+        "clients/structures/packed.ts"
+      ],
+      "lines": 322,
+      "bytes": 9435
+    },
+    "collection": {
+      "files": [
+        "legacy-adapter/collection.ts",
+        "legacy-adapter/matter.ts",
+        "legacy-adapter/change-management/change-management.ts",
+        "legacy-adapter/result-types/result-types.ts"
+      ],
+      "lines": 2966,
+      "bytes": 88554
+    }
+  },
+  "bundles": {
+    "core": {
+      "lines": 1554,
+      "bytes": 52847,
+      "min_bytes": 29668,
+      "gzip_bytes": 9082,
+      "brotli_bytes": 8231
+    },
+    "trie_class": {
+      "lines": 1777,
+      "bytes": 59380,
+      "min_bytes": 32876,
+      "gzip_bytes": 10322,
+      "brotli_bytes": 9388
+    },
+    "vector_class": {
+      "lines": 1548,
+      "bytes": 51579,
+      "min_bytes": 28708,
+      "gzip_bytes": 8986,
+      "brotli_bytes": 8121
+    },
+    "trie": {
+      "lines": 1997,
+      "bytes": 68158,
+      "min_bytes": 38184,
+      "gzip_bytes": 12095,
+      "brotli_bytes": 10987
+    },
+    "vector": {
+      "lines": 1777,
+      "bytes": 60548,
+      "min_bytes": 34128,
+      "gzip_bytes": 10812,
+      "brotli_bytes": 9814
+    },
+    "combined": {
+      "lines": 2209,
+      "bytes": 75508,
+      "min_bytes": 42373,
+      "gzip_bytes": 13517,
+      "brotli_bytes": 12242
+    },
+    "collection": {
+      "lines": 1739,
+      "bytes": 53378,
+      "min_bytes": 23659,
+      "gzip_bytes": 7838,
+      "brotli_bytes": 6932
+    }
+  }
+}

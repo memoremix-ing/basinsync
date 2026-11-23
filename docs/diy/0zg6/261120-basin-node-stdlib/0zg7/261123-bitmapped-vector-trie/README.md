@@ -4,6 +4,7 @@ prerequisites:
   - 0zg6/261112-commit-marker-edges-with-node-promotion
 ---
 
+[comparison]: <benchmark/comparison.md>
 [diy/0zg6/261120-basin-node-stdlib]: <../../README.md>
 [node-height]: <../../../../../glossary/node-height.md>
 [strong-edge]: <../../../../../glossary/strong-edge.md>
@@ -62,3 +63,6 @@ const found = await sparse.get(2n ** 200n);
 Check empty/threshold cases, independent snapshots, canonical rebuilds, sparse or
 separator lookups, range/aggregate pruning, corrupted descriptors, and all three
 languages reading one another's fixtures.
+
+Compare incrementing positions with the byte trie and historical collection in the
+*client performance and browser-size measurements*[~][comparison].
