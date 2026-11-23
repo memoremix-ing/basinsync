@@ -8,6 +8,7 @@
 [group-cap-255]: <group-cap-255.json>
 [lexidecimal]: <../../../../../../glossary/lexidecimal.md>
 [lexidecimal-grouping]: <lexidecimal-grouping.json>
+[logical-costs]: <logical-costs.md>
 [node]: <../../../../../../glossary/node.md>
 [sha384]: <../../../../../../glossary/sha384.md>
 [trie]: <../../../../../../glossary/trie.md>
@@ -173,3 +174,5 @@ TypeScript, Rust and Go. Consumers can aggregate reversed-key bounds through
 footer summaries. Boundary tests cover 255/256 and reject an unsplit 256-entry
 group; 129 client tests, native tests and 234 cross-language cases pass, as does
 live reservation/upload/commit/promotion/restart integration.
+
+Follow-up: *capability bisection and logical implementation costs*[~][logical-costs].
