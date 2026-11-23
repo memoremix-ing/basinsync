@@ -47,3 +47,8 @@ boundaries with gated I/O, disconnects, source failures, and shutdown signals.
 
 Inspect request/batch correlation and scrape process-local metrics through the
 *observability interface*[~][observability].
+
+Codec wire vectors, Flow ID rules, and object-key prefixes live in
+`tests/vectors/`; the Rust and TypeScript tests both read them. Dependencies
+build optimized in the dev profile. Set `PROPTEST_CASES` to deepen the
+slowest property tests.

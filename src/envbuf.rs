@@ -290,37 +290,67 @@ mod tests {
         let mut bad = bytes.clone();
         bad[frames[0].end - 1] ^= 1;
         assert!(readable(&bad).is_err());
-        for format in [1, 2, 3, PLATFORM_EXTENSION] {
-            assert!(append(&mut vec![], &[], format).is_err());
-        }
         Ok(())
     }
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Frame {
+        format: u8,
+        alignment_power: u8,
+        content: Vec<u8>,
+        wire: Vec<u8>,
+    }
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Vectors {
+        frames: Vec<Frame>,
+        reserved_formats: Vec<u8>,
+    }
+
+    /// Wire vectors shared with the TypeScript client.
     #[test]
-    fn known_frame_and_bidirectional_concatenation() -> Result<()> {
+    fn shared_vectors_concatenate_and_walk_both_ways() -> Result<()> {
+        let vectors: Vectors = serde_json::from_str(include_str!("../tests/vectors/envbuf.json"))?;
         let mut bytes = vec![];
-        append(&mut bytes, &[1], FLEXBUFFERS)?;
-        assert_eq!(
-            bytes,
-            [
-                b"enV".as_slice(),
-                &[0xa3, 1, 0, 0, 0, 1],
-                &[0xee; 7],
-                &[1, 0, 0, 0, 0xa3],
-                b"vNE"
-            ]
-            .concat()
-        );
-        let boundary = bytes.len();
-        append(&mut bytes, b"second command", FLEXBUFFERS)?;
-        assert_eq!(at(&bytes, boundary)?, before(&bytes, bytes.len())?);
-        assert_eq!(before(&bytes, boundary)?.content, [1]);
+        let mut boundaries = vec![0];
+        for frame in &vectors.frames {
+            let mut wire = vec![];
+            append_with_alignment(
+                &mut wire,
+                &frame.content,
+                frame.format,
+                frame.alignment_power,
+            )?;
+            assert_eq!(wire, frame.wire);
+            let decoded = at(&frame.wire, 0)?;
+            assert_eq!(
+                (decoded.format, decoded.content),
+                (frame.format, frame.content.as_slice())
+            );
+            bytes.extend_from_slice(&frame.wire);
+            boundaries.push(bytes.len());
+        }
+        for format in &vectors.reserved_formats {
+            assert!(append(&mut vec![], &[], *format).is_err(), "{format}");
+        }
+        for (pair, frame) in boundaries.windows(2).zip(&vectors.frames) {
+            assert_eq!(at(&bytes, pair[0])?, before(&bytes, pair[1])?);
+            assert_eq!(before(&bytes, pair[1])?.content, frame.content);
+        }
+        // Frames concatenate only at their own alignment, so the 32-byte frame leads.
+        // Corrupt the framing (not content) of the canonical one-byte frame.
+        let canonical = boundaries[vectors
+            .frames
+            .iter()
+            .position(|f| f.content == [1])
+            .unwrap()];
         for offset in [0, 3, 4, 9, 16, 20, 23] {
             let mut bad = bytes.clone();
-            bad[offset] ^= 1;
+            bad[canonical + offset] ^= 1;
             assert!(all(&bad).is_err(), "offset {offset}");
         }
         for length in 1..bytes.len() {
-            if length != boundary {
+            if !boundaries.contains(&length) {
                 assert!(all(&bytes[..length]).is_err());
             }
         }
@@ -341,22 +371,6 @@ mod tests {
             assert_eq!(frame.content, content);
         }
         assert!(append(&mut vec![0; 4], &[], FLEXBUFFERS).is_err());
-        Ok(())
-    }
-    #[test]
-    fn reads_existing_power_three_frames() -> Result<()> {
-        let frame = [
-            b"enV".as_slice(),
-            &[0xa3, 1, 0, 0, 0, 1],
-            &[0xee; 7],
-            &[1, 0, 0, 0, 0xa3],
-            b"vNE",
-        ]
-        .concat();
-        let bytes = [frame.clone(), frame].concat();
-        assert_eq!(all(&bytes)?.len(), 2);
-        assert_eq!(before(&bytes, 48)?, at(&bytes, 24)?);
-        assert_eq!(before(&bytes, 24)?.content, [1]);
         Ok(())
     }
     #[test]

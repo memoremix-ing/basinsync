@@ -51,28 +51,24 @@ mod tests {
     use super::*;
     use proptest::prelude::*;
 
+    #[derive(serde::Deserialize)]
+    struct Vectors {
+        canonical: Vec<(String, String)>,
+        invalid: Vec<String>,
+    }
+
+    /// Wire vectors shared with the TypeScript client.
     #[test]
-    fn vectors_and_invalid_encodings() {
-        for (n, wire) in [
-            (0, "0w0z"),
-            (1, "0w1z"),
-            (15, "0wfz"),
-            (16, "0w01z"),
-            (27, "0wb1z"),
-            (256, "0w001z"),
-            (-1, "0wfy"),
-            (-16, "0w0y"),
-            (-17, "0wfey"),
-            (-256, "0w00y"),
-            (-257, "0wffey"),
-        ] {
-            assert_eq!(encode(&n.into()), wire);
-            assert_eq!(decode(wire).unwrap(), n.into());
+    fn shared_vectors() {
+        let vectors: Vectors =
+            serde_json::from_str(include_str!("../tests/vectors/diffuse16.json")).unwrap();
+        for (n, wire) in &vectors.canonical {
+            let n: BigInt = n.parse().unwrap();
+            assert_eq!(&encode(&n), wire);
+            assert_eq!(decode(wire).unwrap(), n);
         }
-        for bad in [
-            "", "0wz", "0w00z", "0w10z", "0wFz", "0w-1z", "0w1z/x", "0wffy", "0w0fy", "💧",
-        ] {
-            assert!(decode(bad).is_err());
+        for bad in &vectors.invalid {
+            assert!(decode(bad).is_err(), "{bad}");
         }
     }
 

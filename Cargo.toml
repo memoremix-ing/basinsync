@@ -30,4 +30,7 @@ metrics-exporter-prometheus = { version = "0.18", default-features = false }
 
 [dev-dependencies]
 proptest = "1"
-redb = "4.4.0"
+
+# Tests spend most of their time inside Turso; optimize dependencies only.
+[profile.dev.package."*"]
+opt-level = 2

@@ -157,51 +157,56 @@ mod tests {
     use super::*;
     use proptest::prelude::*;
 
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Vectors {
+        extensions: Vec<serde_json::Map<String, serde_json::Value>>,
+        invalid: Vec<Vec<u8>>,
+        unsupported_well_known_symbols: Vec<String>,
+    }
+
+    fn decoded(wire: &[u8]) -> Option<Extension> {
+        read(Reader::get_root(wire).ok()?).ok()
+    }
+
+    /// Extension wire vectors shared with the TypeScript client.
     #[test]
-    fn extension_prefixes_and_wire_vectors() {
-        for (value, wire) in [
-            (0, vec![2, b'x', 0, 2, 48, 1]),
-            (-1, vec![2, b'~', 0, 2, 48, 1]),
-            (-257, vec![3, b'~', 1, 0, 3, 48, 1]),
-        ] {
-            let extension = Extension::BigInt(value.into());
+    fn shared_vectors() {
+        let vectors: Vectors =
+            serde_json::from_str(include_str!("../tests/vectors/flexbuffer.json")).unwrap();
+        for vector in &vectors.extensions {
+            let wire: Vec<u8> = serde_json::from_value(vector["wire"].clone()).unwrap();
+            let text = |key: &str| vector.get(key).and_then(|v| v.as_str()).map(String::from);
+            let extension = if let Some(n) = text("bigint") {
+                Extension::BigInt(n.parse().unwrap())
+            } else if let Some(name) = text("wellKnownSymbol") {
+                Extension::WellKnownSymbol(name)
+            } else {
+                Extension::GlobalSymbol(text("globalSymbol").unwrap())
+            };
             assert_eq!(encode(&extension).unwrap(), wire);
-            assert_eq!(
-                read(Reader::get_root(wire.as_slice()).unwrap()).unwrap(),
-                extension
-            );
+            assert_eq!(decoded(&wire), Some(extension));
         }
-        for extension in [
-            Extension::WellKnownSymbol("species".into()),
-            Extension::GlobalSymbol("".into()),
-            Extension::GlobalSymbol("shared 🌎".repeat(100)),
-        ] {
-            let wire = encode(&extension).unwrap();
-            assert_eq!(
-                read(Reader::get_root(wire.as_slice()).unwrap()).unwrap(),
-                extension
-            );
+        for wire in &vectors.invalid {
+            assert_eq!(decoded(wire), None, "{wire:?}");
         }
-        for wire in [
-            vec![2, b'X', 0, 2, 48, 1],
-            vec![1, b'~', 1, 48, 1],
-            vec![3, b'x', 0, 1, 3, 48, 1],
-            vec![2, b'$', 255, 2, 48, 1],
-            vec![2, 0, b'x', 0, 0, 1, 4, 49, 1],
-        ] {
-            assert!(read(Reader::get_root(wire.as_slice()).unwrap()).is_err());
+        for name in &vectors.unsupported_well_known_symbols {
+            assert!(Extension::WellKnownSymbol(name.clone()).payload().is_err());
+            let payload = [b"#", name.as_bytes()].concat();
+            let length = payload.len() as u8;
+            let wire = [&[length][..], &payload, &[length, 48, 1]].concat();
+            assert_eq!(decoded(&wire), None, "{name}");
         }
-        assert!(
-            Extension::WellKnownSymbol("dispose".into())
-                .payload()
-                .is_err()
-        );
     }
 
     #[test]
     fn vector_length_and_root_offset_width_boundaries() {
-        for length in [1, 2, 3, 4, 254, 255, 256, 32767, 32768, 65535, 65536] {
-            let extension = Extension::GlobalSymbol("x".repeat(length));
+        for name in [1, 2, 3, 4, 254, 255, 256, 32767, 32768, 65535, 65536]
+            .map(|length| "x".repeat(length))
+            .into_iter()
+            .chain(["shared 🌎".repeat(100)])
+        {
+            let extension = Extension::GlobalSymbol(name);
             let wire = encode(&extension).unwrap();
             assert_eq!(
                 read(Reader::get_root(wire.as_slice()).unwrap()).unwrap(),

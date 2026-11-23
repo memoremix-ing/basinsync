@@ -1044,36 +1044,28 @@ mod tests {
     use super::*;
     use proptest::prelude::*;
 
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Vectors {
+        keys: Vec<(String, String)>,
+        invalid_keys: Vec<String>,
+    }
+
+    /// Key vectors shared with the TypeScript client.
     #[test]
-    fn keys_complement_positive_milestones_and_descend_across_width_boundaries() -> Result<()> {
-        for (n, encoded) in [(1u16, "0yve"), (15, "0yv0"), (16, "0yuef"), (256, "0yteff")] {
-            let milestone = BigUint::from(n);
-            assert_eq!(
-                key(&milestone)?,
-                format!("kernelspace/basin/timeline/{encoded}")
-            );
-            assert_eq!(from_key(&key(&milestone)?)?, milestone);
+    fn shared_key_vectors() -> Result<()> {
+        let vectors: Vectors =
+            serde_json::from_str(include_str!("../tests/vectors/timeline.json"))?;
+        for (milestone, expected) in &vectors.keys {
+            let milestone: BigUint = milestone.parse()?;
+            assert_eq!(&key(&milestone)?, expected);
+            assert_eq!(from_key(expected)?, milestone);
         }
-        for bits in [4usize, 8, 64, 68, 256, 1024] {
-            let n = BigUint::from(1u8) << bits;
-            let values = [&n - 1u8, n.clone(), &n + 1u8];
-            for pair in values.windows(2) {
-                assert!(key(&pair[0])? > key(&pair[1])?);
-                assert_eq!(from_key(&key(&pair[0])?)?, pair[0]);
-            }
+        for bad in &vectors.invalid_keys {
+            assert!(from_key(bad).is_err(), "{bad}");
         }
         assert!(key(&0u8.into()).is_err());
         assert!(key(&(BigUint::from(1u8) << 4096usize)).is_err());
-        for bad in [
-            "kernelspace/basin/timeline/0yvf",
-            "kernelspace/basin/timeline/0zg1",
-            "kernelspace/basin/timeline/0w1z",
-            "kernelspace/basin/timeline/0yFFE",
-            "kernelspace/basin/timeline/0yve/extra",
-            "kernelspace/basin/epilogue/0yve",
-        ] {
-            assert!(from_key(bad).is_err(), "{bad}");
-        }
         Ok(())
     }
 

@@ -4,9 +4,9 @@
   "type": "module",
   "engines": { "node": ">=18" },
   "scripts": {
-    "test": "bun test clients/*.test.ts",
-    "test:integration": "bun clients/integration.ts && bun clients/cancellation-integration.ts && bun clients/analogue-integration.ts && bun clients/bidirectional-integration.ts && bun clients/crc32c-integration.ts && bun clients/kernel-backup-integration.ts && bun clients/kernel-promotion-integration.ts && bun clients/observability-integration.ts",
-    "stress": "bun clients/stress.ts",
+    "test": "bun test tests/clients/*.test.ts",
+    "test:integration": "bun tests/clients/integration.ts && bun tests/clients/cancellation-integration.ts && bun tests/clients/analogue-integration.ts && bun tests/clients/bidirectional-integration.ts && bun tests/clients/crc32c-integration.ts && bun tests/clients/kernel-backup-integration.ts && bun tests/clients/kernel-promotion-integration.ts && bun tests/clients/observability-integration.ts",
+    "stress": "bun tests/clients/stress.ts",
     "check": "tsc --noEmit",
     "check:docs": "python3 docs/skills/basinsync-tutorial-dag/scripts/check_dag.py",
     "test:docs": "python3 docs/skills/basinsync-tutorial-dag/scripts/test_check_dag.py"

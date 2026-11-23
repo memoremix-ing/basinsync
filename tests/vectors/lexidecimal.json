@@ -1,0 +1,14 @@
+{
+  "canonical": [
+    ["0", "0zg0"], ["1", "0zg1"], ["15", "0zgf"], ["16", "0zh10"], ["255", "0zhff"], ["256", "0zi100"],
+    ["-1", "0yvf"], ["-2", "0yve"], ["-16", "0yv0"], ["-17", "0yuef"], ["-256", "0yu00"], ["-257", "0yteff"]
+  ],
+  "invalid": [
+    "", "0", "0x000", "0z00", "0z0000", "0z010", "0yggg", "0z1000", "0z0100", "0z00F", "0zg", "0zg00",
+    "0zwgg0", "0zwgh10", "0yZvvf", "0yWvvvvvvvvvvvvvvvvf", "0zZgg0", "0ywggf", "0zgF", "💧"
+  ],
+  "sizePrefixes": [
+    [0, "g", "v"], [15, "v", "g"], [16, "whg", "Zuv"], [255, "wvv", "Zgg"], [256, "xghgg", "Yvuvv"],
+    [65535, "xvvvv", "Ygggg"], [65536, "yggghgggg", "Xvvvuvvvv"], [4294967296, "zggggggghgggggggg", "Wvvvvvvvuvvvvvvvv"]
+  ]
+}

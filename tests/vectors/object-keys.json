@@ -1,0 +1,9 @@
+{
+  "timeline": "kernelspace/basin/timeline/",
+  "basinEpilogue": "kernelspace/basin/epilogue/",
+  "analogue": "kernelspace/basin/analogue/",
+  "kernelHeap": "kernelspace/basin/heap/",
+  "userHeap": "userspace/heap/",
+  "userFlows": "userspace/flows/",
+  "emptySentinel": "kernelspace/sentinel/empty"
+}

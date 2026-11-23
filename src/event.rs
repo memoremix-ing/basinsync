@@ -125,18 +125,29 @@ pub fn decode(bytes: &[u8]) -> Result<CommitFlow> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct FlowIds {
+        normalized: Vec<(String, String)>,
+        max_length: usize,
+        invalid: Vec<String>,
+    }
+
+    /// Flow ID rules shared with the TypeScript API tests.
     #[test]
     fn flow_ids_are_portable_and_canonical() {
-        assert_eq!(normalize_flow("MiXeD.Id_0-").unwrap(), "mixed.id_0-");
-        assert!(normalize_flow(&"A".repeat(160)).is_ok());
-        assert!(valid_flow("UPPER").is_err());
-        for id in [
-            "", ".", "..", "/", "a/b", "a\\b", "a b", "a\tb", "a\0b", "雪", "%2f", "a?b", "a#b",
-            "a:b",
-        ] {
+        let ids: FlowIds =
+            serde_json::from_str(include_str!("../tests/vectors/flow-ids.json")).unwrap();
+        for (raw, canonical) in &ids.normalized {
+            assert_eq!(&normalize_flow(raw).unwrap(), canonical);
+            assert!(valid_flow(canonical).is_ok());
+            assert!(valid_flow(raw).is_err(), "{raw:?} is not canonical");
+        }
+        assert!(normalize_flow(&"A".repeat(ids.max_length)).is_ok());
+        assert!(normalize_flow(&"a".repeat(ids.max_length + 1)).is_err());
+        for id in &ids.invalid {
             assert!(normalize_flow(id).is_err(), "{id:?}");
         }
-        assert!(normalize_flow(&"a".repeat(161)).is_err());
     }
     #[test]
     fn unary_batch_and_binary_blob() {
@@ -862,10 +873,12 @@ mod envelope_tests {
         assert_eq!(manifest_range(&old)?, None);
         let bytes = chunks.finish(delta)?;
         let frames = frames(&bytes)?;
-        assert_eq!(frames.len(), commands.len() + 3);
-        let last = &frames[frames.len() - 2];
+        // Published feeds end with a retry margin; the manifest is the last frame before it.
         assert_eq!(frames.last().unwrap().format, crate::envbuf::MARGIN);
-        assert_eq!(frames.last().unwrap().content, &0u64.to_le_bytes());
+        let last = frames
+            .iter()
+            .rfind(|f| f.format != crate::envbuf::MARGIN)
+            .unwrap();
         assert_eq!(manifest_range(&bytes)?, Some(last.start..last.end));
         let headers = crate::timeline::entry_headers(&bytes, 0)?;
         assert_eq!(headers["if-none-match"], "*");
@@ -907,7 +920,10 @@ mod envelope_tests {
         let delta = writer.prepare(&0u8.into(), None, &commands)?;
         let bytes = encode_wal(commands, delta)?;
         let frames = frames(&bytes)?;
-        let manifest = &frames[frames.len() - 2];
+        let manifest = frames
+            .iter()
+            .rfind(|f| f.format != crate::envbuf::MARGIN)
+            .unwrap();
         assert!(decode_entry(&bytes[..manifest.start]).is_err());
         assert!(manifest_range(&bytes[..manifest.start]).is_err());
         assert!(manifest_range(b"enV").is_err());

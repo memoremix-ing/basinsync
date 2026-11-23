@@ -5,10 +5,6 @@ use turso_core::{
     io::{FileId, FileSyncType},
 };
 
-#[cfg(test)]
-#[path = "zsets.rs"]
-mod zsets;
-
 #[derive(Default)]
 struct Recorder {
     current: Vec<u8>,

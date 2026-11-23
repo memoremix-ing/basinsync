@@ -410,6 +410,29 @@ mod tests {
         assert!(flow_key(&"x".repeat(600), &revision, &vp).is_err());
         Ok(())
     }
+    /// The TypeScript tests build keys from the same table.
+    #[test]
+    fn layouts_match_the_shared_object_key_table() -> Result<()> {
+        let table: HashMap<String, String> =
+            serde_json::from_str(include_str!("../tests/vectors/object-keys.json"))?;
+        assert_eq!(table["timeline"], crate::timeline::PREFIX);
+        assert_eq!(table["basinEpilogue"], BASIN_PREFIX);
+        assert_eq!(table["analogue"], crate::analogue::PREFIX);
+        assert_eq!(
+            format!("{}young/", table["kernelHeap"]),
+            crate::kernel::YOUNG
+        );
+        assert_eq!(format!("{}old/", table["kernelHeap"]), crate::kernel::OLD);
+        assert_eq!(format!("{}young/", table["userHeap"]), crate::heap::YOUNG);
+        assert_eq!(format!("{}old/", table["userHeap"]), crate::heap::OLD);
+        assert_eq!(table["emptySentinel"], crate::sequence::REFERENCE_KEY);
+        let revision = uuid::Uuid::nil();
+        assert_eq!(
+            flow_prefix("f", &revision),
+            format!("{}f/{revision}/epilogue/", table["userFlows"])
+        );
+        Ok(())
+    }
     #[test]
     fn promotion_signs_use_uncomplemented_keys_after_every_marker() -> Result<()> {
         let revision = uuid::Uuid::new_v4();

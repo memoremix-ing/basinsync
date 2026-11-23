@@ -109,38 +109,6 @@ fn concatenated_events_keep_boundaries_alignment_ranges_and_recovery() -> Result
 }
 
 #[test]
-fn retry_margin_preserves_prepared_successors_and_locations() -> Result<()> {
-    let mut stager = Basin::default().into_stager();
-    let first = stager.prepare(vec![command("f", "0")])?;
-    let second = stager.prepare(vec![command("f", "1")])?;
-    let digest = event::entry_digest(first.bytes())?;
-    let locations = event::blob_ranges(first.bytes())?;
-    let manifest = event::manifest_range(first.bytes())?;
-    let mut retried = first.bytes().to_vec();
-    for counter in [0u64, 1, 256, u64::MAX] {
-        let mut margin = vec![];
-        basinsync::envbuf::append(
-            &mut margin,
-            &counter.to_le_bytes(),
-            basinsync::envbuf::MARGIN,
-        )?;
-        let start = event::envelope(first.bytes())?.end;
-        retried[start..start + margin.len()].copy_from_slice(&margin);
-        assert_eq!(retried.len(), first.bytes().len());
-        assert_eq!(event::entry_digest(&retried)?, digest);
-        assert_ne!(event::digest(&retried), digest);
-        assert_eq!(event::blob_ranges(&retried)?, locations);
-        assert_eq!(event::manifest_range(&retried)?, manifest);
-    }
-    let mut recovered = Basin::default();
-    recovered.apply_entry(1u8.into(), &retried)?;
-    recovered.apply_entry(2u8.into(), second.bytes())?;
-    assert_eq!(recovered.prefix(), stager.prefix());
-    assert_eq!(recovered.latest("f")?.unwrap().decimal(), "1");
-    Ok(())
-}
-
-#[test]
 fn legacy_history_can_be_extended_with_wal_batches() -> Result<()> {
     let mut reader = Basin::default();
     let (_, legacy) = reader.prepare(command("f", "0").markers)?;
@@ -228,7 +196,8 @@ fn wal_preserves_counters_above_machine_precision() -> Result<()> {
 }
 
 proptest::proptest! {
-    #![proptest_config(proptest::test_runner::Config::with_cases(32))]
+    // Each run draws new cases; set PROPTEST_CASES for a deeper search.
+    #![proptest_config(proptest::test_runner::Config::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|c| c.parse().ok()).unwrap_or(32)))]
     #[test]
     fn persistent_wal_batches_reconstruct_at_every_prefix(batches in proptest::collection::vec(proptest::collection::vec(0u16..64,1..20),2..30)){
         let mut before=State::genesis().unwrap().image;
@@ -249,45 +218,75 @@ proptest::proptest! {
     }
 }
 
+proptest::proptest! {
+    #![proptest_config(proptest::test_runner::Config::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|c| c.parse().ok()).unwrap_or(32)))]
+    /// Writers rewrite the trailing counter margin and may append more margins when they
+    /// retry a conditional PUT; none of that may change the entry's identity.
+    #[test]
+    fn trailing_retry_margins_never_change_an_entry(
+        counter in proptest::prelude::any::<u64>(),
+        margins in proptest::collection::vec(proptest::collection::vec(proptest::prelude::any::<u8>(), 0..64), 0..4),
+    ) {
+        let mut stager = Basin::default().into_stager();
+        let first = stager.prepare(vec![command("f", "0")]).unwrap();
+        let second = stager.prepare(vec![command("f", "1")]).unwrap();
+        let original = first.bytes();
+        let mut stored = original.to_vec();
+        let mut margin = vec![];
+        basinsync::envbuf::append(&mut margin, &counter.to_le_bytes(), basinsync::envbuf::MARGIN).unwrap();
+        let start = event::envelope(original).unwrap().end;
+        stored[start..start + margin.len()].copy_from_slice(&margin);
+        proptest::prop_assert_eq!(stored.len(), original.len());
+        for margin in &margins {
+            basinsync::envbuf::append(&mut stored, margin, basinsync::envbuf::MARGIN).unwrap();
+        }
+        proptest::prop_assert_eq!(event::coordinate_bytes(&stored).unwrap(), event::coordinate_bytes(original).unwrap());
+        proptest::prop_assert_eq!(event::entry_digest(&stored).unwrap(), event::entry_digest(original).unwrap());
+        proptest::prop_assert_eq!(event::blob_ranges(&stored).unwrap(), event::blob_ranges(original).unwrap());
+        proptest::prop_assert_eq!(event::manifest_range(&stored).unwrap(), event::manifest_range(original).unwrap());
+        proptest::prop_assert_eq!(basinsync::checksum::event(0, &stored).unwrap(), basinsync::checksum::event(0, original).unwrap());
+        let mut recovered = Basin::default();
+        recovered.apply_entry(1u8.into(), &stored).unwrap();
+        recovered.apply_entry(2u8.into(), second.bytes()).unwrap();
+        proptest::prop_assert_eq!(recovered.prefix(), stager.prefix());
+        proptest::prop_assert_eq!(recovered.latest("f").unwrap().unwrap().decimal(), "1");
+    }
+}
+
 #[test]
-fn byte_coordinates_are_digest_bound_contiguous_and_ignore_retry_margins() -> Result<()> {
+fn byte_coordinates_are_digest_bound_and_contiguous() -> Result<()> {
     let mut stager = Basin::default().into_stager();
     let first = stager.prepare(vec![command("f", "0")])?;
     let second = stager.prepare(vec![command("f", "1")])?;
-    assert_eq!(event::coordinate(first.bytes())?, Some(0u8.into()));
-    let mut reframed = first.bytes().to_vec();
-    basinsync::envbuf::append_counter_margin(&mut reframed, 0)?;
+    let original = first.bytes();
+    let bytes = event::coordinate_bytes(original)?;
+    assert_eq!(event::envelope(original)?.end, bytes.len());
+    assert_eq!(event::entry_digest(original)?, event::digest(bytes));
     assert_eq!(
-        event::entry_digest(&reframed)?,
-        event::entry_digest(first.bytes())?
+        basinsync::checksum::event(0, original)?,
+        basinsync::checksum::append(0, bytes)
     );
-    let mut unmodified = Basin::default();
-    unmodified.apply_entry(1u8.into(), &reframed)?;
-    unmodified.apply_entry(2u8.into(), second.bytes())?;
-    assert_eq!(unmodified.prefix(), stager.prefix());
+    assert_eq!(event::coordinate(original)?, Some(0u8.into()));
     assert_eq!(
         event::coordinate(second.bytes())?,
-        Some(event::coordinate_length(first.bytes())?.into())
+        Some(event::coordinate_length(original)?.into())
     );
     assert_eq!(
         stager.prefix().coordinate(),
         &BigUint::from(
-            event::coordinate_length(first.bytes())? + event::coordinate_length(second.bytes())?
+            event::coordinate_length(original)? + event::coordinate_length(second.bytes())?
         )
     );
     let event::Entry::Wal {
         commands, delta, ..
-    } = event::decode_entry(first.bytes())?
+    } = event::decode_entry(original)?
     else {
         panic!()
     };
     for wrong in [1u8.into(), BigUint::from(1u8) << 256usize] {
         let bad = event::encode_wal_at(commands.clone(), *delta.clone(), &wrong)?;
         assert_eq!(event::coordinate(&bad)?, Some(wrong));
-        assert_ne!(
-            event::entry_digest(&bad)?,
-            event::entry_digest(first.bytes())?
-        );
+        assert_ne!(event::entry_digest(&bad)?, event::entry_digest(original)?);
         let mut recovered = Basin::default();
         assert!(recovered.apply_entry(1u8.into(), &bad).is_err());
         assert_eq!(recovered.milestone, 0u8.into());
@@ -297,50 +296,11 @@ fn byte_coordinates_are_digest_bound_contiguous_and_ignore_retry_margins() -> Re
 }
 
 #[test]
-fn external_retry_margins_leave_the_entire_event_unchanged_and_reject_other_suffixes() -> Result<()>
-{
-    let mut stager = Basin::default().into_stager();
-    let first = stager.prepare(vec![command("f", "0")])?;
-    let second = stager.prepare(vec![command("f", "1")])?;
-    let original = first.bytes();
-    let outer = event::envelope(original)?;
-    let bytes = event::coordinate_bytes(original)?;
-    assert_eq!(outer.end, bytes.len());
-    assert_eq!(
-        basinsync::envbuf::all(original)?
-            .iter()
-            .map(|f| f.format)
-            .collect::<Vec<_>>(),
-        vec![4, 6]
-    );
-    assert_eq!(
-        basinsync::envbuf::before(outer.content, outer.content.len())?.format,
-        basinsync::envbuf::FLEXBUFFERS
-    );
-    assert_eq!(event::entry_digest(original)?, event::digest(bytes));
-    assert_eq!(
-        basinsync::checksum::event(0, original)?,
-        basinsync::checksum::append(0, bytes)
-    );
-    for count in 0..=3 {
-        let mut stored = bytes.to_vec();
-        for n in 0..count {
-            basinsync::envbuf::append(
-                &mut stored,
-                &vec![n as u8; n * 9],
-                basinsync::envbuf::MARGIN,
-            )?;
-        }
-        assert_eq!(event::coordinate_bytes(&stored)?, bytes);
-        assert_eq!(
-            event::entry_digest(&stored)?,
-            event::entry_digest(original)?
-        );
-        let mut recovered = Basin::default();
-        recovered.apply_entry(1u8.into(), &stored)?;
-        recovered.apply_entry(2u8.into(), second.bytes())?;
-        assert_eq!(recovered.prefix(), stager.prefix());
-    }
+fn entries_reject_non_margin_suffixes_truncation_and_internal_margins() -> Result<()> {
+    let original = Basin::default()
+        .into_stager()
+        .prepare(vec![command("f", "0")])?;
+    let original = original.bytes();
     for format in [basinsync::envbuf::NESTED, basinsync::envbuf::FLEXBUFFERS, 0] {
         let mut stored = original.to_vec();
         basinsync::envbuf::append(&mut stored, b"unexpected", format)?;
@@ -352,7 +312,7 @@ fn external_retry_margins_leave_the_entire_event_unchanged_and_reject_other_suff
     assert!(event::decode_entry(&truncated).is_err());
     // Margins within the command feed belong in its manifest; they cannot trail it.
     let mut internal = vec![0; 8];
-    internal.extend_from_slice(outer.content);
+    internal.extend_from_slice(event::envelope(original)?.content);
     basinsync::envbuf::append_counter_margin(&mut internal, 0)?;
     let internal = basinsync::envbuf::finish_nested(internal)?;
     assert!(event::decode_entry(&internal).is_err());

@@ -1,0 +1,5 @@
+{
+  "normalized": [["MiXeD.Id_0-", "mixed.id_0-"]],
+  "maxLength": 160,
+  "invalid": ["", ".", "..", "/", "a/b", "a\\b", "a b", "a\tb", "a\u0000b", "雪", "%2f", "a?b", "a#b", "a:b"]
+}

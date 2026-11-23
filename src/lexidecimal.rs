@@ -155,110 +155,49 @@ mod tests {
     use super::*;
     use proptest::prelude::*;
 
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Vectors {
+        canonical: Vec<(String, String)>,
+        invalid: Vec<String>,
+        size_prefixes: Vec<(u64, String, String)>,
+    }
+
+    /// Wire vectors shared with the TypeScript client.
     #[test]
-    fn canonical_vectors_and_rejection() {
-        for (n, wire) in [
-            (0, "0zg0"),
-            (1, "0zg1"),
-            (15, "0zgf"),
-            (16, "0zh10"),
-            (255, "0zhff"),
-            (256, "0zi100"),
-            (-1, "0yvf"),
-            (-2, "0yve"),
-            (-16, "0yv0"),
-            (-17, "0yuef"),
-            (-256, "0yu00"),
-            (-257, "0yteff"),
-        ] {
-            assert_eq!(encode(&n.into()), wire);
-            assert_eq!(decode(wire).unwrap(), n.into());
+    fn shared_vectors() {
+        let vectors: Vectors =
+            serde_json::from_str(include_str!("../tests/vectors/lexidecimal.json")).unwrap();
+        for (n, wire) in &vectors.canonical {
+            let n: BigInt = n.parse().unwrap();
+            assert_eq!(&encode(&n), wire);
+            assert_eq!(decode(wire).unwrap(), n);
         }
-        for bad in [
-            "",
-            "0",
-            "0x000",
-            "0z00",
-            "0z0000",
-            "0z010",
-            "0yggg",
-            "0z1000",
-            "0z0100",
-            "0z00F",
-            "0zg",
-            "0zg00",
-            "0zwgg0",
-            "0zwgh10",
-            "0yZvvf",
-            "0yWvvvvvvvvvvvvvvvvf",
-            "0zZgg0",
-            "0ywggf",
-            "0zgF",
-            "💧",
-        ] {
+        for bad in &vectors.invalid {
             assert!(decode(bad).is_err(), "{bad}");
         }
+        for (size, positive, negative) in &vectors.size_prefixes {
+            let Ok(size) = usize::try_from(*size) else {
+                continue;
+            };
+            assert_eq!(&size_prefix(size, false), positive);
+            assert_eq!(&size_prefix(size, true), negative);
+        }
+    }
+
+    #[test]
+    fn viewpoints_reject_noncanonical_decimals_foreign_keys_and_oversized_keys() {
         for bad in ["", "-1", "+1", "01", "1.0", " 1", "١"] {
-            assert!(Viewpoint::parse(bad).is_err());
+            assert!(Viewpoint::parse(bad).is_err(), "{bad}");
         }
         for bad in [
             "kernelspace/basin/epilogue/0zg0",
             "kernelspace/basin/epilogue/0yvf/extra",
             "other/0yvf",
         ] {
-            assert!(Viewpoint::from_key(bad).is_err());
+            assert!(Viewpoint::from_key(bad).is_err(), "{bad}");
         }
-    }
-
-    #[test]
-    fn size_powers_and_complemented_boundaries() {
-        for (size, positive, negative) in [
-            (0usize, "g", "v"),
-            (15, "v", "g"),
-            (16, "whg", "Zuv"),
-            (255, "wvv", "Zgg"),
-            (256, "xghgg", "Yvuvv"),
-            (65535, "xvvvv", "Ygggg"),
-            (65536, "yggghgggg", "Xvvvuvvvv"),
-        ] {
-            assert_eq!(size_prefix(size, false), positive);
-            assert_eq!(size_prefix(size, true), negative);
-        }
-        if usize::BITS >= 64 {
-            let size = usize::try_from(0x1_0000_0000u64).unwrap();
-            assert_eq!(size_prefix(size, false), "zggggggghgggggggg");
-            assert_eq!(size_prefix(size, true), "Wvvvvvvvuvvvvvvvv");
-        }
-        for bits in [64usize, 1024, 262144] {
-            let n = BigInt::from(1u8) << bits;
-            let values = [-&n - 1u8, -&n, -&n + 1u8, &n - 1u8, n.clone(), &n + 1u8];
-            for value in &values {
-                assert_eq!(decode(&encode(value)).unwrap(), *value);
-            }
-            for pair in values.windows(2) {
-                assert!(encode(&pair[0]) < encode(&pair[1]));
-            }
-        }
-    }
-
-    #[test]
-    fn boundaries_beyond_machine_precision() {
-        for bits in [4, 8, 64, 68, 256, 1024, 4096] {
-            let n = BigInt::from(1u8) << (bits as usize);
-            let values = [&n - 1u8, n.clone(), &n + 1u8];
-            for pair in values.windows(2) {
-                assert!(encode(&pair[0]) < encode(&pair[1]));
-                assert_eq!(decode(&encode(&pair[0])).unwrap(), pair[0]);
-                if bits == 4096 {
-                    assert!(Viewpoint(pair[0].to_biguint().unwrap()).key().is_err());
-                    continue;
-                }
-                let a = Viewpoint(pair[0].to_biguint().unwrap());
-                let b = Viewpoint(pair[1].to_biguint().unwrap());
-                assert!(a.key().unwrap() > b.key().unwrap());
-                assert_eq!(Viewpoint::from_key(&a.key().unwrap()).unwrap(), a);
-            }
-        }
+        assert!(Viewpoint(BigUint::from(1u8) << 4096usize).key().is_err());
     }
 
     proptest! {
@@ -268,6 +207,27 @@ mod tests {
             let b = BigInt::from_bytes_be(if negative_b {Sign::Minus} else {Sign::Plus}, &b);
             prop_assert_eq!(decode(&encode(&a)).unwrap(), a.clone());
             prop_assert_eq!(encode(&a).cmp(&encode(&b)), a.cmp(&b));
+        }
+
+        /// Neighbors of powers of two cross every size-prefix width, including widths beyond
+        /// machine precision; Epilogue keys of viewpoints sort in reverse.
+        #[test]
+        fn width_boundaries_keep_order_and_descending_keys(bits in prop_oneof![63 => 0usize..2048, 1 => Just(262_144)], negative in any::<bool>()) {
+            let n = BigInt::from(1u8) << bits;
+            let values: Vec<BigInt> = if negative {
+                vec![-&n - 1u8, -&n, -&n + 1u8]
+            } else {
+                vec![&n - 1u8, n.clone(), &n + 1u8]
+            };
+            for pair in values.windows(2) {
+                prop_assert!(encode(&pair[0]) < encode(&pair[1]));
+                prop_assert_eq!(decode(&encode(&pair[0])).unwrap(), pair[0].clone());
+                if let (true, Some(a), Some(b)) = (bits < 2048, pair[0].to_biguint(), pair[1].to_biguint()) {
+                    let (a, b) = (Viewpoint(a), Viewpoint(b));
+                    prop_assert!(a.key().unwrap() > b.key().unwrap());
+                    prop_assert_eq!(Viewpoint::from_key(&a.key().unwrap()).unwrap(), a);
+                }
+            }
         }
 
         #[test]

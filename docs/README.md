@@ -9,6 +9,7 @@
 [diy/0zg6/261112-commit-marker-edges-with-node-promotion]: <diy/0zg6/261112-commit-marker-edges-with-node-promotion/README.md>
 [diy/0zg7/261118-shallow-basin-backup-nodes]: <diy/0zg7/261118-shallow-basin-backup-nodes/README.md>
 [diy/0zg8/261119-observability]: <diy/0zg8/261119-observability/README.md>
+[diy/0zg9/261121-durable-test-suites]: <diy/0zg9/261121-durable-test-suites/README.md>
 [lexidecimal]: <glossary/lexidecimal.md>
 [object-keys]: <object-keys.md>
 
@@ -48,5 +49,8 @@ Back up paired database graphs with
 
 Inspect request publication and background progress with
 *Observability*[~][diy/0zg8/261119-observability].
+
+Keep the test suites small and resilient with
+*Durable test suites*[~][diy/0zg9/261121-durable-test-suites].
 
 Audit storage layouts in the *object-key reference*[~][object-keys].
