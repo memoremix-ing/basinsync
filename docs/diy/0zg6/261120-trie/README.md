@@ -38,6 +38,9 @@ descriptor remains a map. `Symbol.match` identifies an edge in both
 ```ts
 type U32 = number;
 
+// Proposed: null denotes no observations; nonempty bounds include both ends.
+type Bounds<T> = null | [floor: T, ceiling: T];
+
 type SCHEMA_0 = 0;
 
 type Footers = {
@@ -55,10 +58,10 @@ interface BasinNode_S0<
   1: DomainT;
   2: PathT;
   3: BasinQuery_S0;
-  4: SCHEMA_0;
+  4: SCHEMA_0; // structural schema, independent of consumer migration
   5: HeaderT;
   6: {
-    [IndexT in U32 & keyof FootersT]: [IndexT, ...FootersT[IndexT]];
+    [IndexT in U32 & keyof FootersT]: [migration: IndexT, ...FootersT[IndexT]];
   }[U32 & keyof FootersT];
 }
 
@@ -66,10 +69,10 @@ type BasinQuery_S0 = {
   height: U32; // (for DAG inaviants and basin ids)
   degree: U32; // shallow count of edges
   breadth: bigint; // deep aggregate degree
-  rotations: [floor: U32, ceiling: U32]; // deep aggregate from edges
-  versions: [floor: U32, ceiling: U32]; // deep aggregate from edges
-  schemas: [floor: U32, ceiling: U32]; // deep aggregate over edges
-  migrations: [floor: U32, ceiling: U32]; // deep aggregate over edges
+  rotations: Bounds<U32>; // deep aggregate from edges
+  versions: Bounds<U32>; // deep aggregate from edges
+  schemas: Bounds<U32>; // deep aggregate over edges
+  migrations: Bounds<U32>; // deep aggregate over edges
 };
 
 type BasinEdge_S0<
@@ -127,9 +130,9 @@ interface TrieNode_S0<
     degree: U32; // number of trie-handles (distinct from basin-degree)
     inlined: U32; // count of nested values up to edge boundaries
     prefix: null | Uint8Array; // (for trie-compression)
-    keys: [floor: Uint8Array, ceiling: Uint8Array];
-    reversals: [floor: Uint8Array, ceiling: Uint8Array]; // min/max reverse-key
-    lengths: [floor: U32, ceiling: U32]; // min/max key-lengths
+    keys: Bounds<Uint8Array>;
+    reversals: Bounds<Uint8Array>; // min/max reverse-key
+    lengths: Bounds<U32>; // min/max key-lengths
   },
   {
     [IndexT in U32 & keyof MigrationsT]: [
@@ -143,7 +146,7 @@ interface TrieNode_S0<
 > {}
 
 interface TrieGroup<ValueT> {
-  keys: Array<Uint8Array>; // 63 maximum
+  keys: Array<Uint8Array>; // 63 maximum; suffixes after consumed prefix/branch bytes
   values: Array<ValueT>; // (one per key)
 }
 
@@ -258,31 +261,83 @@ type SyncSector_M0 = TrieNode_S0<{
 }>;
 ```
 
-## Open design questions
+## Canonical form
 
-- **Version labels.** Slot 4 identifies the structural schema; the first element
-  of slot 6 selects the consumer migration; an edge footer's `version` identifies
-  the *basin-node*[~][node] id encoding. For example, structural schema 0 can
-  carry migration 7 while still referencing node-id version 0. Are migration
-  labels permanent identifiers, so deleting migration 1 never renumbers 2?
-  Slot 6 currently stores one selected migration, not all footer variants.
-- **Key consumption.** For key bytes `ab cd`, a branch can consume nibble `a`
-  then nibble `b`, leaving suffix `cd`. Specify whether groups store that suffix
-  or the full key. The proposal already calls for common byte-prefix compression,
-  which fits `Uint8Array`; no extra nibble count is needed. Define how a key
-  ending at the prefix is stored.
-- **Deterministic packing.** Inserting 64 keys and then deleting one should
-  produce the same representation as inserting the remaining 63 directly.
-  Specify collapse as well as split rules, indexed nibble slots and omitted/null
-  slots, and the 1280-inline transition. Does `edged: true` externalize every
-  nested sibling, even a small one? *Degree*[~][node-degree] 320 accommodates the
-  256 structural slots, but value count alone does not bound serialized bytes.
-  Runtime readers still validate integer bounds, capacities, unique/sorted keys,
-  and equal key/value array lengths.
-- **Aggregate meaning.** For a shared child reached by two paths, is its
-  contribution counted twice in `breadth`? Specify whether ceilings are inclusive
-  and how empty ranges are represented. *Height*[~][node-height] follows
-  *basin edges*[~][strong-edge], not inline trie nesting.
+Groups store the unconsumed key suffix: after branches consume byte `ab` from
+key `ab cd`, the group stores `cd`. Common byte prefixes move into the header.
+Splitting and collapsing are canonical functions of the remaining contents;
+inserting 64 keys then deleting one yields the same shape as directly inserting
+those remaining 63. Empty structural children disappear, whether inline or behind
+*basin edges*[~][strong-edge].
+
+Structural schema (slot 4), consumer migration (the first element of slot 6),
+and *basin-node*[~][node] id version (`edge.footer.version`) are independent.
+Slot 6 stores the selected migration, not all footer variants.
+
+## Proposed empty aggregates
+
+`Bounds<T>` is `null` when there are no observations; otherwise it contains the
+inclusive minimum and maximum. Aggregation ignores `null` bounds and returns
+`null` if every input is empty. Empty bounds must not use fabricated zeroes or
+empty byte strings, which can be genuine observations.
+
+Only a root may represent an empty trie. Its header has `count = nullity = 0n`,
+`degree = inlined = 0`, `prefix = null`, and `keys = reversals = lengths = null`.
+Its selected footer is `[migration, emptySummary, { keys: [], values: [] }, null, null]`.
+Each consumer migration defines its canonical `emptySummary`; it is not
+necessarily `null`.
+
+The root's *basin query*[~][node] has *height*[~][node-height] and
+*degree*[~][node-degree] zero, `breadth = 0n`, and all four descendant bounds
+(`rotations`, `versions`, `schemas`, `migrations`) null. Those descendant bounds
+are also null on a nonempty node with no *basin edges*[~][strong-edge]; they
+aggregate edge targets, not the current node's own version tags.
+
+For migration 0 with a null empty summary, the proposed root in
+*JSON0*[~][json0] is:
+
+```json
+{
+  "0": "0#species",
+  "1": "sync.memoremix.com",
+  "2": ".trie-node/",
+  "3": {
+    "height": 0,
+    "degree": 0,
+    "breadth": "0x0",
+    "rotations": null,
+    "versions": null,
+    "schemas": null,
+    "migrations": null
+  },
+  "4": 0,
+  "5": {
+    "count": "0x0",
+    "nullity": "0x0",
+    "degree": 0,
+    "inlined": 0,
+    "prefix": null,
+    "keys": null,
+    "reversals": null,
+    "lengths": null
+  },
+  "6": [0, null, { "keys": [], "values": [] }, null, null]
+}
+```
+
+An empty-byte key with a null value is a nonempty trie: `count = nullity = 1n`,
+key and reverse-key bounds each contain two empty byte strings, and length bounds
+are `[0, 0]`. Its group contains one empty suffix and one null value.
+
+## Remaining packing details
+
+Specify indexed nibble slots and omitted/null slots, and the 1280-inline
+transition. `edged: true` makes every nested node a *basin edge*[~][strong-edge],
+including small siblings. *Degree*[~][node-degree] 320 accommodates the 256
+structural slots, but value count alone does not bound serialized bytes.
+Runtime readers still validate integer bounds, capacities, unique/sorted keys,
+and equal key/value array lengths. For a shared child reached by two paths,
+clarify whether `breadth` counts its contribution twice.
 
 ## Strong retention and weak shortcuts
 

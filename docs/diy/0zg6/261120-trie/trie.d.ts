@@ -1,5 +1,8 @@
 type U32 = number;
 
+// Proposed: null denotes no observations; nonempty bounds include both ends.
+type Bounds<T> = null | [floor: T, ceiling: T];
+
 type SCHEMA_0 = 0;
 
 type Footers = {
@@ -17,10 +20,10 @@ interface BasinNode_S0<
   1: DomainT;
   2: PathT;
   3: BasinQuery_S0;
-  4: SCHEMA_0;
+  4: SCHEMA_0; // structural schema, independent of consumer migration
   5: HeaderT;
   6: {
-    [IndexT in U32 & keyof FootersT]: [IndexT, ...FootersT[IndexT]];
+    [IndexT in U32 & keyof FootersT]: [migration: IndexT, ...FootersT[IndexT]];
   }[U32 & keyof FootersT];
 }
 
@@ -28,10 +31,10 @@ type BasinQuery_S0 = {
   height: U32; // (for DAG inaviants and basin ids)
   degree: U32; // shallow count of edges
   breadth: bigint; // deep aggregate degree
-  rotations: [floor: U32, ceiling: U32]; // deep aggregate from edges
-  versions: [floor: U32, ceiling: U32]; // deep aggregate from edges
-  schemas: [floor: U32, ceiling: U32]; // deep aggregate over edges
-  migrations: [floor: U32, ceiling: U32]; // deep aggregate over edges
+  rotations: Bounds<U32>; // deep aggregate from edges
+  versions: Bounds<U32>; // deep aggregate from edges
+  schemas: Bounds<U32>; // deep aggregate over edges
+  migrations: Bounds<U32>; // deep aggregate over edges
 };
 
 type BasinEdge_S0<
@@ -84,9 +87,9 @@ interface TrieNode_S0<
     degree: U32; // number of trie-handles (distinct from basin-degree)
     inlined: U32; // count of nested values up to edge boundaries
     prefix: null | Uint8Array; // (for trie-compression)
-    keys: [floor: Uint8Array, ceiling: Uint8Array];
-    reversals: [floor: Uint8Array, ceiling: Uint8Array]; // min/max reverse-key
-    lengths: [floor: U32, ceiling: U32]; // min/max key-lengths
+    keys: Bounds<Uint8Array>;
+    reversals: Bounds<Uint8Array>; // min/max reverse-key
+    lengths: Bounds<U32>; // min/max key-lengths
   },
   {
     [IndexT in U32 & keyof MigrationsT]: [
@@ -100,7 +103,7 @@ interface TrieNode_S0<
 > {}
 
 interface TrieGroup<ValueT> {
-  keys: Array<Uint8Array>; // 63 maximum
+  keys: Array<Uint8Array>; // 63 maximum; suffixes after consumed prefix/branch bytes
   values: Array<ValueT>; // (one per key)
 }
 
