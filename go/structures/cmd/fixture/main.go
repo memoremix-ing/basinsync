@@ -101,6 +101,26 @@ func run() error {
 		if err != nil {
 			return err
 		}
+		if ops, ok := req["operations"].([]any); ok {
+			for _, v := range ops {
+				op := v.(map[string]any)
+				replace, _ := op["replace"].(bool)
+				switch op["op"].(string) {
+				case "mv":
+					root, err = s.MoveVolume(basin, root, op["from"].(string), op["to"].(string), replace)
+				case "cp":
+					root, err = s.CopyVolume(basin, root, op["from"].(string), op["to"].(string), replace)
+				case "rm":
+					recursive, _ := op["recursive"].(bool)
+					root, err = s.RemoveVolume(basin, root, op["path"].(string), recursive)
+				default:
+					return fmt.Errorf("unknown filesystem operation")
+				}
+				if err != nil {
+					return err
+				}
+			}
+		}
 		objects := []any{}
 		keys := []string{}
 		for key := range storage.Objects {

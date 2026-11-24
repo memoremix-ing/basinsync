@@ -17,7 +17,7 @@ fn main() -> Result<()> {
         let kind = req.field("kind")?.text()?;
         let seed = req.field("seed")?.blob()?.to_vec();
         let mut basin = Basin::new(MemoryStorage::default(), seed)?;
-        let root = if kind == "vector" {
+        let mut root = if kind == "vector" {
             let rows = req
                 .field("items")?
                 .array()?
@@ -87,6 +87,43 @@ fn main() -> Result<()> {
                     .unwrap_or_default(),
             )?
         };
+        if let Some(ops) = req.map_ref()?.get("operations") {
+            for op in ops.array()? {
+                let replace = op
+                    .map_ref()?
+                    .get("replace")
+                    .map(Value::boolean)
+                    .transpose()?
+                    .unwrap_or(false);
+                root = match op.field("op")?.text()? {
+                    "mv" => volume::move_path(
+                        &mut basin,
+                        &root,
+                        op.field("from")?.text()?,
+                        op.field("to")?.text()?,
+                        replace,
+                    )?,
+                    "cp" => volume::copy_path(
+                        &mut basin,
+                        &root,
+                        op.field("from")?.text()?,
+                        op.field("to")?.text()?,
+                        replace,
+                    )?,
+                    "rm" => volume::remove_path(
+                        &mut basin,
+                        &root,
+                        op.field("path")?.text()?,
+                        op.map_ref()?
+                            .get("recursive")
+                            .map(Value::boolean)
+                            .transpose()?
+                            .unwrap_or(false),
+                    )?,
+                    _ => anyhow::bail!("unknown filesystem operation"),
+                };
+            }
+        }
         let objects = basin
             .storage
             .objects

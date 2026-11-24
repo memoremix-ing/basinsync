@@ -17,6 +17,7 @@ import {
   edgeFrom,
   query,
 } from "./core";
+import { TrieView } from "./trie-view";
 import { Trie, Consumer, plain, Header, TRIE } from "./trie";
 import { pack } from "./packed";
 import { Vector, vectorBoundaryLinks } from "./vector";
@@ -153,6 +154,51 @@ async function pageRoot(basin: Basin, footer: Reference): Promise<Reference> {
   const pages = footer.get(2);
   return pages.isMap() ? pages : basin.load(edgeFrom(pages));
 }
+export type VolumeTransferOptions = { replace?: boolean };
+export type VolumeRemoveOptions = { recursive?: boolean };
+type DirectoryEntry = Directory | File;
+function entryAt(root: Directory, parts: readonly string[]): DirectoryEntry {
+  let current: DirectoryEntry = root;
+  for (const part of parts) {
+    check(current[0], "parent is not a directory");
+    check(Object.hasOwn(current[2], part), "missing pathname");
+    current = current[2][part];
+  }
+  return current;
+}
+async function changeEntry(
+  root: Directory,
+  parts: readonly string[],
+  value?: DirectoryEntry,
+): Promise<Directory> {
+  const contents = Object.assign(Object.create(null), root[2]),
+    name = parts[0];
+  if (parts.length === 1) {
+    if (value) contents[name] = value;
+    else delete contents[name];
+  } else {
+    const child = entryAt(root, [name]);
+    check(child[0], "parent is not a directory");
+    contents[name] = await changeEntry(child, parts.slice(1), value);
+  }
+  return directory(contents);
+}
+async function sealVolume(
+  basin: Basin,
+  device: { node: Node; edges: Edge[] },
+  root: Directory,
+): Promise<Volume> {
+  const node = {
+    0: Symbol.species,
+    1: DOMAIN,
+    2: VOLUME,
+    3: device.node[3],
+    4: 0,
+    5: null,
+    6: [0, null, device.node, root],
+  } as Node;
+  return new Volume(basin, await basin.seal(node, device.edges));
+}
 export class Volume {
   constructor(
     readonly basin: Basin,
@@ -238,17 +284,7 @@ export class Volume {
         entries[name] = item instanceof Map ? await finish(item) : item;
       return directory(entries);
     };
-    const root = await finish(tree),
-      node = {
-        0: Symbol.species,
-        1: DOMAIN,
-        2: VOLUME,
-        3: device.node[3],
-        4: 0,
-        5: null,
-        6: [0, null, device.node, root],
-      } as Node;
-    return new Volume(basin, await basin.seal(node, device.edges));
+    return sealVolume(basin, device, await finish(tree));
   }
   private async data(): Promise<Reference> {
     const r = await this.basin.load(this.root);
@@ -518,6 +554,96 @@ export class Volume {
       "invalid file range",
     );
     return bytes.slice(start, start + length);
+  }
+  /** Exact destination pathname; unchanged blocks/links are shared. */
+  async mv(
+    from: string,
+    to: string,
+    options: VolumeTransferOptions = {},
+  ): Promise<Volume> {
+    return this.transfer(from, to, true, options);
+  }
+  /** Copy a file or a whole directory subtree; no file-body reads. */
+  async cp(
+    from: string,
+    to: string,
+    options: VolumeTransferOptions = {},
+  ): Promise<Volume> {
+    return this.transfer(from, to, false, options);
+  }
+  private async transfer(
+    from: string,
+    to: string,
+    move: boolean,
+    options: VolumeTransferOptions,
+  ): Promise<Volume> {
+    const a = path(from),
+      b = path(to),
+      footer = await this.data();
+    let root = object<Directory>(footer.get(3));
+    const source = entryAt(root, a);
+    if (from === to) {
+      check(move, "cannot copy onto itself");
+      return this;
+    }
+    check(!to.startsWith(from + "/"), "destination is inside source");
+    const parent = entryAt(root, b.slice(0, -1));
+    check(parent[0], "parent is not a directory");
+    const name = b.at(-1)!,
+      target = Object.hasOwn(parent[2], name) ? parent[2][name] : undefined;
+    if (target) {
+      check(options.replace === true, "destination exists");
+      check(source[0] === target[0], "file/directory collision");
+      check(
+        !target[0] || Object.keys(target[2]).length === 0,
+        "destination directory is not empty",
+      );
+    }
+    const view = TrieView.from(new Trie(this.basin, footer.get(2), devices));
+    let result = view;
+    if (source[0]) {
+      const prefix = utf8(from + "/"),
+        subtree = view.subtree(prefix);
+      if (move) result = view.deletePrefix(prefix);
+      result = await result.graftPrefix(utf8(to + "/"), subtree, "replace");
+    } else {
+      const block = await view.get(utf8(from));
+      check(block, "missing retained block");
+      if (move) result = result.delete(utf8(from));
+      result = result.set(utf8(to), block);
+    }
+    if (move) root = await changeEntry(root, a);
+    root = await changeEntry(root, b, source);
+    return this.saveFilesystem(root, result);
+  }
+  async rm(name: string, options: VolumeRemoveOptions = {}): Promise<Volume> {
+    const parts = path(name),
+      footer = await this.data();
+    const root = object<Directory>(footer.get(3)),
+      source = entryAt(root, parts);
+    check(
+      !source[0] ||
+        options.recursive === true ||
+        Object.keys(source[2]).length === 0,
+      "directory is not empty",
+    );
+    const view = TrieView.from(new Trie(this.basin, footer.get(2), devices));
+    const result = source[0]
+      ? view.deletePrefix(utf8(name + "/"))
+      : view.delete(utf8(name));
+    return this.saveFilesystem(await changeEntry(root, parts), result);
+  }
+  private async saveFilesystem(
+    root: Directory,
+    device: TrieView<[Edge], null>,
+  ): Promise<Volume> {
+    const rows: [Uint8Array, [Edge]][] = [];
+    for await (const row of device.entries()) rows.push(row);
+    return sealVolume(
+      this.basin,
+      await Trie.buildNode(this.basin, rows, devices),
+      root,
+    );
   }
   async update(
     changes: Iterable<[string, Uint8Array | null]>,

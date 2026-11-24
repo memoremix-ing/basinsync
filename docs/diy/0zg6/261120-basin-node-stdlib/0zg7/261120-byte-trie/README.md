@@ -22,6 +22,7 @@ prerequisites:
 [object-keys]: <../../../../../object-keys.md>
 [promoted-costs]: <benchmark/promoted-costs.md>
 [revision]: <../../../../../glossary/revision.md>
+[shortcut-reads]: <benchmark/shortcut-reads.md>
 [strong-edge]: <../../../../../glossary/strong-edge.md>
 [subtree-cow]: <benchmark/subtree-cow.md>
 [trie-format]: <../../../../../trie-format.md>
@@ -385,8 +386,10 @@ const removed = edit.deletePrefix(utf8("/old/"));
 Graft requires an empty destination unless `"replace"` explicitly removes its range.
 Copy/move reject missing sources and destinations inside them; moving onto itself
 is a no-op. These are byte prefixes: use `/dir/` to distinguish `/dir2/`.
-A filesystem move must additionally update directory entries/hashes and handle
-pathname conflicts and empty directories; prefix relocation alone does not do that.
+Stored export rebuilds queries, headers and consumer summaries for the new keys;
+logical handles defer that work until export. The footer starts with migration at
+index 0 and summary at index 1. Moving file paths also requires coordinating the
+separate directory tree; file checksums and allocation links remain unchanged.
 
 `TrieView.from(trie)` provides lazy equivalents, recording source snapshots,
 prefix mounts/tombstones and point overrides. Resolve the longest matching prefix;
@@ -416,7 +419,10 @@ Only draft mutations are used; recipe return values are ignored.
 Each flushed key update still copies its trie path, sharing untouched branches.
 An owner-tagged transient would reuse writable branches inside a scope, copying
 only on first write; that optimization is not implemented. Proxy drafts coalesce
-payload edits per key, independently of trie-branch ownership.
+payload edits per key, independently of trie-branch ownership. Existing scopes
+already isolate concurrent recipes; owner-tagged mutation additionally needs a
+freeze/fork rule whenever branches escape or become shared. Returning a local
+snapshot does not publish it or resolve competing publications.
 
 ```js
 const next = produceTrie(edit, draft => {
@@ -442,10 +448,28 @@ Replace byte fields and use array `splice` instead of deleting indices. Accessor
 nonenumerable/symbol property keys and custom prototypes are unsupported.
 See the *subtree/COW experiments*[~][subtree-cow] for performance and code costs.
 
+`Volume.mv`, `cp` and `rm` coordinate directory entries/hashes with device keys,
+preserving empty directories and sharing retained blocks without reading file
+bodies. Paths are absolute and destinations exact; parents must exist. Reject
+collisions unless `replace: true` permits the same kind, with destination
+directories empty. Copy includes a whole subtree; removing a nonempty directory
+requires `recursive: true`. Reject root edits and moves/copies into descendants.
+Each call returns a new snapshot after success; metadata export remains a full
+canonical pass. Rust/Go expose equivalent operations.
+
+```js
+const moved = await volume.mv("/old", "/parent/new");
+const copied = await moved.cp("/parent/new", "/copy");
+const removed = await copied.rm("/parent/new", { recursive: true });
+```
+
 `Volume.update()` still reads files and rebuilds; `fromBlocks()` shares existing
-block descriptors. Its directory tree remains inline. Dedicated filesystem commands
-are not added; these primitives supply their foundation. Server-side retention
+block descriptors. The directory tree remains inline. Server-side retention
 and collection govern eventual storage reclamation.
+
+The *shortcut request traces*[~][shortcut-reads] show that the current binary-searched
+leaf vector can add GETs, while adjacent file links can bypass the device trie.
+Prefer measured object-fetch paths over logical branching-factor comparisons.
 
 Pruning
 and partial reads remain selective. Readers bound nesting to 256 trie levels;

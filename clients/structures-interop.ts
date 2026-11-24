@@ -133,6 +133,23 @@ for (const bits of [1, 2, 3, 4, 6, 7, 8]) {
     queries: [0n, BigInt(n - 1), BigInt(n), 2n ** 200n + BigInt(n - 1)],
   });
 }
+cases.push({
+  kind: "volume",
+  seed,
+  files: [
+    ["/src/__proto__", utf8("a")],
+    ["/src/🦊", utf8("b")],
+    ["/target", utf8("old")],
+  ],
+  directories: ["/src/empty", "/out", "/empty"],
+  operations: [
+    { op: "mv", from: "/src", to: "/out/moved" },
+    { op: "cp", from: "/out/moved", to: "/copied" },
+    { op: "cp", from: "/copied/🦊", to: "/target", replace: true },
+    { op: "rm", path: "/out/moved", recursive: true },
+    { op: "mv", from: "/copied/empty", to: "/empty", replace: true },
+  ],
+});
 mkdirSync(".local/trie-interop", { recursive: true });
 const writers = ["typescript", "rust", "go"],
   readers = [...writers];

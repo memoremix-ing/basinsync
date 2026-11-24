@@ -7,7 +7,7 @@ use crate::{
 };
 use Value::*;
 use anyhow::{Context, Result, ensure};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 pub const PATH: &str = ".sync-volume/";
 pub const BLOCK: &str = ".sync-block/";
 pub const PAGE_SIZE: usize = 4096;
@@ -716,6 +716,165 @@ pub fn read_range<S: Storage>(
     out.truncate(actual);
     Ok(out)
 }
+struct Catalogue {
+    files: BTreeMap<String, BlockRoot>,
+    dirs: BTreeSet<String>,
+}
+fn catalogue<S: Storage>(basin: &mut Basin<S>, root: &Edge) -> Result<Catalogue> {
+    fn walk(
+        v: &Value,
+        prefix: &str,
+        dirs: &mut BTreeSet<String>,
+        sums: &mut BTreeMap<String, Vec<u8>>,
+    ) -> Result<()> {
+        for (name, entry) in v.at(2)?.map_ref()? {
+            let path = format!("{prefix}/{name}");
+            if entry.at(0)?.boolean()? {
+                dirs.insert(path.clone());
+                walk(entry, &path, dirs, sums)?;
+            } else {
+                sums.insert(path, entry.at(1)?.blob()?.to_vec());
+            }
+        }
+        Ok(())
+    }
+    let f = data(basin, root)?;
+    let mut dirs = BTreeSet::new();
+    let mut sums = BTreeMap::new();
+    walk(&f.item(3).owned()?, "", &mut dirs, &mut sums)?;
+    let mut files = BTreeMap::new();
+    trie::visit_inline(
+        basin,
+        f.item(2),
+        &[],
+        &[],
+        0,
+        &mut |_, _| true,
+        &mut |k, v| {
+            let name = String::from_utf8(k)?;
+            let digest = sums.remove(&name).context("device/directory mismatch")?;
+            files.insert(
+                name,
+                BlockRoot {
+                    edge: v.owned()?.at(0)?.clone(),
+                    digest,
+                },
+            );
+            Ok(true)
+        },
+    )?;
+    ensure!(sums.is_empty(), "missing retained block");
+    Ok(Catalogue { files, dirs })
+}
+fn exists(c: &Catalogue, name: &str) -> bool {
+    c.files.contains_key(name) || c.dirs.contains(name)
+}
+fn save_catalogue<S: Storage>(basin: &mut Basin<S>, c: Catalogue) -> Result<Edge> {
+    from_blocks(
+        basin,
+        c.files.into_iter().collect(),
+        c.dirs.into_iter().collect(),
+    )
+}
+fn transfer<S: Storage>(
+    basin: &mut Basin<S>,
+    root: &Edge,
+    from: &str,
+    to: &str,
+    moving: bool,
+    replace: bool,
+) -> Result<Edge> {
+    path(from)?;
+    path(to)?;
+    let mut c = catalogue(basin, root)?;
+    ensure!(exists(&c, from), "missing pathname");
+    if from == to {
+        ensure!(moving, "cannot copy onto itself");
+        return Ok(root.clone());
+    }
+    ensure!(
+        !to.starts_with(&format!("{from}/")),
+        "destination is inside source"
+    );
+    let parent = to.rsplit_once('/').unwrap().0;
+    ensure!(
+        parent.is_empty() || c.dirs.contains(parent),
+        "missing parent directory"
+    );
+    let directory = c.dirs.contains(from);
+    if exists(&c, to) {
+        ensure!(replace, "destination exists");
+        ensure!(directory == c.dirs.contains(to), "file/directory collision");
+        let prefix = format!("{to}/");
+        ensure!(
+            !directory
+                || (!c.dirs.iter().any(|n| n.starts_with(&prefix))
+                    && !c.files.keys().any(|n| n.starts_with(&prefix))),
+            "destination directory is not empty"
+        );
+    }
+    let prefix = format!("{from}/");
+    let selected = |n: &str| n == from || (directory && n.starts_with(&prefix));
+    let files = c
+        .files
+        .iter()
+        .filter(|(n, _)| selected(n))
+        .map(|(n, v)| (format!("{to}{}", &n[from.len()..]), v.clone()))
+        .collect::<Vec<_>>();
+    let dirs = c
+        .dirs
+        .iter()
+        .filter(|n| selected(n))
+        .map(|n| format!("{to}{}", &n[from.len()..]))
+        .collect::<Vec<_>>();
+    if moving {
+        c.files.retain(|n, _| !selected(n));
+        c.dirs.retain(|n| !selected(n));
+    }
+    c.files.extend(files);
+    c.dirs.extend(dirs);
+    save_catalogue(basin, c)
+}
+/// Exact destination; overwrite requires replace and a matching kind/empty directory.
+pub fn move_path<S: Storage>(
+    basin: &mut Basin<S>,
+    root: &Edge,
+    from: &str,
+    to: &str,
+    replace: bool,
+) -> Result<Edge> {
+    transfer(basin, root, from, to, true, replace)
+}
+/// Shares retained blocks, including an entire directory subtree.
+pub fn copy_path<S: Storage>(
+    basin: &mut Basin<S>,
+    root: &Edge,
+    from: &str,
+    to: &str,
+    replace: bool,
+) -> Result<Edge> {
+    transfer(basin, root, from, to, false, replace)
+}
+pub fn remove_path<S: Storage>(
+    basin: &mut Basin<S>,
+    root: &Edge,
+    name: &str,
+    recursive: bool,
+) -> Result<Edge> {
+    path(name)?;
+    let mut c = catalogue(basin, root)?;
+    ensure!(exists(&c, name), "missing pathname");
+    let prefix = format!("{name}/");
+    let nested = |n: &str| n.starts_with(&prefix);
+    ensure!(
+        recursive || (!c.dirs.iter().any(|n| nested(n)) && !c.files.keys().any(|n| nested(n))),
+        "directory is not empty"
+    );
+    c.files.retain(|n, _| n != name && !nested(n));
+    c.dirs.retain(|n| n != name && !nested(n));
+    save_catalogue(basin, c)
+}
+
 pub fn update<S: Storage>(
     basin: &mut Basin<S>,
     root: &Edge,

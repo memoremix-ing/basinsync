@@ -303,3 +303,58 @@ func TestBorrowedMetadataMatchesJSON0Comparisons(t *testing.T) {
 		}
 	}
 }
+
+func TestVolumeFilesystemEditsRetainBlocksAndRehashDirectories(t *testing.T) {
+	b := newTestBasin(t)
+	block, err := BuildBlock(b, []PageInput{{big.NewInt(0), []byte("one")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := VolumeFromBlocks(b, map[string]BlockRoot{"/src/file": block, "/src2/file": block}, "/src/empty", "/out")
+	if err != nil {
+		t.Fatal(err)
+	}
+	storage := b.Storage.(*MemoryStorage)
+	key := capability(block.Edge)
+	saved := storage.Objects[key]
+	delete(storage.Objects, key)
+	b.ClearCache()
+	moved, err := MoveVolume(b, root, "/src", "/out/moved", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	copied, err := CopyVolume(b, moved, "/out/moved", "/copy", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	final, err := RemoveVolume(b, copied, "/out/moved", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonical, err := VolumeFromBlocks(b, map[string]BlockRoot{"/copy/file": block, "/src2/file": block}, "/copy/empty", "/out")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(blob(field(final[6], "sha384")), blob(field(canonical[6], "sha384"))) {
+		t.Fatal("canonical hash")
+	}
+	for _, f := range []func() error{
+		func() error { _, e := RemoveVolume(b, root, "/src", false); return e },
+		func() error { _, e := MoveVolume(b, root, "/src", "/src/child", false); return e },
+		func() error { _, e := MoveVolume(b, root, "/missing", "/missing", false); return e },
+		func() error { _, e := CopyVolume(b, root, "/src", "/src", true); return e },
+		func() error { _, e := MoveVolume(b, root, "/src", "/src2", true); return e },
+		func() error { _, e := MoveVolume(b, root, "/src/file", "/src2", true); return e },
+	} {
+		if f() == nil {
+			t.Fatal("expected rejection")
+		}
+	}
+	if names, e := List(b, final, "/copy/empty"); e != nil || len(names) != 0 {
+		t.Fatal(names, e)
+	}
+	storage.Objects[key] = saved
+	if data, e := ReadFile(b, final, "/copy/file", true); e != nil || string(data) != "one" {
+		t.Fatal(string(data), e)
+	}
+}

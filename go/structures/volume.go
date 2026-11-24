@@ -646,6 +646,137 @@ type FileChange struct {
 	Delete bool
 }
 
+type volumeCatalogue struct {
+	files map[string]BlockRoot
+	dirs  map[string]bool
+}
+
+func catalogue(b *Basin, root Edge) volumeCatalogue {
+	f := volumeData(b, root)
+	c := volumeCatalogue{map[string]BlockRoot{}, map[string]bool{}}
+	sums := map[string][]byte{}
+	var walk func(any, string)
+	walk = func(v any, prefix string) {
+		for name, entry := range mapping(at(v, 2)) {
+			path := prefix + "/" + name
+			if boolean(at(entry, 0)) {
+				c.dirs[path] = true
+				walk(entry, path)
+			} else {
+				sums[path] = blob(at(entry, 1))
+			}
+		}
+	}
+	walk(f.item(3).owned(0), "")
+	visitInline(b, f.item(2), nil, nil, 0, func(any, any) bool { return true }, func(k []byte, r Ref) (bool, error) {
+		name := string(k)
+		sum, ok := sums[name]
+		require(ok, "device/directory mismatch")
+		c.files[name] = BlockRoot{array(at(r.owned(0), 0)), sum}
+		delete(sums, name)
+		return true, nil
+	})
+	require(len(sums) == 0, "missing retained block")
+	return c
+}
+func (c volumeCatalogue) exists(n string) bool { _, ok := c.files[n]; return ok || c.dirs[n] }
+func (c volumeCatalogue) save(b *Basin) Edge {
+	dirs := []string{}
+	for n := range c.dirs {
+		dirs = append(dirs, n)
+	}
+	return checked(VolumeFromBlocks(b, c.files, dirs...))
+}
+func transferVolume(b *Basin, root Edge, from, to string, moving, replace bool) Edge {
+	path(from)
+	path(to)
+	c := catalogue(b, root)
+	require(c.exists(from), "missing pathname")
+	if from == to {
+		require(moving, "cannot copy onto itself")
+		return root
+	}
+	require(!strings.HasPrefix(to, from+"/"), "destination is inside source")
+	parent := to[:strings.LastIndex(to, "/")]
+	require(parent == "" || c.dirs[parent], "missing parent directory")
+	directory := c.dirs[from]
+	if c.exists(to) {
+		require(replace, "destination exists")
+		require(directory == c.dirs[to], "file/directory collision")
+		if directory {
+			for n := range c.files {
+				require(!strings.HasPrefix(n, to+"/"), "destination directory is not empty")
+			}
+			for n := range c.dirs {
+				require(!strings.HasPrefix(n, to+"/"), "destination directory is not empty")
+			}
+		}
+	}
+	selected := func(n string) bool { return n == from || directory && strings.HasPrefix(n, from+"/") }
+	files := map[string]BlockRoot{}
+	dirs := []string{}
+	for n, v := range c.files {
+		if selected(n) {
+			files[to+n[len(from):]] = v
+			if moving {
+				delete(c.files, n)
+			}
+		}
+	}
+	for n := range c.dirs {
+		if selected(n) {
+			dirs = append(dirs, to+n[len(from):])
+			if moving {
+				delete(c.dirs, n)
+			}
+		}
+	}
+	for n, v := range files {
+		c.files[n] = v
+	}
+	for _, n := range dirs {
+		c.dirs[n] = true
+	}
+	return c.save(b)
+}
+
+// Exact destination; replace permits matching kinds and empty destination directories.
+func MoveVolume(b *Basin, root Edge, from, to string, replace bool) (edge Edge, err error) {
+	defer protect(&err)
+	return transferVolume(b, root, from, to, true, replace), nil
+}
+func CopyVolume(b *Basin, root Edge, from, to string, replace bool) (edge Edge, err error) {
+	defer protect(&err)
+	return transferVolume(b, root, from, to, false, replace), nil
+}
+func RemoveVolume(b *Basin, root Edge, name string, recursive bool) (edge Edge, err error) {
+	defer protect(&err)
+	path(name)
+	c := catalogue(b, root)
+	require(c.exists(name), "missing pathname")
+	for n := range c.files {
+		if strings.HasPrefix(n, name+"/") {
+			require(recursive, "directory is not empty")
+		}
+	}
+	for n := range c.dirs {
+		if strings.HasPrefix(n, name+"/") {
+			require(recursive, "directory is not empty")
+		}
+	}
+	for n := range c.files {
+		if n == name || strings.HasPrefix(n, name+"/") {
+			delete(c.files, n)
+		}
+	}
+	for n := range c.dirs {
+		if n == name || strings.HasPrefix(n, name+"/") {
+			delete(c.dirs, n)
+		}
+	}
+	return c.save(b), nil
+}
+
 func UpdateVolume(b *Basin, root Edge, changes []FileChange) (edge Edge, err error) {
 	defer protect(&err)
 	files := map[string][]byte{}

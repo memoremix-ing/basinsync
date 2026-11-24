@@ -34,11 +34,19 @@ export async function build(input: {
   items?: [bigint, unknown][];
   length?: bigint;
   bits?: number;
+  operations?: {
+    op: "mv" | "cp" | "rm";
+    from?: string;
+    to?: string;
+    path?: string;
+    replace?: boolean;
+    recursive?: boolean;
+  }[];
   queries?: bigint[];
 }): Promise<Archive> {
   const storage = new MemoryStorage(),
     b = new Basin(storage, { seed: input.seed });
-  const root =
+  let root =
     input.kind === "vector"
       ? (
           await Vector.buildEntries(b, input.length!, input.items!, count, {
@@ -56,6 +64,16 @@ export async function build(input: {
                 ])
               ).root
             : (await Volume.build(b, input.files!, input.directories)).root;
+  for (const op of input.operations ?? []) {
+    const v = new Volume(b, root);
+    root = (
+      op.op === "mv"
+        ? await v.mv(op.from!, op.to!, op)
+        : op.op === "cp"
+          ? await v.cp(op.from!, op.to!, op)
+          : await v.rm(op.path!, op)
+    ).root;
+  }
   return {
     kind: input.kind,
     queries: input.queries,

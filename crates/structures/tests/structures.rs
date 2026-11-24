@@ -297,3 +297,52 @@ fn borrowed_metadata_matches_owned_comparisons() -> Result<()> {
     b.load(&e)?;
     Ok(())
 }
+
+#[test]
+fn volume_filesystem_edits_retain_blocks_and_rehash_directory_paths() -> Result<()> {
+    let mut b = basin();
+    let block = volume::build_block(&mut b, vec![(0.into(), b"one".to_vec())])?;
+    let root = volume::from_blocks(
+        &mut b,
+        vec![
+            ("/src/file".into(), block.clone()),
+            ("/src2/file".into(), block.clone()),
+        ],
+        vec!["/src/empty".into(), "/out".into()],
+    )?;
+    let key = basin::capability(&block.edge)?;
+    let saved = b.storage.objects.remove(&key).unwrap();
+    b.clear_cache();
+    let moved = volume::move_path(&mut b, &root, "/src", "/out/moved", false)?;
+    let copied = volume::copy_path(&mut b, &moved, "/out/moved", "/copy", false)?;
+    let final_root = volume::remove_path(&mut b, &copied, "/out/moved", true)?;
+    let canonical = volume::from_blocks(
+        &mut b,
+        vec![
+            ("/copy/file".into(), block.clone()),
+            ("/src2/file".into(), block.clone()),
+        ],
+        vec!["/copy/empty".into(), "/out".into()],
+    )?;
+    assert_eq!(
+        final_root.at(6)?.field("sha384")?,
+        canonical.at(6)?.field("sha384")?
+    );
+    assert_eq!(
+        volume::list(&mut b, &final_root, "/copy/empty")?,
+        Vec::<String>::new()
+    );
+    assert_eq!(volume::list(&mut b, &root, "/src")?, vec!["empty", "file"]);
+    assert!(volume::remove_path(&mut b, &root, "/src", false).is_err());
+    assert!(volume::move_path(&mut b, &root, "/src", "/src/child", false).is_err());
+    assert!(volume::move_path(&mut b, &root, "/missing", "/missing", false).is_err());
+    assert!(volume::copy_path(&mut b, &root, "/src", "/src", true).is_err());
+    assert!(volume::move_path(&mut b, &root, "/src", "/src2", true).is_err());
+    assert!(volume::move_path(&mut b, &root, "/src/file", "/src2", true).is_err());
+    b.storage.objects.insert(key, saved);
+    assert_eq!(
+        volume::read(&mut b, &final_root, "/copy/file", true)?,
+        b"one"
+    );
+    Ok(())
+}
