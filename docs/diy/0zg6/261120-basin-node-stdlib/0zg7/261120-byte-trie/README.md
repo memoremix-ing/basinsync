@@ -358,7 +358,7 @@ and *degree*[~][node-degree] limits apply independently.
 
 Compare the three libraries using the *CPU and storage read measurements*[~][trie-performance].
 
-The 1,280-value inlining trigger is currently fixed for tries, vectors and block
+The default inlining trigger is 1,280 values for tries, vectors and block
 packing; vector `bits`, physical degree/height and object-byte limits are configurable.
 Trie groups cap at 255 entries. Small high-nibble groups can remain inline after
 larger children are sealed, so 1,280 is not a strict object-wide bound for ordinary

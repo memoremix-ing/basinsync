@@ -460,11 +460,34 @@ pub fn build_block<S: Storage>(
     b: &mut Basin<S>,
     input: Vec<(num_bigint::BigInt, Vec<u8>)>,
 ) -> Result<BlockRoot> {
+    build_block_with_inline_pages(b, input, 1280)
+}
+/// Bound page payloads per physical trie node while retaining the ordinary wire schema.
+pub fn build_block_with_inline_pages<S: Storage>(
+    b: &mut Basin<S>,
+    input: Vec<(num_bigint::BigInt, Vec<u8>)>,
+    inline_pages: usize,
+) -> Result<BlockRoot> {
+    struct Pages(usize);
+    impl Consumer for Pages {
+        fn trie_inline_limit(&self) -> usize {
+            self.0
+        }
+        fn empty(&self) -> Value {
+            Sectors.empty()
+        }
+        fn entry(&self, k: &[u8], v: &Value) -> Result<Value> {
+            Sectors.entry(k, v)
+        }
+        fn combine(&self, s: &[Value]) -> Result<Value> {
+            Sectors.combine(s)
+        }
+    }
     let pages = input
         .into_iter()
         .map(|(n, v)| Ok((lex(&n)?.into_bytes(), Array(vec![Blob(v)]))))
         .collect::<Result<Vec<_>>>()?;
-    let t = trie::build_node(b, pages, &Sectors)?;
+    let t = trie::build_node(b, pages, &Pages(inline_pages))?;
     let leading = page_spine(b, &t.node, false)?;
     let lagging = page_spine(b, &t.node, true)?;
     let digest = t
@@ -997,6 +1020,123 @@ pub fn update<S: Storage>(
         }
     }
     save_catalogue(basin, c)
+}
+
+/// Read only file/sector descriptors; no page-trie descendants need to be fetched.
+pub fn dense_page_count<S: Storage>(b: &mut Basin<S>, root: &Edge, name: &str) -> Result<u64> {
+    let (footer, _) = open_block(b, root, name, false)?;
+    let pages = footer.item(2);
+    let header = if pages.reader()?.flexbuffer_type() == flexbuffers::FlexBufferType::Map {
+        pages.field("5").owned()?
+    } else {
+        pages.item(5).owned()?
+    };
+    let count = u64::try_from(header.field("count")?.big()?)?;
+    let keys = header.field("keys")?;
+    if count == 0 {
+        ensure!(keys.is_null(), "nonempty page bounds");
+    } else {
+        ensure!(
+            unlex(std::str::from_utf8(keys.at(0)?.blob()?)?)? == 0.into()
+                && unlex(std::str::from_utf8(keys.at(1)?.blob()?)?)? == (count - 1).into(),
+            "sparse database page map"
+        );
+    }
+    Ok(count)
+}
+
+/// Path-copy only changed directories, preserving unopened sibling contents.
+pub fn replace_blocks<S: Storage>(
+    b: &mut Basin<S>,
+    root: &Edge,
+    blocks: Vec<(String, BlockRoot)>,
+) -> Result<Edge> {
+    fn replace<S: Storage>(
+        b: &mut Basin<S>,
+        descriptor: Value,
+        parts: &[&str],
+        block: &BlockRoot,
+    ) -> Result<Value> {
+        let source = descriptor.at(4)?;
+        let bytes = if matches!(source, Array(_)) {
+            b.load(source)?
+        } else {
+            std::sync::Arc::new(basin::frame(&value::encode(source)?)?)
+        };
+        let mut entries = BTreeMap::new();
+        trie::visit_inline(
+            b,
+            View::root(bytes),
+            &[],
+            &[],
+            0,
+            &mut |_, _| true,
+            &mut |key, v| {
+                entries.insert(String::from_utf8(key)?, v.owned()?);
+                Ok(true)
+            },
+        )?;
+        let next = if parts.len() == 1 {
+            if let Some(previous) = entries.get(parts[0]) {
+                ensure!(!previous.at(0)?.boolean()?, "file/directory collision");
+            }
+            Array(vec![
+                Bool(false),
+                Blob(block.digest.clone()),
+                block.edge.clone(),
+            ])
+        } else {
+            let child = entries
+                .remove(parts[0])
+                .context("missing parent directory")?;
+            ensure!(child.at(0)?.boolean()?, "parent is not a directory");
+            replace(b, child, &parts[1..], block)?
+        };
+        entries.insert(parts[0].into(), next);
+        let digest = directory(entries.clone())?.at(1)?.clone();
+        for v in entries.values_mut() {
+            if v.at(0)?.boolean()?
+                && matches!(v.at(4)?, Map(_))
+                && (v.at(2)?.number()? >= 1280 || v.at(3)?.number()? >= 32)
+            {
+                *v = DirectoryEntries.trie_externalize(b, v)?;
+            }
+        }
+        let rows = entries
+            .into_iter()
+            .map(|(k, v)| (k.into_bytes(), v))
+            .collect();
+        let trie = trie::build_node(b, rows, &DirectoryEntries)?;
+        let (inline, nesting) = directory_stats(&trie.node)?;
+        Ok(Array(vec![
+            Bool(true),
+            digest,
+            inline.into(),
+            nesting.into(),
+            trie.node,
+        ]))
+    }
+    let mut descriptor = data(b, root)?.item(2).owned()?;
+    for (name, block) in blocks {
+        ensure!(
+            block.edge.at(2)?.text()? == BLOCK && block.digest.len() == 64,
+            "invalid block"
+        );
+        descriptor = replace(b, descriptor, &path(&name)?, &block)?;
+    }
+    let edges = directory_refs(descriptor.at(4)?)?;
+    b.seal(
+        Value::map([
+            ("0", Symbol("species".into())),
+            ("1", DOMAIN.into()),
+            ("2", PATH.into()),
+            ("3", basin::query(&edges, b.max_degree, b.max_height)?),
+            ("4", 0u32.into()),
+            ("5", Null),
+            ("6", Array(vec![0u32.into(), Null, descriptor])),
+        ]),
+        &edges,
+    )
 }
 
 #[cfg(test)]

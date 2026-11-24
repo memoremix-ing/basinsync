@@ -25,6 +25,7 @@ pub mod cow;
 mod deep;
 mod heap;
 mod promotion;
+pub mod volume;
 use cleanup::enqueue_sweeping;
 
 pub const ID: &str = "default.turso";

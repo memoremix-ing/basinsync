@@ -10,6 +10,10 @@ use num_bigint::BigInt;
 use std::sync::Arc;
 pub const PATH: &str = ".trie-node/";
 pub trait Consumer {
+    /// Physical inline-value budget; smaller budgets are strict, including small groups.
+    fn trie_inline_limit(&self) -> usize {
+        1280
+    }
     fn migration(&self) -> u32 {
         0
     }
@@ -190,6 +194,9 @@ fn build_rows<S: Storage, C: Consumer>(
     depth: usize,
 ) -> Result<Built> {
     ensure!(depth < 256, "trie nesting limit");
+    let limit = c.trie_inline_limit();
+    ensure!((1..=1280).contains(&limit), "invalid trie inline limit");
+    let strict = c.trie_inline_cost().is_some() || limit != 1280;
     let mut prefix_len = input.first().map_or(0, |r| r.key.len());
     for r in &input {
         prefix_len = prefix_len.min(r.key.len());
@@ -221,8 +228,8 @@ fn build_rows<S: Storage, C: Consumer>(
     let mut members = Vec::<Option<Member>>::new();
     let mut edged = Null;
     if rows.len() > 255
-        || (c.trie_inline_cost().is_some()
-            && (row_cost(&rows, c)? > 1280 || refs(&rows, &[], c)?.len() > basin.max_degree))
+        || (strict
+            && (row_cost(&rows, c)? > limit || refs(&rows, &[], c)?.len() > basin.max_degree))
     {
         own = rows.iter().filter(|r| r.key.is_empty()).cloned().collect();
         for high in 0..16 {
@@ -234,20 +241,23 @@ fn build_rows<S: Storage, C: Consumer>(
             members.push(if bucket.is_empty() {
                 None
             } else {
-                Some(if bucket.len() <= 255 {
-                    Member::Group(bucket)
-                } else {
-                    Member::Nodes(split(basin, &bucket, c, depth)?)
-                })
+                Some(
+                    if bucket.len() <= 255 && (limit == 1280 || row_cost(&bucket, c)? <= limit) {
+                        Member::Group(bucket)
+                    } else {
+                        Member::Nodes(split(basin, &bucket, c, depth)?)
+                    },
+                )
             });
         }
         trim(&mut members);
         edged = Bool(false);
     }
     if !members.is_empty()
-        && (inlined(&own, &members, c)? > 1280 || refs(&own, &members, c)?.len() > basin.max_degree)
+        && (inlined(&own, &members, c)? > limit
+            || refs(&own, &members, c)?.len() > basin.max_degree)
     {
-        if refs(&own, &members, c)?.len() > basin.max_degree || c.trie_inline_cost().is_some() {
+        if refs(&own, &members, c)?.len() > basin.max_degree || strict {
             for (high, m) in members.iter_mut().enumerate() {
                 if matches!(m, Some(Member::Group(_))) {
                     let bucket = rows
@@ -270,14 +280,14 @@ fn build_rows<S: Storage, C: Consumer>(
         }
         edged = Bool(true);
     }
-    if c.trie_inline_cost().is_some() && refs(&own, &members, c)?.len() > basin.max_degree {
+    if strict && refs(&own, &members, c)?.len() > basin.max_degree {
         for r in &mut own {
             r.value = c.trie_externalize(basin, &r.value)?;
         }
     }
-    if c.trie_inline_cost().is_some() {
+    if strict {
         ensure!(
-            inlined(&own, &members, c)? <= 1280,
+            inlined(&own, &members, c)? <= limit,
             "trie inline budget exceeded"
         );
     }
