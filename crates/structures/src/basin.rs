@@ -452,6 +452,20 @@ impl<S: Storage> Basin<S> {
         );
         Ok(bytes)
     }
+    /// Inspect only the verified local cache; never calls Storage::get.
+    pub fn peek(&mut self, e: &Edge) -> Result<Option<Arc<Vec<u8>>>> {
+        validate_edge(e)?;
+        let key = format!(
+            "{}/{}",
+            capability(e)?,
+            hex(footer(e)?.field("sha384")?.blob()?)
+        );
+        if self.cache.contains_key(&key) {
+            Ok(Some(self.load(e)?))
+        } else {
+            Ok(None)
+        }
+    }
     pub fn clear_cache(&mut self) {
         self.cache.clear();
     }

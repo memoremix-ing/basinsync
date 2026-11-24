@@ -285,3 +285,51 @@ func UpdateVector(b *Basin, e Edge, changes []VectorChange, length *big.Int, c C
 	}
 	return BuildVectorEntries(b, length, rows, c, uint(uint32Value(field(vectorRoot(e, c.Migration), "bits"))))
 }
+
+// Reverse search prunes child descriptors before loading their objects.
+func findVectorLastInline(b *Basin, r Ref, migration int64, accept, prune func(any) bool, cacheOnly bool) (*big.Int, *Ref, bool) {
+	var walk func(Ref, *big.Int, int) (*big.Int, *Ref, bool)
+	walk = func(r Ref, base *big.Int, depth int) (*big.Int, *Ref, bool) {
+		require(depth < 256, "vector nesting limit")
+		h, bitmap, slots := vectorParts(r, migration)
+		if bigint(field(h, "count")).Sign() == 0 || !prune(r.get("6").item(1).owned(0)) {
+			return nil, nil, true
+		}
+		shift := uint(uint32Value(field(h, "shift")))
+		bits := uint32Value(field(h, "bits"))
+		for slot := (1 << bits) - 1; slot >= 0; slot-- {
+			if bitmap[slot/8]&(1<<(slot%8)) == 0 {
+				continue
+			}
+			at := slots.item(vectorRank(bitmap, uint(slot)))
+			index := new(big.Int).Add(base, new(big.Int).Lsh(big.NewInt(int64(slot)), shift))
+			if shift == 0 {
+				if accept(at.owned(0)) {
+					return index, &at, true
+				}
+			} else {
+				child := at
+				if at.typ != 9 {
+					e := array(at.owned(0))
+					if !prune(field(e[6], "1")) {
+						continue
+					}
+					if cacheOnly {
+						cached := b.peek(e)
+						if cached == nil {
+							return nil, nil, false
+						}
+						child = *cached
+					} else {
+						child = b.load(e)
+					}
+				}
+				if i, v, ready := walk(child, index, depth+1); !ready || v != nil {
+					return i, v, ready
+				}
+			}
+		}
+		return nil, nil, true
+	}
+	return walk(r, new(big.Int), 0)
+}

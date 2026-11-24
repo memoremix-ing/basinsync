@@ -331,6 +331,91 @@ export class Vector<V = unknown, M = null, R extends Edge | Reference = Edge> {
     const op = this.getOrDefer(i);
     return typeof op === "function" ? resolveOperation(op) : op;
   }
+  /** Ready-only probe; the returned continuation initiates no I/O until resumed. */
+  findLastOrDefer(
+    acceptValue: (value: V) => boolean,
+    acceptSummary: (summary: M) => boolean = () => true,
+  ): Operation<[bigint, V] | undefined> {
+    const missing = Symbol();
+    const inspect = (
+      source: Reference | Edge,
+      base: bigint,
+      depth: number,
+    ): [bigint, V] | undefined | typeof missing => {
+      check(depth < 256, "vector nesting limit");
+      if (Array.isArray(source) && !acceptSummary(source[6][1] as M)) return;
+      const r = Array.isArray(source) ? this.basin.peek(source) : source;
+      if (!r) return missing;
+      const { h, f, bitmap, slots } = this.parts(r);
+      check(h.bits === this.bits, "inconsistent vector bits");
+      if (!h.count || !acceptSummary(object<M>(f.get(1)))) return;
+      for (let slot = (1 << h.bits) - 1; slot >= 0; slot--)
+        if (has(bitmap, slot)) {
+          const at = slots.get(rank(bitmap, slot)),
+            index = base + (BigInt(slot) << BigInt(h.shift));
+          if (!h.shift) {
+            const v = object<V>(at);
+            if (acceptValue(v)) return [index, v];
+          } else {
+            const found = inspect(
+              at.isMap() ? at : edgeFrom(at),
+              index,
+              depth + 1,
+            );
+            if (found !== undefined) return found;
+          }
+        }
+    };
+    const found = inspect(this.root, 0n, 0);
+    if (found !== missing) return found;
+    const self = this;
+    return function* () {
+      return (yield self.findLast(acceptValue, acceptSummary)) as
+        | [bigint, V]
+        | undefined;
+    };
+  }
+  /** Last matching index; summaries prune entire stored branches before GETs. */
+  async findLast(
+    acceptValue: (value: V) => boolean,
+    acceptSummary: (summary: M) => boolean = () => true,
+  ): Promise<[bigint, V] | undefined> {
+    if (!this.header().count || !acceptSummary(this.summary())) return;
+    const walk = async (
+      r: Reference,
+      base: bigint,
+      depth: number,
+    ): Promise<[bigint, V] | undefined> => {
+      check(depth < 256, "vector nesting limit");
+      const { h, f, bitmap, slots } = this.parts(r);
+      check(h.bits === this.bits, "inconsistent vector bits");
+      if (!h.count || !acceptSummary(object<M>(f.get(1)))) return;
+      for (let slot = (1 << h.bits) - 1; slot >= 0; slot--)
+        if (has(bitmap, slot)) {
+          const at = slots.get(rank(bitmap, slot)),
+            i = base + (BigInt(slot) << BigInt(h.shift));
+          if (!h.shift) {
+            const value = object<V>(at);
+            if (acceptValue(value)) return [i, value];
+          } else {
+            let child: Reference;
+            if (at.isMap()) child = at;
+            else {
+              const e = edgeFrom(at);
+              if (!acceptSummary(e[6][1] as M)) continue;
+              child = await this.basin.load(e);
+            }
+            const found = await walk(child, i, depth + 1);
+            if (found) return found;
+          }
+        }
+    };
+    return walk(
+      Array.isArray(this.root) ? await this.basin.load(this.root) : this.root,
+      0n,
+      0,
+    );
+  }
   async *entries(
     from = 0n,
     to = this.length,

@@ -50,8 +50,7 @@ export type BasinEdge_S0<
       ? [TSummary, ...TData]
       : never;
   },
-> = [
-  // FlexBuffers vector; its footer is a map
+> = [ // FlexBuffers vector; its footer is a map
   protocol: typeof Symbol.match,
   domain: LazyT[1],
   path: LazyT[2],
@@ -76,32 +75,33 @@ export type BasinEdge_S0<
   }[U32 & keyof FootersT],
 ];
 
+
 export interface TrieNode_S0<
   MigrationsT extends {
     [index: number]: { Summary: unknown; Value: unknown };
   },
 > extends BasinNode_S0<
-    "sync.memoremix.com",
-    ".trie-node/",
-    {
-      count: bigint; // number of values
-      nullity: bigint; // number of values that are null
-      degree: U32; // number of trie-handles (distinct from basin-degree)
-      inlined: U32; // count of nested values up to edge boundaries
-      prefix: null | Uint8Array; // (for trie-compression)
-      keys: Bounds<Uint8Array>; // suffix bounds after ancestor bytes, before this node's prefix
-      lengths: Bounds<U32>; // min/max lengths of those suffixes
-    },
-    {
-      [IndexT in U32 & keyof MigrationsT]: [
-        summary: MigrationsT[IndexT]["Summary"],
-        // (must not have common byte-prefix -- extract that to the header)
-        group: TrieGroup<MigrationsT[IndexT]["Value"]>,
-        // (present when initial group overflows -- will hold all values except where key ends at prefix)
-        ...nest: TrieNest<MigrationsT, IndexT>,
-      ];
-    }
-  > {}
+  "sync.memoremix.com",
+  ".trie-node/",
+  {
+    count: bigint; // number of values
+    nullity: bigint; // number of values that are null
+    degree: U32; // number of trie-handles (distinct from basin-degree)
+    inlined: U32; // count of nested values up to edge boundaries
+    prefix: null | Uint8Array; // (for trie-compression)
+    keys: Bounds<Uint8Array>; // suffix bounds after ancestor bytes, before this node's prefix
+    lengths: Bounds<U32>; // min/max lengths of those suffixes
+  },
+  {
+    [IndexT in U32 & keyof MigrationsT]: [
+      summary: MigrationsT[IndexT]["Summary"],
+      // (must not have common byte-prefix -- extract that to the header)
+      group: TrieGroup<MigrationsT[IndexT]["Value"]>,
+      // (present when initial group overflows -- will hold all values except where key ends at prefix)
+      ...nest: TrieNest<MigrationsT, IndexT>,
+    ];
+  }
+> {}
 
 export interface TrieGroup<ValueT> {
   keys: Array<Uint8Array>; // 255 maximum; suffixes after consumed prefix/branch bytes
@@ -120,8 +120,10 @@ export type TrieNest<
         // 16 maximum (i.e. one per nibble)
         | null
         | TrieGroup<MigrationsT[IndexT]["Value"]> // (must have common nibble-prefix)
-        | Array<// 16 maximum (i.e. one per nibble)
-          null | TrieNode_S0<MigrationsT>>
+        | Array<
+            // 16 maximum (i.e. one per nibble)
+            null | TrieNode_S0<MigrationsT>
+          >
       >,
       edged: false, // (when nested nodes have no corresponding edges -- default unless inlined > 1280)
     ]
@@ -130,39 +132,38 @@ export type TrieNest<
         // 16 maximum (i.e. one per nibble)
         | null
         | TrieGroup<MigrationsT[IndexT]["Value"]> // (must have common nibble-prefix)
-        | Array<// 16 maximum (i.e. one per nibble)
-          null | BasinEdge_S0<TrieNode_S0<MigrationsT>>>
+        | Array<
+            // 16 maximum (i.e. one per nibble)
+            null | BasinEdge_S0<TrieNode_S0<MigrationsT>>
+          >
       >,
       edged: true, // (when no nodes are directly inlined members)
     ];
 
-export interface SyncVolume_S0
-  extends BasinNode_S0<
-    "sync.memoremix.com",
-    ".sync-volume/",
-    null,
-    {
-      0: [
-        summary: null,
-        device: TrieNode_S0<{
-          0: {
-            Summary: null;
+export type SyncDevice_M0 = TrieNode_S0<{
+  0: { Summary: null; Value: [edge: BasinEdge_S0<SyncBlock_M0>] };
+}>;
 
-            Value: [edge: BasinEdge_S0<SyncBlock_M0>];
-          };
-        }>,
-        root: SyncDirectory_M0,
-      ];
-    }
-  > {}
+export interface SyncVolume_S0 extends BasinNode_S0<
+  "sync.memoremix.com", ".sync-volume/", null,
+  { 0: [summary: null, device: SyncDevice_M0 | BasinEdge_S0<SyncDevice_M0>,
+    root: SyncDirectory_M0 | SyncDirectoryEdge_M0] }
+> {}
 
-export type SyncDirectory_M0 = [
-  folder: true,
-  sha384: Uint8Array, // digest of UTF-8 basename-byte-sorted pairs: length-framed basename + child digest
-  contents: {
-    [basename: string]: SyncDirectory_M0 | SyncFile_M0;
-  },
+export interface SyncDirectory_M0 extends BasinNode_S0<
+  "sync.memoremix.com", ".sync-directory/",
+  { sha384: Uint8Array; inlined: U32; nesting: U32 },
+  { 0: [summary: null, contents: TrieNode_S0<{
+    0: { Summary: null; Value: SyncDirectoryEntry_M0 };
+  }>] }
+> {}
+
+export type SyncDirectoryEntry_M0 = SyncFile_M0 | [
+  folder: true, sha384: Uint8Array, directory: SyncDirectory_M0 | SyncDirectoryEdge_M0
 ];
+export type SyncDirectoryEdge_M0 = BasinEdge_S0<BasinNode_S0<
+  "sync.memoremix.com", ".sync-directory/", SyncDirectory_M0[5], {0:[summary:null]}
+>>;
 
 export type SyncFile_M0 = [
   folder: false,
@@ -198,7 +199,7 @@ export interface SyncBlock_M0
 
 export type SyncLeaves_M0 = VectorNode_S0<{
   0: {
-    Summary: null;
+    Summary: { pages: Bounds<bigint> };
     Value: [page: bigint, span: U32, link: SyncLink_M0<SyncSector_M0>];
   };
 }>;

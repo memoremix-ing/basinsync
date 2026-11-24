@@ -156,10 +156,9 @@ try {
     await new Vector(new Basin(direct), indexed.root, count).get(1999n),
     rows[1999][1],
   );
-  const directory = object<Node>(
-    await basin.load(volume.root),
-  )[6][3] as Directory;
-  const shortcut = ((directory[2].docs as Directory)[2].a as File)[2];
+  const file = await volume.stat("/docs/a");
+  assert.equal(file.kind, "file");
+  const shortcut = (file as Extract<typeof file, { kind: "file" }>).link;
   validateNode(nodeView(await rawRead(shortcut)), BLOCK);
   for (const [name, data] of files)
     assert.deepEqual(

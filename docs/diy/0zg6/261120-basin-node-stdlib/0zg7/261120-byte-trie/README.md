@@ -24,6 +24,7 @@ prerequisites:
 [promoted-costs]: <benchmark/promoted-costs.md>
 [revision]: <../../../../../glossary/revision.md>
 [selective-export]: <benchmark/selective-export.md>
+[shortcut-navigation]: <benchmark/shortcut-navigation.md>
 [shortcut-reads]: <benchmark/shortcut-reads.md>
 [strong-edge]: <../../../../../glossary/strong-edge.md>
 [subtree-cow]: <benchmark/subtree-cow.md>
@@ -110,32 +111,30 @@ type TrieNest<
 ## Volume and directory shortcuts
 
 ```ts
-interface SyncVolume_S0 extends BasinNode_S0<
-  "sync.memoremix.com",
-  ".sync-volume/",
-  null,
-  {
-    0: [
-      summary: null,
-      device: TrieNode_S0<{
-        0: {
-          Summary: null;
+type SyncDevice_M0 = TrieNode_S0<{
+  0: { Summary: null; Value: [edge: BasinEdge_S0<SyncBlock_M0>] };
+}>;
 
-          Value: [edge: BasinEdge_S0<SyncBlock_M0>];
-        };
-      }>,
-      root: SyncDirectory_M0,
-    ];
-  }
+interface SyncVolume_S0 extends BasinNode_S0<
+  "sync.memoremix.com", ".sync-volume/", null,
+  { 0: [summary: null, device: SyncDevice_M0 | BasinEdge_S0<SyncDevice_M0>,
+    root: SyncDirectory_M0 | SyncDirectoryEdge_M0] }
 > {}
 
-type SyncDirectory_M0 = [
-  folder: true,
-  sha384: Uint8Array, // digest of UTF-8 basename-byte-sorted pairs: length-framed basename + child digest
-  contents: {
-    [basename: string]: SyncDirectory_M0 | SyncFile_M0;
-  },
+interface SyncDirectory_M0 extends BasinNode_S0<
+  "sync.memoremix.com", ".sync-directory/",
+  { sha384: Uint8Array; inlined: U32; nesting: U32 },
+  { 0: [summary: null, contents: TrieNode_S0<{
+    0: { Summary: null; Value: SyncDirectoryEntry_M0 };
+  }>] }
+> {}
+
+type SyncDirectoryEntry_M0 = SyncFile_M0 | [
+  folder: true, sha384: Uint8Array, directory: SyncDirectory_M0 | SyncDirectoryEdge_M0
 ];
+type SyncDirectoryEdge_M0 = BasinEdge_S0<BasinNode_S0<
+  "sync.memoremix.com", ".sync-directory/", SyncDirectory_M0[5], {0:[summary:null]}
+>>;
 
 type SyncFile_M0 = [
   folder: false,
@@ -176,7 +175,7 @@ interface SyncBlock_M0
 
 type SyncLeaves_M0 = VectorNode_S0<{
   0: {
-    Summary: null;
+    Summary: { pages: Bounds<bigint> };
     Value: [page: bigint, span: U32, link: SyncLink_M0<SyncSector_M0>];
   };
 }>;
@@ -283,14 +282,21 @@ Inline its root when packing permits; its ordinary *basin edges*[~][strong-edge]
 retain shortcut-index nodes, while leaf links remain *weak*[~][weak-link].
 `leading` and `lagging` cache the first/last paths' stored, non-root vector nodes,
 indexed from *basin-node height*[~][node-height] zero; missing heights are null.
-These links do not add retainers. Binary-search vector entries by page number.
+These links do not add retainers. Replicate inclusive page bounds in vector
+summaries; reverse search prunes branches whose first page exceeds the target.
+Point reads use only inline/cached shortcuts, falling back to the device/sector
+trie without fetching a secondary index merely to discover a hint.
 
-Directory scaling proposal: make directories *basin nodes*[~][node], inlining
-nested directories while packing permits and using *strong edges*[~][strong-edge]
-when they spill. Index immediate children by UTF-8 basename with a byte trie, so
-wide flat directories also split. Keep file links *weak*[~][weak-link] and the
-device trie authoritative for file retention. This directory format is proposed;
-the current directory tree remains inline.
+Directories use `.sync-directory/` *basin nodes*[~][node] with a UTF-8 basename
+trie containing file entries or `[true, sha384, directory]` entries. The directory
+source and volume's device trie can be inline or *basin edges*[~][strong-edge].
+Directory hashes retain the basename/kind/child-digest framing above. File links
+remain *weak*[~][weak-link]; the device trie retains file blocks.
+
+Budget nested inline directory entries conservatively against 1,280 and cap inline
+directory nesting at 32; if either budget or the edge limit is exceeded, seal the
+immediate child directories. The basename trie independently pages wide directories.
+`stat` reads entry metadata; `list` loads only the requested directory index.
 
 Before choosing a shortcut layout, measure first-useful-result latency, fetched
 bytes, request count, and update churn against ordinary trie traversal. Keep
@@ -470,13 +476,14 @@ const copied = await moved.cp("/parent/new", "/copy");
 const removed = await copied.rm("/parent/new", { recursive: true });
 ```
 
-`Volume.update()` still reads files and rebuilds; `fromBlocks()` shares existing
-block descriptors. The directory tree remains inline. Server-side retention
+`Volume.update()` rebuilds changed file blocks and reuses unchanged descriptors;
+filesystem edits still materialize directory metadata before rebuilding it. Server-side retention
 and collection govern eventual storage reclamation.
 
-The *shortcut request traces*[~][shortcut-reads] show that the current binary-searched
-leaf vector can add GETs, while adjacent file links can bypass the device trie.
-Prefer measured object-fetch paths over logical branching-factor comparisons.
+The *initial shortcut traces*[~][shortcut-reads] exposed extra secondary-index
+GETs. The *revised navigation traces*[~][shortcut-navigation] measure ready-only
+hints and paged directories. Prefer measured object-fetch paths over logical
+branching-factor comparisons.
 
 Pruning
 and partial reads remain selective. Readers bound nesting to 256 trie levels;

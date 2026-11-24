@@ -4,7 +4,7 @@ use crate::{
     value::{self, field, item},
 };
 use Value::*;
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use flexbuffers::Reader;
 use num_bigint::BigInt;
 use std::sync::Arc;
@@ -450,12 +450,13 @@ fn find_group(g: &View, k: &[u8]) -> Result<Option<View>> {
         None
     })
 }
-pub fn get_inline<S: Storage>(
+fn lookup_inline<S: Storage>(
     basin: &mut Basin<S>,
     mut view: View,
     mut k: Vec<u8>,
     migration: u32,
-) -> Result<Option<View>> {
+    cached_only: bool,
+) -> Result<Option<Option<View>>> {
     let mut depth = 0;
     loop {
         ensure!(depth < 256, "trie nesting limit");
@@ -467,14 +468,14 @@ pub fn get_inline<S: Storage>(
             h.field("prefix")?.blob()?
         };
         if !k.starts_with(prefix) {
-            return Ok(None);
+            return Ok(Some(None));
         }
         k = k[prefix.len()..].to_vec();
         if let Some(found) = find_group(&g, &k)? {
-            return Ok(Some(found));
+            return Ok(Some(Some(found)));
         }
         if k.is_empty() || e.is_none() {
-            return Ok(None);
+            return Ok(Some(None));
         }
         let high = (k[0] >> 4) as usize;
         let low = (k[0] & 15) as usize;
@@ -482,18 +483,18 @@ pub fn get_inline<S: Storage>(
         if high >= mm.len()
             || mm.index(high)?.flexbuffer_type() == flexbuffers::FlexBufferType::Null
         {
-            return Ok(None);
+            return Ok(Some(None));
         }
         let member = m.item(high);
         if member.reader()?.flexbuffer_type() == flexbuffers::FlexBufferType::Map {
-            return find_group(&member, &k);
+            return find_group(&member, &k).map(Some);
         }
         let list = member.reader()?.get_vector()?;
         ensure!(list.len() <= 16, "invalid nibble slots");
         if low >= list.len()
             || list.index(low)?.flexbuffer_type() == flexbuffers::FlexBufferType::Null
         {
-            return Ok(None);
+            return Ok(Some(None));
         }
         let child = member.item(low);
         k = k[1..].to_vec();
@@ -504,13 +505,38 @@ pub fn get_inline<S: Storage>(
                 || k.as_slice() < bounds.at(0)?.blob()?
                 || k.as_slice() > bounds.at(1)?.blob()?
             {
-                return Ok(None);
+                return Ok(Some(None));
             }
-            view = View::root(basin.load(&edge)?);
+            view = View::root(if cached_only {
+                if let Some(bytes) = basin.peek(&edge)? {
+                    bytes
+                } else {
+                    return Ok(None);
+                }
+            } else {
+                basin.load(&edge)?
+            });
         } else {
             view = child;
         }
     }
+}
+pub fn get_inline<S: Storage>(
+    basin: &mut Basin<S>,
+    view: View,
+    k: Vec<u8>,
+    migration: u32,
+) -> Result<Option<View>> {
+    lookup_inline(basin, view, k, migration, false)?.context("unexpected deferred lookup")
+}
+/// None means deferred; Some(None) is a definitive absent key.
+pub fn get_cached_inline<S: Storage>(
+    basin: &mut Basin<S>,
+    view: View,
+    k: Vec<u8>,
+    migration: u32,
+) -> Result<Option<Option<View>>> {
+    lookup_inline(basin, view, k, migration, true)
 }
 pub fn get_view<S: Storage>(
     basin: &mut Basin<S>,

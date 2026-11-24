@@ -306,7 +306,19 @@ func (b *Basin) load(e Edge) Ref {
 }
 func strconvIndex(i int) string                 { return string(rune('0' + i)) }
 func (b *Basin) Load(e Edge) (r Ref, err error) { defer protect(&err); return b.load(e), nil }
-func (b *Basin) ClearCache()                    { b.cache = map[string][]byte{}; b.cacheOrder = nil; b.cacheBytes = 0 }
+func (b *Basin) peek(e Edge) *Ref {
+	validateEdge(e)
+	k := capability(e) + "/" + hex.EncodeToString(blob(field(e[6], "sha384")))
+	if _, ok := b.cache[k]; !ok {
+		return nil
+	}
+	r := b.load(e)
+	return &r
+}
+
+// Peek validates cached descriptors without a storage GET.
+func (b *Basin) Peek(e Edge) (r *Ref, err error) { defer protect(&err); return b.peek(e), nil }
+func (b *Basin) ClearCache()                     { b.cache = map[string][]byte{}; b.cacheOrder = nil; b.cacheBytes = 0 }
 
 // NodeKey resolves shared-heap addresses; the adapter supplies bucket/tenant prefix.
 func NodeKey(link any, generation string) (key string, err error) {

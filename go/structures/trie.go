@@ -337,7 +337,7 @@ func find(g Ref, k []byte) *Ref {
 	}
 	return nil
 }
-func getInline(b *Basin, r Ref, key []byte, migration int64) *Ref {
+func lookupInline(b *Basin, r Ref, key []byte, migration int64, cacheOnly bool) (*Ref, bool) {
 	k := key
 	depth := 0
 	for {
@@ -349,26 +349,26 @@ func getInline(b *Basin, r Ref, key []byte, migration int64) *Ref {
 			p = blob(v)
 		}
 		if !bytes.HasPrefix(k, p) {
-			return nil
+			return nil, true
 		}
 		k = k[len(p):]
 		if found := find(g, k); found != nil {
-			return found
+			return found, true
 		}
 		if len(k) == 0 || e == nil {
-			return nil
+			return nil, true
 		}
 		high, low := int(k[0]>>4), int(k[0]&15)
 		if high >= m.len() || m.item(high).typ == 0 {
-			return nil
+			return nil, true
 		}
 		member := m.item(high)
 		if member.typ == 9 {
-			return find(member, k)
+			return find(member, k), true
 		}
 		require(member.typ == 10 && member.len() <= 16, "invalid nibble slots")
 		if low >= member.len() || member.item(low).typ == 0 {
-			return nil
+			return nil, true
 		}
 		child := member.item(low)
 		k = k[1:]
@@ -376,13 +376,26 @@ func getInline(b *Basin, r Ref, key []byte, migration int64) *Ref {
 			edge := array(child.owned(0))
 			bounds := field(edge[5], "keys")
 			if bounds == nil || bytes.Compare(k, blob(at(bounds, 0))) < 0 || bytes.Compare(k, blob(at(bounds, 1))) > 0 {
-				return nil
+				return nil, true
 			}
-			r = b.load(edge)
+			if cacheOnly {
+				cached := b.peek(edge)
+				if cached == nil {
+					return nil, false
+				}
+				r = *cached
+			} else {
+				r = b.load(edge)
+			}
 		} else {
 			r = child
 		}
 	}
+}
+func getInline(b *Basin, r Ref, k []byte, migration int64) *Ref {
+	v, ready := lookupInline(b, r, k, migration, false)
+	require(ready, "unexpected deferred lookup")
+	return v
 }
 func GetView(b *Basin, root Edge, key []byte, migration int64) (view *Ref, err error) {
 	defer protect(&err)

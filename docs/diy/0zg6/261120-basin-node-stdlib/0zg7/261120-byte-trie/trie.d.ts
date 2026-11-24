@@ -62,32 +62,30 @@ type TrieNest<
       edged: true, // (when no nodes are directly inlined members)
     ];
 
-interface SyncVolume_S0 extends BasinNode_S0<
-  "sync.memoremix.com",
-  ".sync-volume/",
-  null,
-  {
-    0: [
-      summary: null,
-      device: TrieNode_S0<{
-        0: {
-          Summary: null;
+type SyncDevice_M0 = TrieNode_S0<{
+  0: { Summary: null; Value: [edge: BasinEdge_S0<SyncBlock_M0>] };
+}>;
 
-          Value: [edge: BasinEdge_S0<SyncBlock_M0>];
-        };
-      }>,
-      root: SyncDirectory_M0,
-    ];
-  }
+interface SyncVolume_S0 extends BasinNode_S0<
+  "sync.memoremix.com", ".sync-volume/", null,
+  { 0: [summary: null, device: SyncDevice_M0 | BasinEdge_S0<SyncDevice_M0>,
+    root: SyncDirectory_M0 | SyncDirectoryEdge_M0] }
 > {}
 
-type SyncDirectory_M0 = [
-  folder: true,
-  sha384: Uint8Array, // digest of UTF-8 basename-byte-sorted pairs: length-framed basename + child digest
-  contents: {
-    [basename: string]: SyncDirectory_M0 | SyncFile_M0;
-  },
+interface SyncDirectory_M0 extends BasinNode_S0<
+  "sync.memoremix.com", ".sync-directory/",
+  { sha384: Uint8Array; inlined: U32; nesting: U32 },
+  { 0: [summary: null, contents: TrieNode_S0<{
+    0: { Summary: null; Value: SyncDirectoryEntry_M0 };
+  }>] }
+> {}
+
+type SyncDirectoryEntry_M0 = SyncFile_M0 | [
+  folder: true, sha384: Uint8Array, directory: SyncDirectory_M0 | SyncDirectoryEdge_M0
 ];
+type SyncDirectoryEdge_M0 = BasinEdge_S0<BasinNode_S0<
+  "sync.memoremix.com", ".sync-directory/", SyncDirectory_M0[5], {0:[summary:null]}
+>>;
 
 type SyncFile_M0 = [
   folder: false,
@@ -123,7 +121,7 @@ interface SyncBlock_M0
 
 type SyncLeaves_M0 = VectorNode_S0<{
   0: {
-    Summary: null;
+    Summary: { pages: Bounds<bigint> };
     Value: [page: bigint, span: U32, link: SyncLink_M0<SyncSector_M0>];
   };
 }>;

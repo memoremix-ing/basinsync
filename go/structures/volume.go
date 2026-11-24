@@ -11,6 +11,7 @@ import (
 
 const VolumePath = ".sync-volume/"
 const BlockPath = ".sync-block/"
+const DirectoryPath = ".sync-directory/"
 const PageSize = 4096
 
 var slPrime = new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 127), big.NewInt(1))
@@ -77,6 +78,37 @@ func sectorConsumer() Consumer {
 		}
 		return map[string]any{"brombergSL2": combineSL(parts)}, nil
 	}}
+}
+func leafShortcutConsumer() Consumer {
+	c := PlainConsumer()
+	c.Empty = map[string]any{"pages": nil}
+	c.Entry = func(_ []byte, v any) (any, error) {
+		lo := bigint(at(v, 0))
+		hi := new(big.Int).Sub(new(big.Int).Add(lo, big.NewInt(integer(at(v, 1)))), big.NewInt(1))
+		return map[string]any{"pages": vector(new(big.Int).Set(lo), hi)}, nil
+	}
+	c.Combine = func(s []any) (any, error) {
+		var lo, hi *big.Int
+		for _, v := range s {
+			p := field(v, "pages")
+			if p == nil {
+				continue
+			}
+			a, z := bigint(at(p, 0)), bigint(at(p, 1))
+			if lo == nil || a.Cmp(lo) < 0 {
+				lo = new(big.Int).Set(a)
+			}
+			if hi == nil || z.Cmp(hi) > 0 {
+				hi = new(big.Int).Set(z)
+			}
+		}
+		var pages any
+		if lo != nil {
+			pages = vector(lo, hi)
+		}
+		return map[string]any{"pages": pages}, nil
+	}
+	return c
 }
 func deviceConsumer() Consumer {
 	c := PlainConsumer()
@@ -169,6 +201,158 @@ func directory(contents map[string]any) any {
 	}
 	return vector(true, digest(data), contents)
 }
+func directoryRefs(source any) []Edge {
+	if edge, ok := source.([]any); ok {
+		return []Edge{edge}
+	}
+	var scan func(Node) []Edge
+	scan = func(n Node) []Edge {
+		if integer(field(n["3"], "degree")) == 0 {
+			return nil
+		}
+		group := func(g any) []Edge {
+			refs := []Edge{}
+			for _, v := range array(field(g, "values")) {
+				if boolean(at(v, 0)) {
+					refs = append(refs, directoryRefs(at(v, 2))...)
+				}
+			}
+			return refs
+		}
+		refs := group(at(n["6"], 2))
+		if m := at(n["6"], 3); m != nil {
+			for _, high := range array(m) {
+				if high == nil {
+					continue
+				}
+				if low, ok := high.([]any); ok {
+					for _, child := range low {
+						if child == nil {
+							continue
+						}
+						if edge, ok := child.([]any); ok {
+							refs = append(refs, edge)
+						} else {
+							refs = append(refs, scan(mapping(child))...)
+						}
+					}
+				} else {
+					refs = append(refs, group(high)...)
+				}
+			}
+		}
+		return distinct(refs)
+	}
+	return scan(mapping(at(field(source, "6"), 2)))
+}
+func directoryConsumer() Consumer {
+	c := PlainConsumer()
+	c.Edges = func(v any) ([]Edge, error) {
+		if boolean(at(v, 0)) {
+			return directoryRefs(at(v, 2)), nil
+		}
+		return nil, nil
+	}
+	return c
+}
+func buildDirectory(b *Basin, tree any) packedBuilt {
+	entries := mapping(at(tree, 2))
+	children := map[string]packedBuilt{}
+	nested, nesting := 0, 1
+	refs := []Edge{}
+	for name, v := range entries {
+		if boolean(at(v, 0)) {
+			child := buildDirectory(b, v)
+			children[name] = child
+			nested += int(integer(field(child.node["5"], "inlined")))
+			h := 1 + int(integer(field(child.node["5"], "nesting")))
+			if h > nesting {
+				nesting = h
+			}
+			refs = append(refs, child.edges...)
+		}
+	}
+	cut := len(entries)+nested > 1280 || nesting > 32 || len(distinct(refs)) > b.MaxDegree
+	rows := []Entry{}
+	for name, v := range entries {
+		stored := v
+		if child, ok := children[name]; ok {
+			var source any = child.node
+			if cut {
+				source = b.seal(child.node, child.edges)
+			}
+			stored = vector(true, at(v, 1), source)
+		}
+		rows = append(rows, Entry{[]byte(name), stored})
+	}
+	trie := checked(BuildNode(b, rows, directoryConsumer()))
+	inlined := integer(field(trie.Node["5"], "inlined"))
+	if cut {
+		nesting = 1
+	} else {
+		inlined += int64(nested)
+	}
+	node := Node{"0": Symbol{Name: "species"}, "1": Domain, "2": DirectoryPath, "3": trie.Node["3"], "4": int64(0), "5": map[string]any{"sha384": at(tree, 1), "inlined": inlined, "nesting": int64(nesting)}, "6": vector(int64(0), nil, trie.Node)}
+	return packedBuilt{node: node, edges: trie.Edges}
+}
+func sourceRoot(b *Basin, source Ref) Ref {
+	if source.typ == 9 {
+		return source
+	}
+	return b.load(array(source.owned(0)))
+}
+func directoryContents(b *Basin, source Ref) Ref {
+	n := sourceRoot(b, source)
+	validateNode(n, DirectoryPath)
+	require(n.get("6").len() == 3, "unsupported directory")
+	return n.get("6").item(2)
+}
+func directoryEntry(b *Basin, root Edge, name string) (bool, Ref) {
+	f := volumeData(b, root)
+	source := f.item(3)
+	if name == "/" {
+		return true, source
+	}
+	parts := path(name)
+	for i, p := range parts {
+		contents := directoryContents(b, source)
+		v := getInline(b, contents, []byte(p), 0)
+		require(v != nil, "missing pathname")
+		folder := boolean(v.item(0).owned(0))
+		if i == len(parts)-1 {
+			if folder {
+				return true, v.item(2)
+			}
+			return false, *v
+		}
+		require(folder, "parent is not a directory")
+		source = v.item(2)
+	}
+	require(false, "missing pathname")
+	return false, Ref{}
+}
+func materializeDirectory(b *Basin, source Ref) any {
+	n := sourceRoot(b, source)
+	validateNode(n, DirectoryPath)
+	type row struct {
+		name  string
+		value Ref
+	}
+	rows := []row{}
+	visitInline(b, n.get("6").item(2), nil, nil, 0, func(any, any) bool { return true }, func(k []byte, v Ref) (bool, error) { rows = append(rows, row{string(k), v}); return true, nil })
+	entries := map[string]any{}
+	for _, r := range rows {
+		var v any
+		if boolean(r.value.item(0).owned(0)) {
+			v = materializeDirectory(b, r.value.item(2))
+			require(bytes.Equal(blob(at(v, 1)), r.value.item(1).bytes()), "directory digest mismatch")
+		} else {
+			v = r.value.owned(0)
+		}
+		entries[r.name] = v
+	}
+	return vector(true, n.get("5").get("sha384").owned(0), entries)
+}
 func collectLeaves(b *Basin, node Node, base []byte, out *[]any) {
 	h := node["5"]
 	here := append([]byte{}, base...)
@@ -238,7 +422,7 @@ func BuildBlock(b *Basin, input []PageInput) (block BlockRoot, err error) {
 	for i, v := range leaves {
 		shortcutRows[i] = VectorEntry{big.NewInt(int64(i)), v}
 	}
-	shortcuts := buildVectorNodeEntries(b, big.NewInt(int64(len(shortcutRows))), shortcutRows, PlainConsumer(), 7)
+	shortcuts := buildVectorNodeEntries(b, big.NewInt(int64(len(shortcutRows))), shortcutRows, leafShortcutConsumer(), 7)
 	sum := blob(at(t.Node["6"], 1).(map[string]any)["brombergSL2"])
 	packed := packChildren(b, []packedBuilt{{node: t.Node, edges: t.Edges}, shortcuts}, 0, nil)
 	pages, trailing := packed.slots[0], packed.slots[1]
@@ -361,8 +545,20 @@ func VolumeFromBlocks(b *Basin, blocks map[string]BlockRoot, directories ...stri
 		}
 		return directory(entries)
 	}
-	node := Node{"0": Symbol{Name: "species"}, "1": Domain, "2": VolumePath, "3": device.Node["3"], "4": int64(0), "5": nil, "6": vector(int64(0), nil, device.Node, finish(tree))}
-	return b.seal(node, device.Edges), nil
+	dir := buildDirectory(b, finish(tree))
+	var deviceSource any = device.Node
+	var dirSource any = dir.node
+	edges := distinct(append(append([]Edge{}, device.Edges...), dir.edges...))
+	if integer(field(device.Node["5"], "inlined"))+integer(field(dir.node["5"], "inlined")) > 1280 || len(edges) > b.MaxDegree {
+		dirSource = b.seal(dir.node, dir.edges)
+		edges = distinct(append(append([]Edge{}, device.Edges...), array(dirSource)))
+		if integer(field(device.Node["5"], "inlined")) > 1280 || len(edges) > b.MaxDegree {
+			deviceSource = b.seal(device.Node, device.Edges)
+			edges = distinct([]Edge{array(deviceSource), array(dirSource)})
+		}
+	}
+	node := Node{"0": Symbol{Name: "species"}, "1": Domain, "2": VolumePath, "3": query(edges, b.MaxDegree, b.MaxHeight), "4": int64(0), "5": nil, "6": vector(int64(0), nil, deviceSource, dirSource)}
+	return b.seal(node, edges), nil
 }
 func volumeData(b *Basin, root Edge) Ref {
 	r := b.load(root)
@@ -373,20 +569,10 @@ func volumeData(b *Basin, root Edge) Ref {
 }
 func List(b *Basin, root Edge, name string) (names []string, err error) {
 	defer protect(&err)
-	node := volumeData(b, root).item(3).owned(0)
-	if name != "/" {
-		for _, p := range path(name) {
-			require(boolean(at(node, 0)), "not a directory")
-			node = field(at(node, 2), p)
-		}
-	}
-	require(boolean(at(node, 0)), "not a directory")
-	contents := mapping(at(node, 2))
-	names = make([]string, 0, len(contents))
-	for name := range contents {
-		names = append(names, name)
-	}
-	sort.Strings(names)
+	folder, source := directoryEntry(b, root, name)
+	require(folder, "not a directory")
+	names = []string{}
+	visitInline(b, directoryContents(b, source), nil, nil, 0, func(any, any) bool { return true }, func(k []byte, _ Ref) (bool, error) { names = append(names, string(k)); return true, nil })
 	return names, nil
 }
 func tryWeak(b *Basin, file []any) (edge Edge, err error) {
@@ -402,38 +588,72 @@ func tryWeak(b *Basin, file []any) (edge Edge, err error) {
 	require(capability(edge) == weakKey(file[2]), "shortcut capability mismatch")
 	r := b.load(edge)
 	validateNode(r, BlockPath)
-	sum := pageRoot(b, r.get("6")).get("6").item(1).get("brombergSL2").bytes()
+	sum := blob(field(sectorSummary(r.get("6")), "brombergSL2"))
 	require(bytes.Equal(sum, blob(file[1])), "shortcut summary mismatch")
 	return edge, nil
+}
+func readySource(b *Basin, source Ref) *Ref {
+	if source.typ == 9 {
+		return &source
+	}
+	return b.peek(array(source.owned(0)))
+}
+func readyFile(b *Basin, f Ref, name string) []any {
+	source := f.item(3)
+	parts := path(name)
+	for i, p := range parts {
+		node := readySource(b, source)
+		if node == nil {
+			return nil
+		}
+		validateNode(*node, DirectoryPath)
+		entry, ready := lookupInline(b, node.get("6").item(2), []byte(p), 0, true)
+		if !ready || entry == nil {
+			return nil
+		}
+		folder := boolean(entry.item(0).owned(0))
+		if i == len(parts)-1 {
+			if folder {
+				return nil
+			}
+			return array(entry.owned(0))
+		}
+		if !folder {
+			return nil
+		}
+		source = entry.item(2)
+	}
+	return nil
+}
+func sectorSummary(footer Ref) any {
+	pages := footer.item(2)
+	if pages.typ == 9 {
+		return pages.get("6").item(1).owned(0)
+	}
+	return pages.item(6).get("1").owned(0)
 }
 func openBlock(b *Basin, root Edge, name string, shortcuts bool) (footer Ref, expected []byte, err error) {
 	defer protect(&err)
 	f := volumeData(b, root)
-	node := f.item(3).owned(0)
-	for _, p := range path(name) {
-		require(boolean(at(node, 0)), "not a directory")
-		node = field(at(node, 2), p)
-	}
-	file := array(node)
-	require(!boolean(file[0]), "not a file")
 	var edge Edge
 	if shortcuts {
-		candidate, e := tryWeak(b, file)
-		if e == nil {
-			edge = candidate
+		if file := readyFile(b, f, name); file != nil {
+			candidate, e := tryWeak(b, file)
+			if e == nil {
+				edge = candidate
+			}
 		}
 	}
 	if edge == nil {
-		r := getInline(b, f.item(2), []byte(name), 0)
-		require(r != nil, "missing retained block")
+		r := getInline(b, sourceRoot(b, f.item(2)), []byte(name), 0)
+		require(r != nil, "missing file")
 		edge = array(at(r.owned(0), 0))
 	}
 	block := b.load(edge)
 	validateNode(block, BlockPath)
 	footer = block.get("6")
-	require(footer.len() == 6 && integer(footer.item(0).owned(0)) == 0, "unsupported block migration")
-	require(bytes.Equal(pageRoot(b, footer).get("6").item(1).get("brombergSL2").bytes(), blob(file[1])), "block summary mismatch")
-	return footer, blob(file[1]), nil
+	require(footer.len() == 6, "unsupported block migration")
+	return footer, blob(field(sectorSummary(footer), "brombergSL2")), nil
 }
 func ReadFile(b *Basin, root Edge, name string, shortcuts bool) (data []byte, err error) {
 	defer protect(&err)
@@ -479,26 +699,18 @@ func shortcutPage(b *Basin, leaves Ref, page *big.Int, full []byte) (value any, 
 	}
 	var root Ref = leaves
 	if root.typ != 9 {
-		root = b.load(array(root.owned(0)))
+		cached := b.peek(array(root.owned(0)))
+		if cached == nil {
+			return nil, nil
+		}
+		root = *cached
 	}
 	h, _, _ := vectorParts(root, 0)
 	require(integer(field(h, "bits")) == 7, "invalid shortcut vector")
-	low, high := new(big.Int), new(big.Int).Set(bigint(field(h, "length")))
-	for low.Cmp(high) < 0 {
-		mid := new(big.Int).Rsh(new(big.Int).Add(low, high), 1)
-		record := getVectorInline(b, root, mid, 0)
-		require(record != nil, "shortcut vector hole")
-		if bigint(record.item(0).owned(0)).Cmp(page) <= 0 {
-			low.Add(mid, big.NewInt(1))
-		} else {
-			high.Set(mid)
-		}
-	}
-	if low.Sign() == 0 {
+	_, record, ready := findVectorLastInline(b, root, 0, func(v any) bool { return bigint(at(v, 0)).Cmp(page) <= 0 }, func(s any) bool { p := field(s, "pages"); return p != nil && bigint(at(p, 0)).Cmp(page) <= 0 }, true)
+	if !ready || record == nil {
 		return nil, nil
 	}
-	record := getVectorInline(b, root, new(big.Int).Sub(low, big.NewInt(1)), 0)
-	require(record != nil, "shortcut vector hole")
 	start := bigint(record.item(0).owned(0))
 	span := uint32Value(record.item(1).owned(0))
 	end := new(big.Int).Add(start, new(big.Int).SetUint64(uint64(span)))
@@ -540,19 +752,28 @@ func ReadPage(b *Basin, root Edge, name string, index *big.Int, shortcuts bool) 
 		return nil, false, e
 	}
 	full := []byte(lex(index))
+	pages := pageRoot(b, footer)
+	r, ready := lookupInline(b, pages, full, 0, true)
 	var value any
-	if shortcuts {
-		v, e := shortcutPage(b, footer.item(3), index, full)
-		if e == nil {
-			value = v
-		}
-	}
-	if value == nil {
-		r := getInline(b, pageRoot(b, footer), full, 0)
+	if ready {
 		if r == nil {
 			return nil, false, nil
 		}
 		value = r.owned(0)
+	} else {
+		if shortcuts {
+			fast, e := shortcutPage(b, footer.item(3), index, full)
+			if e == nil {
+				value = fast
+			}
+		}
+		if value == nil {
+			r := getInline(b, pages, full, 0)
+			if r == nil {
+				return nil, false, nil
+			}
+			value = r.owned(0)
+		}
 	}
 	require(len(array(value)) == 1, "invalid page")
 	return append([]byte{}, blob(at(value, 0))...), true, nil
@@ -593,17 +814,23 @@ func ReadRange(b *Basin, root Edge, name string, start uint64, length int, short
 	actual := len(data)
 	for page := new(big.Int).Set(first); page.Cmp(last) <= 0; page.Add(page, big.NewInt(1)) {
 		full := []byte(lex(page))
+		r, ready := lookupInline(b, pages, full, 0, true)
 		var value any
-		if shortcuts {
-			fast, e := shortcutPage(b, footer.item(3), page, full)
-			if e == nil {
-				value = fast
-			}
-		}
-		if value == nil {
-			r := getInline(b, pages, full, 0)
+		if ready {
 			require(r != nil, "missing page")
 			value = r.owned(0)
+		} else {
+			if shortcuts {
+				fast, e := shortcutPage(b, footer.item(3), page, full)
+				if e == nil {
+					value = fast
+				}
+			}
+			if value == nil {
+				r := getInline(b, pages, full, 0)
+				require(r != nil, "missing page")
+				value = r.owned(0)
+			}
 		}
 		values := array(value)
 		require(len(values) == 1, "invalid page")
@@ -667,8 +894,8 @@ func catalogue(b *Basin, root Edge) volumeCatalogue {
 			}
 		}
 	}
-	walk(f.item(3).owned(0), "")
-	visitInline(b, f.item(2), nil, nil, 0, func(any, any) bool { return true }, func(k []byte, r Ref) (bool, error) {
+	walk(materializeDirectory(b, f.item(3)), "")
+	visitInline(b, sourceRoot(b, f.item(2)), nil, nil, 0, func(any, any) bool { return true }, func(k []byte, r Ref) (bool, error) {
 		name := string(k)
 		sum, ok := sums[name]
 		require(ok, "device/directory mismatch")
@@ -779,35 +1006,22 @@ func RemoveVolume(b *Basin, root Edge, name string, recursive bool) (edge Edge, 
 
 func UpdateVolume(b *Basin, root Edge, changes []FileChange) (edge Edge, err error) {
 	defer protect(&err)
-	files := map[string][]byte{}
-	directories := []string{}
-	var walk func(string)
-	walk = func(dir string) {
-		for _, name := range checked(List(b, root, dir)) {
-			p := dir + "/" + name
-			if dir == "/" {
-				p = "/" + name
-			}
-			if _, e := List(b, root, p); e == nil {
-				directories = append(directories, p)
-				walk(p)
-			} else {
-				files[p] = checked(ReadFile(b, root, p, true))
-			}
-		}
-	}
-	walk("/")
-	for _, c := range changes {
-		path(c.Path)
-		if c.Delete {
-			delete(files, c.Path)
+	c := catalogue(b, root)
+	for _, change := range changes {
+		path(change.Path)
+		if change.Delete {
+			delete(c.files, change.Path)
 		} else {
-			files[c.Path] = c.Bytes
+			pages := []PageInput{}
+			for at := 0; at < len(change.Bytes); at += PageSize {
+				end := at + PageSize
+				if end > len(change.Bytes) {
+					end = len(change.Bytes)
+				}
+				pages = append(pages, PageInput{big.NewInt(int64(at / PageSize)), change.Bytes[at:end]})
+			}
+			c.files[change.Path] = checked(BuildBlock(b, pages))
 		}
 	}
-	input := make([]FileInput, 0, len(files))
-	for name, b := range files {
-		input = append(input, FileInput{name, b})
-	}
-	return BuildVolume(b, input, directories...)
+	return c.save(b), nil
 }

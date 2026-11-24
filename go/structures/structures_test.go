@@ -319,6 +319,10 @@ func TestVolumeFilesystemEditsRetainBlocksAndRehashDirectories(t *testing.T) {
 	saved := storage.Objects[key]
 	delete(storage.Objects, key)
 	b.ClearCache()
+	_, err = UpdateVolume(b, root, []FileChange{{Path: "/src2/file", Bytes: []byte("new")}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	moved, err := MoveVolume(b, root, "/src", "/out/moved", false)
 	if err != nil {
 		t.Fatal(err)

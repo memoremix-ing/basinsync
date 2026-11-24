@@ -1,3 +1,4 @@
+import { resolveOperation } from "./operation";
 import {
   Basin,
   Edge,
@@ -16,6 +17,9 @@ import {
   validateNode,
   edgeFrom,
   query,
+  distinct,
+  nodeView,
+  nodeBytes,
 } from "./core";
 import { TrieView } from "./trie-view";
 import {
@@ -33,6 +37,7 @@ import { encode as lex, decode as unlex } from "../lexidecimal";
 import * as sl2 from "./bromberg";
 export const VOLUME = ".sync-volume/",
   BLOCK = ".sync-block/",
+  DIRECTORY = ".sync-directory/",
   PAGE_SIZE = 4096;
 export type Directory = [true, Uint8Array, Record<string, Directory | File>];
 export type File = [false, Uint8Array, Link];
@@ -55,6 +60,27 @@ export const sectors: Consumer<[Uint8Array], SectorSummary> =
     },
     { keyIndependent: true },
   );
+export type LeafSummary = { pages: null | [bigint, bigint] };
+export const leafShortcuts = composableConsumer<
+  [bigint, number, Link],
+  LeafSummary
+>(
+  {
+    migration: 0,
+    empty: { pages: null },
+    entry: (_k, v) => ({ pages: [v[0], v[0] + BigInt(v[1]) - 1n] }),
+    combine: (s) => {
+      let lo: bigint | undefined, hi: bigint | undefined;
+      for (const { pages } of s)
+        if (pages) {
+          if (lo === undefined || pages[0] < lo) lo = pages[0];
+          if (hi === undefined || pages[1] > hi) hi = pages[1];
+        }
+      return { pages: lo === undefined ? null : [lo, hi!] };
+    },
+  },
+  { keyIndependent: true },
+);
 export const devices: Consumer<[Edge], null> = composableConsumer<[Edge], null>(
   {
     ...plain,
@@ -98,6 +124,118 @@ async function directory(
   });
   return [true, await sha384(concat(content)), entries];
 }
+type DirectorySource = Node | Edge;
+type StoredEntry = [true, Uint8Array, DirectorySource] | File;
+function directoryRefs(source: DirectorySource): Edge[] {
+  if (Array.isArray(source)) return [source];
+  if (source[3].degree === 0) return [];
+  const scanTrie = (node: Node): Edge[] => {
+    const values = (group: any) =>
+      group.values.flatMap((v: StoredEntry) =>
+        v[0] ? directoryRefs(v[2]) : [],
+      );
+    const refs = values(node[6][2]);
+    for (const m of (node[6][3] as any[] | null) ?? [])
+      if (m) {
+        if (Array.isArray(m)) {
+          for (const ch of m)
+            if (ch)
+              refs.push(...(Array.isArray(ch) ? [ch as Edge] : scanTrie(ch)));
+        } else refs.push(...values(m));
+      }
+    return distinct(refs);
+  };
+  return scanTrie(source[6][2] as Node);
+}
+const directoryEntries = composableConsumer<StoredEntry, null>(
+  { ...plain, edges: (v) => (v[0] ? directoryRefs(v[2]) : []) },
+  { keyIndependent: true },
+);
+async function buildDirectory(
+  basin: Basin,
+  tree: Directory,
+): Promise<{ node: Node; edges: Edge[] }> {
+  const children = new Map<string, { node: Node; edges: Edge[] }>();
+  for (const [name, value] of Object.entries(tree[2]))
+    if (value[0]) children.set(name, await buildDirectory(basin, value));
+  const nested = [...children.values()],
+    total =
+      Object.keys(tree[2]).length +
+      nested.reduce((n, c) => n + (c.node[5] as any).inlined, 0),
+    nesting = 1 + Math.max(0, ...nested.map((c) => (c.node[5] as any).nesting));
+  const cut =
+    total > 1280 ||
+    nesting > 32 ||
+    distinct(nested.flatMap((c) => c.edges)).length >
+      (basin.options.maxDegree ?? 320);
+  const entries: [Uint8Array, StoredEntry][] = [];
+  for (const [name, value] of Object.entries(tree[2])) {
+    if (!value[0]) entries.push([utf8(name), value]);
+    else {
+      const c = children.get(name)!;
+      entries.push([
+        utf8(name),
+        [true, value[1], cut ? await basin.seal(c.node, c.edges) : c.node],
+      ]);
+    }
+  }
+  const trie = await Trie.buildNode(basin, entries, directoryEntries);
+  const node = {
+    0: Symbol.species,
+    1: DOMAIN,
+    2: DIRECTORY,
+    3: trie.node[3],
+    4: 0,
+    5: {
+      sha384: tree[1],
+      inlined:
+        trie.node[5].inlined +
+        (cut ? 0 : nested.reduce((n, c) => n + (c.node[5] as any).inlined, 0)),
+      nesting: cut ? 1 : nesting,
+    },
+    6: [0, null, trie.node],
+  } as Node;
+  return { node, edges: trie.edges };
+}
+async function sourceRef(basin: Basin, source: Reference): Promise<Reference> {
+  return source.isMap() ? source : basin.load(edgeFrom(source));
+}
+async function directoryContents(basin: Basin, source: Reference) {
+  const r = await sourceRef(basin, source);
+  validateNode(r, DIRECTORY);
+  check(
+    r.get("6").length() === 3 && r.get("6").get(0).intValue() === 0,
+    "unsupported directory",
+  );
+  return r.get("6").get(2);
+}
+function trieSource(source: Reference): Reference | Edge {
+  return source.isMap() ? source : edgeFrom(source);
+}
+async function materializeDirectory(
+  basin: Basin,
+  source: Reference,
+): Promise<Directory> {
+  const r = await sourceRef(basin, source);
+  validateNode(r, DIRECTORY);
+  const entries: Record<string, Directory | File> = Object.create(null);
+  for await (const [name, v] of new Trie(
+    basin,
+    r.get("6").get(2),
+    directoryEntries,
+  ).entries()) {
+    const n = new TextDecoder("utf-8", { fatal: true }).decode(name);
+    if (v[0]) {
+      const childSource = v[2];
+      const childRef = Array.isArray(childSource)
+        ? await basin.load(childSource)
+        : nodeView(nodeBytes(childSource));
+      entries[n] = await materializeDirectory(basin, childRef);
+      check(equal(entries[n][1], v[1]), "directory digest mismatch");
+    } else entries[n] = v;
+  }
+  return [true, object<Uint8Array>(r.get("5").get("sha384")), entries];
+}
 export type BlockRoot = { edge: Edge; digest: Uint8Array };
 export async function buildBlock(
   basin: Basin,
@@ -140,7 +278,9 @@ export async function buildBlock(
   }
   await collect(t.node, new Uint8Array());
   leaves.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
-  const shortcuts = await Vector.buildNode(basin, leaves, plain, { bits: 7 });
+  const shortcuts = await Vector.buildNode(basin, leaves, leafShortcuts, {
+    bits: 7,
+  });
   const packed = await pack(basin, [t, shortcuts], 0, []);
   const { leading, lagging } = await vectorBoundaryLinks(
     basin,
@@ -204,16 +344,36 @@ async function sealVolume(
   device: { node: Node; edges: Edge[] },
   root: Directory,
 ): Promise<Volume> {
+  const dir = await buildDirectory(basin, root),
+    max = basin.options.maxDegree ?? 320;
+  let deviceSource: Node | Edge = device.node,
+    dirSource: Node | Edge = dir.node,
+    edges = distinct([...device.edges, ...dir.edges]);
+  if (
+    (device.node[5] as Header).inlined + (dir.node[5] as any).inlined > 1280 ||
+    edges.length > max
+  ) {
+    dirSource = await basin.seal(dir.node, dir.edges);
+    edges = distinct([...device.edges, dirSource]);
+    if ((device.node[5] as Header).inlined > 1280 || edges.length > max) {
+      deviceSource = await basin.seal(device.node, device.edges);
+      edges = distinct([deviceSource, dirSource]);
+    }
+  }
   const node = {
     0: Symbol.species,
     1: DOMAIN,
     2: VOLUME,
-    3: device.node[3],
+    3: query(
+      edges,
+      basin.options.maxDegree ?? 320,
+      basin.options.maxHeight ?? 128,
+    ),
     4: 0,
     5: null,
-    6: [0, null, device.node, root],
+    6: [0, null, deviceSource, dirSource],
   } as Node;
-  return new Volume(basin, await basin.seal(node, device.edges));
+  return new Volume(basin, await basin.seal(node, edges));
 }
 export class Volume {
   constructor(
@@ -311,75 +471,128 @@ export class Volume {
     );
     return r.get("6");
   }
-  async list(name = "/"): Promise<string[]> {
-    const root = object<Directory>((await this.data()).get(3));
-    let current: Directory | File = root;
-    if (name !== "/")
-      for (const part of path(name)) {
-        check(
-          current[0] && Object.hasOwn(current[2], part),
-          "missing directory",
-        );
-        current = current[2][part];
-      }
-    check(current[0], "not a directory");
-    return Object.keys(current[2]).sort((a, b) => compare(utf8(a), utf8(b)));
-  }
-  private async descriptor(
-    name: string,
-  ): Promise<{ file: File; device: Reference }> {
+  private async directoryEntry(name: string): Promise<{
+    entry: Reference;
+    directory: boolean;
+    device: Reference | Edge;
+  }> {
     const f = await this.data();
-    let node: Directory | File = object<Directory>(f.get(3));
-    for (const part of path(name)) {
-      check(node[0] && Object.hasOwn(node[2], part), "missing file");
-      node = node[2][part];
+    let source = f.get(3);
+    if (name === "/")
+      return { entry: source, directory: true, device: trieSource(f.get(2)) };
+    const parts = path(name);
+    for (let i = 0; i < parts.length; i++) {
+      const trie = new Trie(
+        this.basin,
+        await directoryContents(this.basin, source),
+        directoryEntries,
+      );
+      const ref = await trie.getView(utf8(parts[i]));
+      check(ref, "missing pathname");
+      const folder = ref.get(0).boolValue() === true;
+      if (i === parts.length - 1)
+        return {
+          entry: folder ? ref.get(2) : ref,
+          directory: folder,
+          device: trieSource(f.get(2)),
+        };
+      check(folder, "parent is not a directory");
+      source = ref.get(2);
     }
-    check(!node[0], "not a file");
-    return { file: node, device: f.get(2) };
+    throw Error("missing pathname");
+  }
+  async stat(
+    name = "/",
+  ): Promise<
+    | { kind: "directory"; sha384: Uint8Array }
+    | { kind: "file"; brombergSL2: Uint8Array; link: Link }
+  > {
+    const { entry, directory } = await this.directoryEntry(name);
+    if (directory) {
+      const h = entry.isMap() ? entry.get("5") : entry.get(5);
+      return { kind: "directory", sha384: object<Uint8Array>(h.get("sha384")) };
+    }
+    const f = object<File>(entry);
+    return { kind: "file", brombergSL2: f[1], link: f[2] };
+  }
+  async list(name = "/"): Promise<string[]> {
+    const { entry, directory } = await this.directoryEntry(name);
+    check(directory, "not a directory");
+    const names: string[] = [];
+    for await (const [k] of new Trie(
+      this.basin,
+      await directoryContents(this.basin, entry),
+      directoryEntries,
+    ).entries())
+      names.push(new TextDecoder("utf-8", { fatal: true }).decode(k));
+    return names;
+  }
+  private readyDescriptor(f: Reference, name: string): File | undefined {
+    let source = f.get(3);
+    const parts = path(name);
+    for (let i = 0; i < parts.length; i++) {
+      const node = source.isMap() ? source : this.basin.peek(edgeFrom(source));
+      if (!node) return;
+      validateNode(node, DIRECTORY);
+      const op = new Trie(
+        this.basin,
+        node.get("6").get(2),
+        directoryEntries,
+      ).getViewOrDefer(utf8(parts[i]));
+      if (typeof op === "function" || op === undefined) return;
+      const folder = op.get(0).boolValue() === true;
+      if (i === parts.length - 1) return folder ? undefined : object<File>(op);
+      if (!folder) return;
+      source = op.get(2);
+    }
   }
   private async openBlock(
     name: string,
     shortcuts: boolean,
   ): Promise<{ footer: Reference; file: File }> {
-    const { file, device } = await this.descriptor(name);
-    const strong = async () => {
-      const found = await new Trie(this.basin, device, devices).get(utf8(name));
-      check(found, "missing retained block");
-      return found[0];
-    };
-    let e: Edge | undefined;
-    if (shortcuts && this.basin.storage.resolve) {
+    const f = await this.data();
+    let edge: Edge | undefined, file: File | undefined;
+    const ready =
+      shortcuts && this.basin.storage.resolve
+        ? this.readyDescriptor(f, name)
+        : undefined;
+    if (ready)
       try {
-        const found = await this.basin.storage.resolve(file[2]);
-        if (found && capability(link(found)) === capability(file[2])) {
-          const block = await this.basin.load(found);
+        const candidate = await this.basin.storage.resolve!(ready[2]);
+        if (candidate && capability(link(candidate)) === capability(ready[2])) {
+          const block = await this.basin.load(candidate);
           validateNode(block, BLOCK);
-          const sum = object<SectorSummary>(
-            (await pageRoot(this.basin, block.get("6"))).get("6").get(1),
-          );
-          if (equal(sum.brombergSL2, file[1])) e = found;
+          const pages = block.get("6").get(2),
+            sum = pages.isMap() ? pages.get("6").get(1) : pages.get(6).get("1");
+          if (equal(object<SectorSummary>(sum).brombergSL2, ready[1])) {
+            edge = candidate;
+            file = ready;
+          }
         }
       } catch {
-        /* A shortcut is a cache; the strong path remains authoritative. */
+        /* weak metadata is only a hint */
       }
+    if (!edge) {
+      const found = await new Trie(
+        this.basin,
+        trieSource(f.get(2)),
+        devices,
+      ).get(utf8(name));
+      check(found, "missing file");
+      edge = found[0];
     }
-    if (!e) e = await strong();
-    const block = await this.basin.load(e);
+    const block = await this.basin.load(edge);
     validateNode(block, BLOCK);
     const footer = block.get("6");
     check(
       footer.length() === 6 && footer.get(0).intValue() === 0,
       "unsupported block migration",
     );
-    check(
-      equal(
-        object<SectorSummary>(
-          (await pageRoot(this.basin, footer)).get("6").get(1),
-        ).brombergSL2,
-        file[1],
-      ),
-      "block summary mismatch",
-    );
+    const pages = footer.get(2),
+      sum = object<SectorSummary>(
+        pages.isMap() ? pages.get("6").get(1) : pages.get(6).get("1"),
+      );
+    file ??= [false, sum.brombergSL2, link(edge)];
     return { footer, file };
   }
   async page(
@@ -391,7 +604,7 @@ export class Volume {
     const { footer } = await this.openBlock(name, shortcuts);
     const value = await new Trie<[Uint8Array], SectorSummary>(
       this.basin,
-      await pageRoot(this.basin, footer),
+      trieSource(footer.get(2)),
       sectors,
     ).get(utf8(lex(index)));
     if (value === undefined) return undefined;
@@ -408,7 +621,7 @@ export class Volume {
     );
     const pages = new Trie<[Uint8Array], SectorSummary>(
       this.basin,
-      await pageRoot(this.basin, footer),
+      trieSource(footer.get(2)),
       sectors,
     );
     if (options.length !== undefined) {
@@ -423,9 +636,8 @@ export class Volume {
         "invalid file range",
       );
       if (length === 0) return new Uint8Array();
-      const header = object<Header>(
-        (await pageRoot(this.basin, footer)).get("5"),
-      );
+      const root = footer.get(2);
+      const header = object<Header>(root.isMap() ? root.get("5") : root.get(5));
       if (!header.keys) return new Uint8Array();
       const highest = unlex(
         new TextDecoder("utf-8", { fatal: true }).decode(header.keys[1]),
@@ -445,35 +657,37 @@ export class Volume {
       let actual = out.length;
       const leavesRoot = footer.get(3);
       let leaves:
-        | Vector<[bigint, number, Link], null, Edge | Reference>
+        | Vector<[bigint, number, Link], LeafSummary, Edge | Reference>
         | undefined;
       for (let page = first; page <= boundedLast; page++) {
         const full = utf8(lex(page));
-        let value: [Uint8Array] | undefined;
-        if (options.shortcuts !== false && this.basin.storage.resolve) {
+        const direct = pages.getOrDefer(full);
+        let value: [Uint8Array] | undefined =
+          typeof direct === "function" ? undefined : direct;
+        if (
+          value === undefined &&
+          typeof direct === "function" &&
+          options.shortcuts !== false &&
+          this.basin.storage.resolve
+        ) {
           try {
             leaves ??= new Vector<
               [bigint, number, Link],
-              null,
+              LeafSummary,
               Edge | Reference
             >(
               this.basin,
               leavesRoot.isMap() ? leavesRoot : edgeFrom(leavesRoot),
-              plain,
+              leafShortcuts,
             );
             check(leaves.bits === 7, "invalid shortcut vector");
-            let lo = 0n,
-              hi = leaves.length;
-            while (lo < hi) {
-              const mid = (lo + hi) >> 1n,
-                record = await leaves.get(mid);
-              check(record, "shortcut vector hole");
-              if (record[0] <= page) lo = mid + 1n;
-              else hi = mid;
-            }
-            if (lo > 0n) {
-              const record = await leaves.get(lo - 1n);
-              check(record, "shortcut vector hole");
+            const shortcut = leaves.findLastOrDefer(
+              (v) => v[0] <= page,
+              (s) => s.pages !== null && s.pages[0] <= page,
+            );
+            const found = typeof shortcut === "function" ? undefined : shortcut;
+            if (found) {
+              const record = found[1];
               const [low, span] = record;
               if (page < low + BigInt(span)) {
                 try {
@@ -517,7 +731,7 @@ export class Volume {
             /* Shortcut-index misses also fall back to the retaining page trie. */
           }
         }
-        value ??= await pages.get(full);
+        value ??= await resolveOperation(direct);
         check(
           value &&
             value.length === 1 &&
@@ -596,7 +810,7 @@ export class Volume {
     const a = path(from),
       b = path(to),
       footer = await this.data();
-    let root = object<Directory>(footer.get(3));
+    let root = await materializeDirectory(this.basin, footer.get(3));
     const source = entryAt(root, a);
     if (from === to) {
       check(move, "cannot copy onto itself");
@@ -615,7 +829,9 @@ export class Volume {
         "destination directory is not empty",
       );
     }
-    const view = TrieView.from(new Trie(this.basin, footer.get(2), devices));
+    const view = TrieView.from(
+      new Trie(this.basin, trieSource(footer.get(2)), devices),
+    );
     let result = view;
     if (source[0]) {
       const prefix = utf8(from + "/"),
@@ -635,7 +851,7 @@ export class Volume {
   async rm(name: string, options: VolumeRemoveOptions = {}): Promise<Volume> {
     const parts = path(name),
       footer = await this.data();
-    const root = object<Directory>(footer.get(3)),
+    const root = await materializeDirectory(this.basin, footer.get(3)),
       source = entryAt(root, parts);
     check(
       !source[0] ||
@@ -643,7 +859,9 @@ export class Volume {
         Object.keys(source[2]).length === 0,
       "directory is not empty",
     );
-    const view = TrieView.from(new Trie(this.basin, footer.get(2), devices));
+    const view = TrieView.from(
+      new Trie(this.basin, trieSource(footer.get(2)), devices),
+    );
     const result = source[0]
       ? view.deletePrefix(utf8(name + "/"))
       : view.delete(utf8(name));
@@ -658,26 +876,43 @@ export class Volume {
   async update(
     changes: Iterable<[string, Uint8Array | null]>,
   ): Promise<Volume> {
-    const all = new Map<string, Uint8Array>();
-    const directories: string[] = [];
-    const visit = async (prefix: string) => {
-      for (const name of await this.list(prefix)) {
-        const p = prefix === "/" ? `/${name}` : `${prefix}/${name}`;
-        try {
-          await this.list(p);
-          directories.push(p);
-          await visit(p);
-        } catch {
-          all.set(p, await this.read(p));
-        }
+    const footer = await this.data(),
+      root = await materializeDirectory(this.basin, footer.get(3));
+    const sums = new Map<string, Uint8Array>(),
+      directories: string[] = [];
+    const walk = (dir: Directory, prefix: string) => {
+      for (const [name, value] of Object.entries(dir[2])) {
+        const path = prefix + "/" + name;
+        if (value[0]) {
+          directories.push(path);
+          walk(value, path);
+        } else sums.set(path, value[1]);
       }
     };
-    await visit("/");
+    walk(root, "");
+    const files = new Map<string, BlockRoot>();
+    for await (const [k, v] of new Trie(
+      this.basin,
+      trieSource(footer.get(2)),
+      devices,
+    ).entries()) {
+      const name = new TextDecoder("utf-8", { fatal: true }).decode(k),
+        digest = sums.get(name);
+      check(digest, "device/directory mismatch");
+      files.set(name, { edge: v[0], digest });
+      sums.delete(name);
+    }
+    check(sums.size === 0, "missing retained block");
     for (const [name, bytes] of changes) {
       path(name);
-      if (bytes === null) all.delete(name);
-      else all.set(name, bytes);
+      if (bytes === null) files.delete(name);
+      else {
+        const pages: [bigint, Uint8Array][] = [];
+        for (let i = 0; i < bytes.length; i += PAGE_SIZE)
+          pages.push([BigInt(i / PAGE_SIZE), bytes.slice(i, i + PAGE_SIZE)]);
+        files.set(name, await buildBlock(this.basin, pages));
+      }
     }
-    return Volume.build(this.basin, all, directories);
+    return Volume.fromBlocks(this.basin, files, directories);
   }
 }

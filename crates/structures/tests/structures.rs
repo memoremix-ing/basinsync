@@ -313,6 +313,11 @@ fn volume_filesystem_edits_retain_blocks_and_rehash_directory_paths() -> Result<
     let key = basin::capability(&block.edge)?;
     let saved = b.storage.objects.remove(&key).unwrap();
     b.clear_cache();
+    let _updated = volume::update(
+        &mut b,
+        &root,
+        vec![("/src2/file".into(), Some(b"new".to_vec()))],
+    )?;
     let moved = volume::move_path(&mut b, &root, "/src", "/out/moved", false)?;
     let copied = volume::copy_path(&mut b, &moved, "/out/moved", "/copy", false)?;
     let final_root = volume::remove_path(&mut b, &copied, "/out/moved", true)?;

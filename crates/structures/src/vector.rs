@@ -422,3 +422,100 @@ pub fn update<S: Storage, C: Consumer>(
         root(e, c.migration())?.field("bits")?.number()?,
     )
 }
+
+/// Summary-pruned reverse search; index and borrowed value of the last match.
+fn lookup_last_inline<S: Storage>(
+    b: &mut Basin<S>,
+    v: View,
+    migration: u32,
+    accept: &mut dyn FnMut(&Value) -> bool,
+    prune: &mut dyn FnMut(&Value) -> bool,
+    cached_only: bool,
+) -> Result<Option<Option<(BigInt, View)>>> {
+    fn walk<S: Storage>(
+        b: &mut Basin<S>,
+        v: View,
+        base: BigInt,
+        depth: usize,
+        migration: u32,
+        accept: &mut dyn FnMut(&Value) -> bool,
+        prune: &mut dyn FnMut(&Value) -> bool,
+        cached_only: bool,
+    ) -> Result<Option<Option<(BigInt, View)>>> {
+        ensure!(depth < 256, "vector nesting limit");
+        let (h, bitmap, slots) = parts(&v, migration)?;
+        if h.field("count")?.big()? == 0.into() || !prune(&v.field("6").item(1).owned()?) {
+            return Ok(Some(None));
+        }
+        let shift = h.field("shift")?.number()?;
+        let bits = h.field("bits")?.number()?;
+        for slot in (0..(1u32 << bits)).rev() {
+            if bitmap[slot as usize / 8] & (1 << (slot % 8)) == 0 {
+                continue;
+            }
+            let at = slots.item(rank(&bitmap, slot));
+            let index = &base + (BigInt::from(slot) << shift as usize);
+            if shift == 0 {
+                if accept(&at.owned()?) {
+                    return Ok(Some(Some((index, at))));
+                }
+            } else {
+                let child = if at.reader()?.flexbuffer_type() == flexbuffers::FlexBufferType::Map {
+                    at
+                } else {
+                    let e = at.owned()?;
+                    if !prune(e.at(6)?.field("1")?) {
+                        continue;
+                    }
+                    View::root(if cached_only {
+                        if let Some(bytes) = b.peek(&e)? {
+                            bytes
+                        } else {
+                            return Ok(None);
+                        }
+                    } else {
+                        b.load(&e)?
+                    })
+                };
+                let found = walk(
+                    b,
+                    child,
+                    index,
+                    depth + 1,
+                    migration,
+                    accept,
+                    prune,
+                    cached_only,
+                )?;
+                match found {
+                    None => return Ok(None),
+                    Some(Some(found)) => return Ok(Some(Some(found))),
+                    Some(None) => {}
+                }
+            }
+        }
+        Ok(Some(None))
+    }
+    walk(b, v, 0.into(), 0, migration, accept, prune, cached_only)
+}
+
+pub fn find_last_inline<S: Storage>(
+    b: &mut Basin<S>,
+    v: View,
+    migration: u32,
+    accept: &mut dyn FnMut(&Value) -> bool,
+    prune: &mut dyn FnMut(&Value) -> bool,
+) -> Result<Option<(BigInt, View)>> {
+    use anyhow::Context;
+    lookup_last_inline(b, v, migration, accept, prune, false)?
+        .context("unexpected deferred reverse search")
+}
+pub fn find_last_cached_inline<S: Storage>(
+    b: &mut Basin<S>,
+    v: View,
+    migration: u32,
+    accept: &mut dyn FnMut(&Value) -> bool,
+    prune: &mut dyn FnMut(&Value) -> bool,
+) -> Result<Option<Option<(BigInt, View)>>> {
+    lookup_last_inline(b, v, migration, accept, prune, true)
+}

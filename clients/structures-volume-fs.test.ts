@@ -5,6 +5,7 @@ import {
   object,
   utf8,
   type Edge,
+  edgeFrom,
 } from "./structures/core";
 import {
   Volume,
@@ -13,6 +14,8 @@ import {
   type Directory,
 } from "./structures/volume";
 import { Trie } from "./structures/trie";
+const trieSource = (r: import("./flexbuffer").Reference) =>
+  r.isMap() ? r : edgeFrom(r);
 const seed = new Uint8Array(32).fill(42);
 async function fixture() {
   const storage = new MemoryStorage(),
@@ -32,14 +35,13 @@ async function fixture() {
   ]);
   return { storage, b, blocks, one, two, v };
 }
-async function tree(v: Volume): Promise<Directory> {
-  return object<Directory>((await v.basin.load(v.root)).get("6").get(3));
-}
 async function device(v: Volume, name: string): Promise<Edge> {
   const node = await v.basin.load(v.root),
-    edge = await new Trie(v.basin, node.get("6").get(2), devices).get(
-      utf8(name),
-    );
+    edge = await new Trie(
+      v.basin,
+      trieSource(node.get("6").get(2)),
+      devices,
+    ).get(utf8(name));
   return edge![0];
 }
 
@@ -59,12 +61,14 @@ test("Volume mv/cp/rm coordinate hashes, empty directories and retained block id
   const moved = await v.mv("/src", "/out/moved");
   const copied = await moved.cp("/out/moved", "/clone");
   const removed = await copied.rm("/out/moved", { recursive: true });
-  const original = await tree(v),
-    result = await tree(removed);
-  expect((result[2].clone as Directory)[1]).toEqual(
-    (original[2].src as Directory)[1],
+  const original = await v.stat("/src"),
+    result = await removed.stat("/clone");
+  expect(original.kind).toBe("directory");
+  expect(result.kind).toBe("directory");
+  expect((result as any).sha384).toEqual((original as any).sha384);
+  expect(((await removed.stat("/")) as any).sha384).not.toEqual(
+    ((await v.stat("/")) as any).sha384,
   );
-  expect(result[1]).not.toEqual(original[1]);
   expect(await removed.list("/clone/empty")).toEqual([]);
   expect(await removed.list("/out")).toEqual([]);
   expect(await removed.list("/src2")).toEqual(["file"]);
@@ -82,7 +86,12 @@ test("Volume mv/cp/rm coordinate hashes, empty directories and retained block id
   );
   expect(removed.root[6].sha384).toEqual(canonical.root[6].sha384);
   expect(
-    fetched.every((p) => p === ".sync-volume/" || p === ".trie-node/"),
+    fetched.every(
+      (p) =>
+        p === ".sync-volume/" ||
+        p === ".trie-node/" ||
+        p === ".sync-directory/",
+    ),
   ).toBe(true);
   storage.get = get;
   const reload = new Volume(new Basin(storage, { seed }), removed.root);

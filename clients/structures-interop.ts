@@ -150,6 +150,25 @@ cases.push({
     { op: "mv", from: "/copied/empty", to: "/empty", replace: true },
   ],
 });
+cases.push({
+  kind: "volume",
+  seed,
+  files: Array.from({ length: 1500 }, (_, i) => [
+    "/wide/" + i.toString(16).padStart(8, "0"),
+    utf8("x"),
+  ]),
+});
+cases.push({
+  kind: "volume",
+  seed,
+  files: [
+    [
+      "/" + Array.from({ length: 40 }, (_, i) => "d" + i).join("/") + "/file",
+      utf8("deep"),
+    ],
+  ],
+  directories: ["/empty"],
+});
 mkdirSync(".local/trie-interop", { recursive: true });
 const writers = ["typescript", "rust", "go"],
   readers = [...writers];
