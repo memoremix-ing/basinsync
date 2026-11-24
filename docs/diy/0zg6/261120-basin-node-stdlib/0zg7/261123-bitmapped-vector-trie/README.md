@@ -31,7 +31,9 @@ order; consumer entry callbacks receive canonical unsigned big-endian index byte
 *basin edges*[~][strong-edge] for range and aggregate pruning.
 
 Pack children inline while `inlined <= 1280` and the physical degree fits; otherwise
-seal all immediate children. `shift` counts logical bit levels, independently of
+seal all immediate children. Multiple logical vector levels can therefore share
+one stored *basin node*[~][strong-edge], just as with the byte trie. A logical
+child does not necessarily require a GET. `shift` counts bit levels, independently of
 *basin-node height*[~][node-height]. A range includes its start and excludes its end.
 Stored updates, append and pop rebuild canonically, preserving `bits`. TypeScript also offers
 synchronous, path-copied logical editors, preserving earlier snapshots:

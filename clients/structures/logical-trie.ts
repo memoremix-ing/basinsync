@@ -216,9 +216,6 @@ function claim<V, T extends Tree<V>>(n: T, owner: Owner): T {
   ) as T;
 }
 function normalizedOwned<V>(n: Branch<V>, owner: Owner): Tree<V> {
-  n.count =
-    (n.own ? 1 : 0) + n.children.reduce((sum, [, c]) => sum + c.count, 0);
-  n.levels = 1 + Math.max(0, ...n.children.map(([, c]) => c.levels));
   check(
     Number.isSafeInteger(n.count),
     "logical trie size exceeds safe integer limit",
@@ -286,6 +283,7 @@ function editOwned<V>(
     if ((remove && !n.own) || (n.own && !remove && Object.is(n.own[0], value)))
       return n;
     const next = claim(n, owner);
+    next.count += remove ? -1 : next.own ? 0 : 1;
     next.own = remove ? undefined : [value as V];
     owner.writes++;
     return normalizedOwned(next, owner);
@@ -296,12 +294,22 @@ function editOwned<V>(
   if (!exists && remove) return n;
   const writes = owner.writes,
     prior = exists ? n.children[at][1] : leaf<V>([]),
+    priorCount = prior.count,
+    priorLevels = prior.levels,
     child = editOwned(prior, k, value, remove, owner, offset);
   if (owner.writes === writes) return n;
   const next = claim(n, owner),
     children = next.children as (readonly [number, Tree<V>])[];
   if (!child.count) children.splice(at, 1);
   else children.splice(at, exists ? 1 : 0, [byte, child]);
+  next.count += child.count - priorCount;
+  if (child.count && child.levels + 1 > next.levels)
+    next.levels = child.levels + 1;
+  else if (
+    (!child.count || child.levels < priorLevels) &&
+    priorLevels + 1 === next.levels
+  )
+    next.levels = 1 + Math.max(0, ...children.map(([, c]) => c.levels));
   return normalizedOwned(next, owner);
 }
 

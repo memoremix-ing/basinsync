@@ -22,6 +22,8 @@ Apply these when implementing or benchmarking this tutorial family:
   describe relative suffixes, not absolute paths. Check consumer callbacks for ancestor
   dependencies and preserve canonical packing at boundaries. Test pathname boundaries,
   destination collisions and moves into descendants.
+- Rotate transient ownership before snapshots/iterators escape or subtrees are
+  grafted; an owner tag alone does not prove a branch has only one parent.
 - Verify shared unchanged branches, old snapshots, owned versus borrowed data,
   canonical output and cross-language reads. Record request/byte counts as well as CPU.
 - Carry measured techniques across structures as candidates, then measure again;

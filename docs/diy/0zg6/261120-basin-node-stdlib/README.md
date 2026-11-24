@@ -139,3 +139,21 @@ Follow the *implementation and benchmark guidance*[~][AGENTS] when changing this
   can each widen representations. Keep optional expensive summaries consumer-defined.
 - For format-preserving optimizations, compare serialized bytes and cross-language
   reads, including uncached loads, snapshots, prefixes and packing boundaries.
+
+## Remaining work
+
+Prioritize selective canonical export, so path edits avoid scanning/repacking the
+whole structure. Consumer summaries that depend on full keys need an explicit
+reuse/recompute contract.
+
+Next, measure bounded directory nodes and page-range navigation for the
+*volume shortcuts*[~][diy/0zg6/261120-basin-node-stdlib/0zg7/261120-byte-trie].
+`Volume.update` still reads/rebuilds unchanged files; metadata-only filesystem
+operations already reuse their blocks.
+
+The *B-tree*[~][diy/0zg6/261120-basin-node-stdlib/0zg7/261123-b-tree]
+still needs measured lookup-plan/deferred-read and logical-editor work.
+Owner-tagged scopes and prefix editors are TypeScript-only; vector transients,
+Rust/Go editing parity and browser/Wasm CPU measurements remain candidates.
+Restart-from-root versus retained continuations under matching cache misses is
+also unmeasured. These are deferred experiments, not additional format requirements.

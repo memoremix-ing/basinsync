@@ -416,18 +416,22 @@ path-copy `updateIn` and prefix operations. Exceptions discard the recipe; sync
 recipes return an editor, async recipes a Promise. Inputs remain immutable;
 assigned values and escaped working copies cannot mutate the returned snapshot.
 Only draft mutations are used; recipe return values are ignored.
-Each flushed key update still copies its trie path, sharing untouched branches.
-An owner-tagged transient would reuse writable branches inside a scope, copying
-only on first write; that optimization is not implemented. Proxy drafts coalesce
-payload edits per key, independently of trie-branch ownership. Existing scopes
-already isolate concurrent recipes; owner-tagged mutation additionally needs a
-freeze/fork rule whenever branches escape or become shared. Returning a local
-snapshot does not publish it or resolve competing publications.
+Use `{ mutation: "owned" }` with either COW entrypoint to copy structural nodes on
+first write, then mutate privately owned nodes. Persistent path-copying remains
+the default. Concurrent recipes use different owner tokens. Snapshots, iterators
+and prefix splices rotate ownership before exposing shared structure; subsequent
+writes copy again. Structural write failures close the builder.
+
+`editor.mutate()` offers a structure-only builder with `snapshot`, `finish` and
+`abort`; payloads retain the editor's borrowed immutable contract. Use the COW
+entrypoints for payload ownership. Proxy drafts coalesce payload edits independently
+of structural mutation. Owners are local and do not change the stored format.
+Returning a snapshot does not publish it or resolve competing publications.
 
 ```js
 const next = produceTrie(edit, draft => {
   draft.updateIn("/file", ["meta", "mode"], () => 0o644);
-}, { keyEncoding: "utf8" });
+}, { keyEncoding: "utf8", mutation: "owned" });
 ```
 
 Use explicit path updates in the core; opt into `produceTrieProxy` for suitable
