@@ -256,7 +256,7 @@ func TestRevisionsPinAllocationsAndSharedHeapAddresses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected := "userspace/heap/old/n-0yvf/v.0zg0/t.0zh20/d_" + hex.EncodeToString(digest(token)) + "/" + text(field(first[6], "revision"))
+	expected := "userspace/heap/old/n-0yve/v.0zg0/t.0zh20/d_" + hex.EncodeToString(digest(token)) + "/" + text(field(first[6], "revision"))
 	if key != expected {
 		t.Fatal(key, expected)
 	}
@@ -360,5 +360,30 @@ func TestVolumeFilesystemEditsRetainBlocksAndRehashDirectories(t *testing.T) {
 	storage.Objects[key] = saved
 	if data, e := ReadFile(b, final, "/copy/file", true); e != nil || string(data) != "one" {
 		t.Fatal(string(data), e)
+	}
+}
+
+func TestStructuredHeightStartsAboveRawBlobs(t *testing.T) {
+	b := newTestBasin(t)
+	leaf, err := Build(b, rows(1), PlainConsumer())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if integer(field(leaf[3], "height")) != 1 {
+		t.Fatal("structured leaf height")
+	}
+	if integer(query([]Edge{leaf}, 320, 2)["height"]) != 2 {
+		t.Fatal("parent height")
+	}
+	for _, edges := range [][]Edge{nil, {leaf}} {
+		limit := len(edges)
+		func() {
+			defer func() {
+				if recover() == nil {
+					t.Error("height limit accepted")
+				}
+			}()
+			query(edges, 320, limit)
+		}()
 	}
 }

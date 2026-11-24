@@ -42,7 +42,7 @@ type Bounds<T> = null | [floor: T, ceiling: T];
 type SCHEMA_0 = 0;
 
 type Footers = {
-  [index: number]: [summary: unknown, ...data: Array<unknown>];
+  [migration: number]: [summary: unknown, ...data: Array<unknown>];
 };
 
 interface BasinNode_S0<
@@ -87,7 +87,7 @@ type BasinEdge_S0<
       : never;
   },
 > = [ // FlexBuffers vector; its footer is a map
-  protocol: typeof Symbol.match,
+  kind: typeof Symbol.match,
   domain: LazyT[1],
   path: LazyT[2],
   query: LazyT[3],
@@ -152,7 +152,7 @@ hashes still scan immediate entries; canonical B-tree rank shifts can repack
 siblings. *Export measurements*[~][selective-ordered] count requests separately
 from new objects. Native readers interoperate with these snapshots. Directory
 contents tries now directly retain file blocks; blocks have page-trie boundary
-spines, with no device trie or link vector.
+spines.
 
 Trie and vector editors offer explicit owner-tagged scopes. *Browser CPU
 measurements*[~][client-browser] cover logical structures; *Rust/Wasm measurements*[~][wasm-cpu]

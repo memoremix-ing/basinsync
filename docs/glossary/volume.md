@@ -4,6 +4,6 @@
 
 # Volume
 
-A versioned graph of directories and sparse page maps. Its device *trie*[~][trie]
-retains blocks through *strong edges*[~][strong-edge]; adjacent
-*weak links*[~][weak-link] provide direct navigation to blocks and leaves.
+A versioned graph of directories and sparse page maps. Directory contents
+*tries*[~][trie] retain file blocks through *strong edges*[~][strong-edge]; block
+boundary *weak links*[~][weak-link] expedite first/last page-trie reads.

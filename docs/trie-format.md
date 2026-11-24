@@ -1,4 +1,5 @@
 [bromberg-sl2]: <glossary/bromberg-sl2.md>
+[envbuf]: <glossary/envbuf.md>
 [lexidecimal]: <glossary/lexidecimal.md>
 [node-degree]: <glossary/node-degree.md>
 [node-format]: <node-format.md>
@@ -51,8 +52,8 @@ child directories and reset at stored edges. Enforce the 1280 budget per physica
 node, splitting even small name groups when nested cost requires it.
 
 Blocks carry page tries and leading/lagging *weak spines*[~][weak-link], indexed
-by stored height. Hints include incoming key prefixes, target digests and links.
-They bypass intermediate reads where available, with strong-path fallback for
+by stored height. Hints include incoming key prefixes, links and SHA-384 digests
+of complete target *EnvBufs*[~][envbuf]. They bypass intermediate reads where available, with strong-path fallback for
 unavailable or stale targets. Full file reads
 also check the composed checksum; partial reads check fetched object digests.
 A storage adapter supplies reads and optional shortcut resolution using these

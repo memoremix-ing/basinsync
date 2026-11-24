@@ -171,7 +171,7 @@ func directoryRefs(source any) []Edge {
 			refs := []Edge{}
 			for _, v := range array(field(g, "values")) {
 				if boolean(at(v, 0)) {
-					refs = append(refs, directoryRefs(field(at(v, 1), "contents"))...)
+					refs = append(refs, directoryRefs(at(v, 4))...)
 				} else {
 					refs = append(refs, array(at(v, 2)))
 				}
@@ -208,20 +208,20 @@ func directoryConsumer() Consumer {
 	c := PlainConsumer()
 	c.TrieInlineCost = func(v any) int {
 		if boolean(at(v, 0)) {
-			d := mapping(at(v, 1))
-			if _, edged := d["contents"].([]any); !edged {
-				return 1 + int(integer(d["inlined"]))
+			d := array(v)
+			if _, edged := d[4].([]any); !edged {
+				return 1 + int(integer(d[2]))
 			}
 		}
 		return 1
 	}
 	c.TrieExternalize = func(b *Basin, v any) any {
 		if boolean(at(v, 0)) {
-			d := mapping(at(v, 1))
-			if _, edged := d["contents"].([]any); !edged {
-				source := d["contents"]
+			d := array(v)
+			if _, edged := d[4].([]any); !edged {
+				source := d[4]
 				edge := b.seal(mapping(source), directoryRefs(source))
-				return vector(true, map[string]any{"sha384": d["sha384"], "inlined": d["inlined"], "nesting": d["nesting"], "contents": edge})
+				return vector(true, d[1], d[2], d[3], edge)
 			}
 		}
 		return v
@@ -229,7 +229,7 @@ func directoryConsumer() Consumer {
 
 	c.Edges = func(v any) ([]Edge, error) {
 		if boolean(at(v, 0)) {
-			return directoryRefs(field(at(v, 1), "contents")), nil
+			return directoryRefs(at(v, 4)), nil
 		}
 		return []Edge{array(at(v, 2))}, nil
 	}
@@ -237,7 +237,7 @@ func directoryConsumer() Consumer {
 }
 
 type directoryBuilt struct {
-	descriptor map[string]any
+	descriptor []any
 	edges      []Edge
 }
 
@@ -247,9 +247,9 @@ func directoryStats(node Node) (int, int) {
 	group := func(g any) {
 		for _, v := range array(field(g, "values")) {
 			if boolean(at(v, 0)) {
-				d := mapping(at(v, 1))
-				if _, edged := d["contents"].([]any); !edged {
-					h := 1 + int(integer(d["nesting"]))
+				d := array(v)
+				if _, edged := d[4].([]any); !edged {
+					h := 1 + int(integer(d[3]))
 					if h > depth {
 						depth = h
 					}
@@ -301,17 +301,17 @@ func buildDirectory(b *Basin, tree any) directoryBuilt {
 		stored := v
 		if ch, ok := children[name]; ok {
 			d := ch.descriptor
-			source := d["contents"]
-			if integer(d["inlined"]) >= 1280 || integer(d["nesting"]) >= 32 {
+			source := d[4]
+			if integer(d[2]) >= 1280 || integer(d[3]) >= 32 {
 				source = b.seal(mapping(source), ch.edges)
 			}
-			stored = vector(true, map[string]any{"sha384": d["sha384"], "inlined": d["inlined"], "nesting": d["nesting"], "contents": source})
+			stored = vector(true, d[1], d[2], d[3], source)
 		}
 		rows = append(rows, Entry{[]byte(name), stored})
 	}
 	t := checked(BuildNode(b, rows, directoryConsumer()))
 	inline, nesting := directoryStats(t.Node)
-	return directoryBuilt{descriptor: map[string]any{"sha384": at(tree, 1), "inlined": int64(inline), "nesting": int64(nesting), "contents": t.Node}, edges: t.Edges}
+	return directoryBuilt{descriptor: vector(true, at(tree, 1), int64(inline), int64(nesting), t.Node), edges: t.Edges}
 }
 func sourceRoot(b *Basin, source Ref) Ref {
 	if source.typ == 9 {
@@ -319,7 +319,7 @@ func sourceRoot(b *Basin, source Ref) Ref {
 	}
 	return b.load(array(source.owned(0)))
 }
-func directoryContents(b *Basin, source Ref) Ref { return sourceRoot(b, source.get("contents")) }
+func directoryContents(b *Basin, source Ref) Ref { return sourceRoot(b, source.item(4)) }
 func directoryEntry(b *Basin, root Edge, name string) (bool, Ref) {
 	f := volumeData(b, root)
 	source := f.item(2)
@@ -333,19 +333,16 @@ func directoryEntry(b *Basin, root Edge, name string) (bool, Ref) {
 		require(v != nil, "missing pathname")
 		folder := boolean(v.item(0).owned(0))
 		if i == len(parts)-1 {
-			if folder {
-				return true, v.item(1)
-			}
-			return false, *v
+			return folder, *v
 		}
 		require(folder, "parent is not a directory")
-		source = v.item(1)
+		source = *v
 	}
 	require(false, "missing pathname")
 	return false, Ref{}
 }
 func materializeDirectory(b *Basin, source Ref) any {
-	sum := source.get("sha384").owned(0)
+	sum := source.item(1).owned(0)
 	n := directoryContents(b, source)
 	type row struct {
 		name  string
@@ -357,8 +354,8 @@ func materializeDirectory(b *Basin, source Ref) any {
 	for _, r := range rows {
 		var v any
 		if boolean(r.value.item(0).owned(0)) {
-			v = materializeDirectory(b, r.value.item(1))
-			require(bytes.Equal(blob(at(v, 1)), r.value.item(1).get("sha384").bytes()), "directory digest mismatch")
+			v = materializeDirectory(b, r.value)
+			require(bytes.Equal(blob(at(v, 1)), r.value.item(1).bytes()), "directory digest mismatch")
 		} else {
 			v = r.value.owned(0)
 		}
@@ -534,9 +531,9 @@ func VolumeFromBlocks(b *Basin, blocks map[string]BlockRoot, directories ...stri
 	dir := buildDirectory(b, finish(tree))
 	descriptor := dir.descriptor
 	edges := dir.edges
-	if integer(descriptor["inlined"]) > 1280 || integer(descriptor["nesting"]) > 32 {
-		e := b.seal(mapping(descriptor["contents"]), dir.edges)
-		descriptor["contents"] = e
+	if integer(descriptor[2]) > 1280 || integer(descriptor[3]) > 32 {
+		e := b.seal(mapping(descriptor[4]), dir.edges)
+		descriptor[4] = e
 		edges = []Edge{e}
 	}
 	node := Node{"0": Symbol{Name: "species"}, "1": Domain, "2": VolumePath, "3": query(edges, b.MaxDegree, b.MaxHeight), "4": int64(0), "5": nil, "6": vector(int64(0), nil, descriptor)}

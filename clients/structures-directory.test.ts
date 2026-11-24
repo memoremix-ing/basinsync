@@ -189,8 +189,8 @@ test("nested directory costs stop at contents-trie edges and bound every stored 
         (sum: number, v: any) =>
           sum +
           1 +
-          (Array.isArray(v) && v[0] === true && !Array.isArray(v[1].contents)
-            ? count(v[1].contents)
+          (Array.isArray(v) && v[0] === true && !Array.isArray(v[4])
+            ? count(v[4])
             : 0),
         0,
       );

@@ -19,8 +19,10 @@ and *node-id*[~][node] version are independent. Readers reject unsupported tags;
 consumer migrations rebuild through the old reader and the new consumer.
 
 `breadth` sums direct degree and child breadth; like `weight`, it may count shared
-nested contributions repeatedly. *Height*[~][node-height] counts only storage
-boundaries. Writes supply the distinct outgoing *strong edges*[~][strong-edge]
+nested contributions repeatedly. *Height*[~][node-height] starts at one for an
+edge-free structured node and is one greater than the highest
+*strong-edge*[~][strong-edge] target; inline structure adds no height.
+Writes supply distinct outgoing *strong edges*[~][strong-edge]
 to storage; *weak links*[~][weak-link] do not retain targets. Both carry the
 node allocation's UUIDv4 *revision*[~][revision]. Storage returns that revision
 before the parent is encoded; readers derive the shared-heap *object key*[~][object-keys]

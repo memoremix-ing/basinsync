@@ -89,15 +89,15 @@ async function directory(
   return [true, await sha384(concat(content)), entries];
 }
 type DirectorySource = Node | Edge;
-type StoredDirectory = DirectoryHeader & { contents: DirectorySource };
-type StoredEntry = [true, StoredDirectory] | File;
+type StoredDirectory = [true, Uint8Array, number, number, DirectorySource];
+type StoredEntry = StoredDirectory | File;
 function directoryRefs(source: DirectorySource): Edge[] {
   if (Array.isArray(source)) return [source];
   if (source[3].degree === 0) return [];
   const scanTrie = (node: Node): Edge[] => {
     const values = (group: any) =>
       group.values.flatMap((v: StoredEntry) =>
-        v[0] ? directoryRefs(v[1].contents) : [v[2]],
+        v[0] ? directoryRefs(v[4]) : [v[2]],
       );
     const refs = values(node[6][2]);
     for (const m of (node[6][3] as any[] | null) ?? [])
@@ -115,21 +115,11 @@ function directoryRefs(source: DirectorySource): Edge[] {
 const directoryEntries = composableConsumer<StoredEntry, null>(
   {
     ...plain,
-    edges: (v) => (v[0] ? directoryRefs(v[1].contents) : [v[2]]),
-    trieInlineCost: (v) =>
-      1 + (v[0] && !Array.isArray(v[1].contents) ? v[1].inlined : 0),
+    edges: (v) => (v[0] ? directoryRefs(v[4]) : [v[2]]),
+    trieInlineCost: (v) => 1 + (v[0] && !Array.isArray(v[4]) ? v[2] : 0),
     trieExternalize: async (b, v) =>
-      v[0] && !Array.isArray(v[1].contents)
-        ? [
-            true,
-            {
-              ...v[1],
-              contents: await b.seal(
-                v[1].contents,
-                directoryRefs(v[1].contents),
-              ),
-            },
-          ]
+      v[0] && !Array.isArray(v[4])
+        ? [true, v[1], v[2], v[3], await b.seal(v[4], directoryRefs(v[4]))]
         : v,
   },
   { keyIndependent: true },
@@ -146,16 +136,20 @@ type DirectoryOrigin = {
 const directoryOrigins = new WeakMap<Directory, DirectoryOrigin>();
 const directoryPolicy = (b: Basin) => JSON.stringify(b.options);
 function directoryHandle(basin: Basin, source: Reference): Directory {
-  check(source.isMap(), "invalid directory descriptor");
   check(
-    source.get("inlined").intValue() !== null &&
-      source.get("nesting").intValue() !== null,
+    source.isVector() &&
+      source.length() === 5 &&
+      source.get(0).boolValue() === true,
+    "invalid directory descriptor",
+  );
+  check(
+    source.get(2).intValue() !== null && source.get(3).intValue() !== null,
     "invalid directory counters",
   );
   const h: DirectoryHeader = {
-    sha384: object<Uint8Array>(source.get("sha384")),
-    inlined: Number(source.get("inlined").intValue()),
-    nesting: Number(source.get("nesting").intValue()),
+    sha384: object<Uint8Array>(source.get(1)),
+    inlined: Number(source.get(2).intValue()),
+    nesting: Number(source.get(3).intValue()),
   };
   check(
     h.sha384.length === 48 &&
@@ -181,7 +175,7 @@ async function readDirectory(
   const origin = directoryOrigins.get(tree);
   if (!origin) return tree[2];
   return (origin.entries ??= (async () => {
-    const r = await sourceRef(origin.basin, origin.source.get("contents"));
+    const r = await sourceRef(origin.basin, origin.source.get(4));
     validateNode(r, TRIE);
     const entries: Record<string, Directory | File> = Object.create(null);
     for await (const [name, value] of new Trie(
@@ -192,13 +186,10 @@ async function readDirectory(
       const n = new TextDecoder("utf-8", { fatal: true }).decode(name);
       origin.raw.set(n, value);
       entries[n] = value[0]
-        ? directoryHandle(origin.basin, toReference(encode(value[1])))
+        ? directoryHandle(origin.basin, toReference(encode(value)))
         : value;
       if (value[0])
-        check(
-          equal(entries[n][1], value[1].sha384),
-          "directory digest mismatch",
-        );
+        check(equal(entries[n][1], value[1]), "directory digest mismatch");
     }
     return entries;
   })());
@@ -221,7 +212,7 @@ async function buildDirectory(
 ): Promise<DirectoryBuild> {
   const old = directoryOrigins.get(tree);
   if (old && old.policy === directoryPolicy(basin)) {
-    const contents = trieSource(old.source.get("contents"));
+    const contents = trieSource(old.source.get(4));
     if (Array.isArray(contents)) basin.peek(contents);
     const node = once(async () =>
       object<Node>(
@@ -257,27 +248,23 @@ async function buildDirectory(
           previous = ancestor
             ? (await readDirectory(ancestor))[name]
             : undefined;
-        if (
-          previous === value &&
-          raw?.[0] &&
-          Array.isArray(raw[1].contents) === cut
-        )
+        if (previous === value && raw?.[0] && Array.isArray(raw[4]) === cut)
           entries.push([utf8(name), raw]);
         else
           entries.push([
             utf8(name),
             [
               true,
-              {
-                ...child.h,
-                contents: cut ? await child.seal() : await child.node(),
-              },
+              child.h.sha384,
+              child.h.inlined,
+              child.h.nesting,
+              cut ? await child.seal() : await child.node(),
             ],
           ]);
       }
     }
     if (origin && origin.policy === directoryPolicy(basin)) {
-      const r = await sourceRef(basin, origin.source.get("contents"));
+      const r = await sourceRef(basin, origin.source.get(4));
       let view = TrieView.from(
         new Trie<StoredEntry, null>(basin, r, directoryEntries),
       );
@@ -306,14 +293,14 @@ async function sourceRef(basin: Basin, source: Reference): Promise<Reference> {
   return source.isMap() ? source : basin.load(edgeFrom(source));
 }
 async function directoryContents(basin: Basin, descriptor: Reference) {
-  return sourceRef(basin, descriptor.get("contents"));
+  return sourceRef(basin, descriptor.get(4));
 }
 function directoryStats(node: Node): { inlined: number; nesting: number } {
   let nesting = 1;
   const group = (g: any) => {
     for (const v of g.values as StoredEntry[])
-      if (v[0] && !Array.isArray(v[1].contents)) {
-        nesting = Math.max(nesting, 1 + v[1].nesting);
+      if (v[0] && !Array.isArray(v[4])) {
+        nesting = Math.max(nesting, 1 + v[3]);
       }
   };
   const walk = (n: Node) => {
@@ -450,7 +437,13 @@ async function sealVolume(basin: Basin, root: Directory): Promise<Volume> {
     edged = dir.h.inlined > 1280 || dir.h.nesting > 32,
     contents = edged ? await dir.seal() : await dir.node(),
     edges = edged ? [contents as Edge] : await dir.edges();
-  const descriptor = { ...dir.h, contents };
+  const descriptor: StoredDirectory = [
+    true,
+    dir.h.sha384,
+    dir.h.inlined,
+    dir.h.nesting,
+    contents,
+  ];
   const node = {
     0: Symbol.species,
     1: DOMAIN,
@@ -573,10 +566,9 @@ export class Volume {
         ref = await trie.getView(utf8(parts[i]));
       check(ref, "missing pathname");
       const folder = ref.get(0).boolValue() === true;
-      if (i === parts.length - 1)
-        return { entry: folder ? ref.get(1) : ref, directory: folder };
+      if (i === parts.length - 1) return { entry: ref, directory: folder };
       check(folder, "parent is not a directory");
-      source = ref.get(1);
+      source = ref;
     }
     throw Error("missing pathname");
   }
@@ -590,7 +582,7 @@ export class Volume {
     if (directory)
       return {
         kind: "directory",
-        sha384: object<Uint8Array>(entry.get("sha384")),
+        sha384: object<Uint8Array>(entry.get(1)),
       };
     const f = object<File>(entry);
     return { kind: "file", brombergSL2: f[1], edge: f[2] };

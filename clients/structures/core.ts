@@ -11,7 +11,7 @@ export type Node = BasinNode_S0<
   string,
   string,
   unknown,
-  { [index: number]: [unknown, ...unknown[]] }
+  { [migration: number]: [unknown, ...unknown[]] }
 >;
 export type Edge = BasinEdge_S0<Node>;
 /** Storage allocates a revision before this descriptor can become a stored edge. */
@@ -234,7 +234,7 @@ export function validateEdge(e: Edge): void {
   );
 }
 export const emptyQuery = (): BasinQuery_S0 => ({
-  height: 0,
+  height: 1,
   degree: 0,
   breadth: 0n,
   rotations: null,
@@ -271,7 +271,10 @@ export function query(
 ): BasinQuery_S0 {
   const all = distinct(edges);
   check(all.length <= maxDegree, "basin degree limit");
-  if (!all.length) return emptyQuery();
+  if (!all.length) {
+    check(maxHeight >= 1, "basin height limit");
+    return emptyQuery();
+  }
   const q: BasinQuery_S0 = {
     height: 1 + Math.max(...all.map((e) => e[3].height)),
     degree: all.length,

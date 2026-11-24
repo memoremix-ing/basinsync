@@ -167,7 +167,7 @@ fn directory_refs(source: &Value) -> Result<Vec<Edge>> {
             let mut out = vec![];
             for v in g.field("values")?.array()? {
                 if v.at(0)?.boolean()? {
-                    out.extend(directory_refs(v.at(1)?.field("contents")?)?);
+                    out.extend(directory_refs(v.at(4)?)?);
                 } else {
                     out.push(v.at(2)?.clone());
                 }
@@ -203,28 +203,23 @@ struct DirectoryEntries;
 impl Consumer for DirectoryEntries {
     fn trie_inline_cost(&self) -> Option<fn(&Value) -> Result<usize>> {
         Some(|v| {
-            Ok(
-                1 + if v.at(0)?.boolean()? && matches!(v.at(1)?.field("contents")?, Map(_)) {
-                    v.at(1)?.field("inlined")?.number()? as usize
-                } else {
-                    0
-                },
-            )
+            Ok(1 + if v.at(0)?.boolean()? && matches!(v.at(4)?, Map(_)) {
+                v.at(2)?.number()? as usize
+            } else {
+                0
+            })
         })
     }
     fn trie_externalize<S: Storage>(&self, b: &mut Basin<S>, v: &Value) -> Result<Value> {
-        if v.at(0)?.boolean()? && matches!(v.at(1)?.field("contents")?, Map(_)) {
-            let d = v.at(1)?;
-            let contents = d.field("contents")?;
+        if v.at(0)?.boolean()? && matches!(v.at(4)?, Map(_)) {
+            let contents = v.at(4)?;
             let edge = b.seal(contents.clone(), &directory_refs(contents)?)?;
             Ok(Array(vec![
                 Bool(true),
-                Value::map([
-                    ("sha384", d.field("sha384")?.clone()),
-                    ("inlined", d.field("inlined")?.clone()),
-                    ("nesting", d.field("nesting")?.clone()),
-                    ("contents", edge),
-                ]),
+                v.at(1)?.clone(),
+                v.at(2)?.clone(),
+                v.at(3)?.clone(),
+                edge,
             ]))
         } else {
             Ok(v.clone())
@@ -241,7 +236,7 @@ impl Consumer for DirectoryEntries {
     }
     fn edges(&self, v: &Value) -> Result<Vec<Edge>> {
         if v.at(0)?.boolean()? {
-            directory_refs(v.at(1)?.field("contents")?)
+            directory_refs(v.at(4)?)
         } else {
             Ok(vec![v.at(2)?.clone()])
         }
@@ -256,9 +251,8 @@ fn directory_stats(n: &Value) -> Result<(usize, usize)> {
         let mut depth = 0;
         for v in g.field("values")?.array()? {
             if v.at(0)?.boolean()? {
-                let d = v.at(1)?;
-                if matches!(d.field("contents")?, Map(_)) {
-                    depth = depth.max(d.field("nesting")?.number()? as usize);
+                if matches!(v.at(4)?, Map(_)) {
+                    depth = depth.max(v.at(3)?.number()? as usize);
                 }
             }
         }
@@ -302,8 +296,8 @@ fn build_directory<S: Storage>(b: &mut Basin<S>, tree: &Value) -> Result<Directo
     for (name, v) in entries {
         let stored = if let Some(child) = children.get(name) {
             let d = &child.descriptor;
-            let contents = d.field("contents")?;
-            let cut = d.field("inlined")?.number()? >= 1280 || d.field("nesting")?.number()? >= 32;
+            let contents = d.at(4)?;
+            let cut = d.at(2)?.number()? >= 1280 || d.at(3)?.number()? >= 32;
             let source = if cut {
                 b.seal(contents.clone(), &child.edges)?
             } else {
@@ -311,12 +305,10 @@ fn build_directory<S: Storage>(b: &mut Basin<S>, tree: &Value) -> Result<Directo
             };
             Array(vec![
                 Bool(true),
-                Value::map([
-                    ("sha384", d.field("sha384")?.clone()),
-                    ("inlined", d.field("inlined")?.clone()),
-                    ("nesting", d.field("nesting")?.clone()),
-                    ("contents", source),
-                ]),
+                d.at(1)?.clone(),
+                d.at(2)?.clone(),
+                d.at(3)?.clone(),
+                source,
             ])
         } else {
             v.clone()
@@ -326,11 +318,12 @@ fn build_directory<S: Storage>(b: &mut Basin<S>, tree: &Value) -> Result<Directo
     let t = trie::build_node(b, rows, &DirectoryEntries)?;
     let (inline, nesting) = directory_stats(&t.node)?;
     Ok(DirectoryBuilt {
-        descriptor: Value::map([
-            ("sha384", tree.at(1)?.clone()),
-            ("inlined", inline.into()),
-            ("nesting", nesting.into()),
-            ("contents", t.node),
+        descriptor: Array(vec![
+            Bool(true),
+            tree.at(1)?.clone(),
+            inline.into(),
+            nesting.into(),
+            t.node,
         ]),
         edges: t.edges,
     })
@@ -343,7 +336,7 @@ fn source_root<S: Storage>(b: &mut Basin<S>, source: View) -> Result<View> {
     }
 }
 fn directory_contents<S: Storage>(b: &mut Basin<S>, source: View) -> Result<View> {
-    source_root(b, source.field("contents"))
+    source_root(b, source.item(4))
 }
 fn directory_entry<S: Storage>(b: &mut Basin<S>, root: &Edge, name: &str) -> Result<(bool, View)> {
     let f = data(b, root)?;
@@ -358,15 +351,15 @@ fn directory_entry<S: Storage>(b: &mut Basin<S>, root: &Edge, name: &str) -> Res
             trie::get_inline(b, contents, p.as_bytes().to_vec(), 0)?.context("missing pathname")?;
         let folder = entry.item(0).owned()?.boolean()?;
         if i == parts.len() - 1 {
-            return Ok((folder, if folder { entry.item(1) } else { entry }));
+            return Ok((folder, entry));
         }
         ensure!(folder, "parent is not a directory");
-        source = entry.item(1);
+        source = entry;
     }
     anyhow::bail!("missing pathname")
 }
 fn materialize_directory<S: Storage>(b: &mut Basin<S>, source: View) -> Result<Value> {
-    let digest = source.field("sha384").owned()?;
+    let digest = source.item(1).owned()?;
     let node = directory_contents(b, source)?;
     let mut rows = vec![];
     trie::visit_inline(b, node, &[], &[], 0, &mut |_, _| true, &mut |k, v| {
@@ -376,9 +369,9 @@ fn materialize_directory<S: Storage>(b: &mut Basin<S>, source: View) -> Result<V
     let mut entries = BTreeMap::new();
     for (name, v) in rows {
         let entry = if v.item(0).owned()?.boolean()? {
-            let child = materialize_directory(b, v.item(1))?;
+            let child = materialize_directory(b, v.clone())?;
             ensure!(
-                child.at(1)? == &v.item(1).field("sha384").owned()?,
+                child.at(1)? == &v.item(1).owned()?,
                 "directory digest mismatch"
             );
             child
@@ -559,12 +552,11 @@ pub fn from_blocks<S: Storage>(
     let root = finish(tree)?;
     let directory = build_directory(basin, &root)?;
     let mut descriptor = directory.descriptor;
-    let edged = descriptor.field("inlined")?.number()? > 1280
-        || descriptor.field("nesting")?.number()? > 32;
+    let edged = descriptor.at(2)?.number()? > 1280 || descriptor.at(3)?.number()? > 32;
     let edges = if edged {
-        let e = basin.seal(descriptor.field("contents")?.clone(), &directory.edges)?;
-        if let Map(ref mut m) = descriptor {
-            m.insert("contents".into(), e.clone());
+        let e = basin.seal(descriptor.at(4)?.clone(), &directory.edges)?;
+        if let Array(ref mut parts) = descriptor {
+            parts[4] = e.clone();
         }
         vec![e]
     } else {

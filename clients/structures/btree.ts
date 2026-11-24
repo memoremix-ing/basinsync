@@ -25,7 +25,7 @@ import { BTreeMap } from "./logical-btree";
 export { BTreeMap } from "./logical-btree";
 export const BTREE = ".btree-node/";
 export type BTreeHeader = import("./types").BTreeNode_S0<{
-  [index: number]: { Summary: unknown; Value: unknown };
+  [migration: number]: { Summary: unknown; Value: unknown };
 }>[5];
 function checkedHeader(h: BTreeHeader): BTreeHeader {
   check(typeof h.count === "bigint" && h.count >= 0n, "invalid B-tree header");

@@ -128,13 +128,14 @@ func distinct(edges []Edge) []Edge {
 	return out
 }
 func emptyQuery() map[string]any {
-	return map[string]any{"height": int64(0), "degree": int64(0), "breadth": new(big.Int), "rotations": nil, "versions": nil, "schemas": nil, "migrations": nil}
+	return map[string]any{"height": int64(1), "degree": int64(0), "breadth": new(big.Int), "rotations": nil, "versions": nil, "schemas": nil, "migrations": nil}
 }
 func query(edges []Edge, maxDegree, maxHeight int) map[string]any {
 	refs := distinct(edges)
 	require(len(refs) <= maxDegree, "basin degree limit")
 	q := emptyQuery()
 	if len(refs) == 0 {
+		require(maxHeight >= 1, "basin height limit")
 		return q
 	}
 	height := int64(0)

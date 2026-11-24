@@ -138,10 +138,14 @@ test("breadth counts shared nested paths; capacities, versions and entropy are c
       } as Node,
       [leaf.root],
     );
+  expect(leaf.root[3].height).toBe(1);
+  expect(query([]).height).toBe(1);
+  expect(() => query([], 320, 0)).toThrow("height limit");
+  expect(() => query([leaf.root], 320, 1)).toThrow("height limit");
   const q = query([left, right]);
   expect(q.degree).toBe(2);
   expect(q.breadth).toBe(4n);
-  expect(q.height).toBe(2);
+  expect(q.height).toBe(3);
   const k = await derive(leaf.root);
   expect(k.token.length).toBe(32);
   expect(k.secret).not.toEqual(k.token);
@@ -277,7 +281,7 @@ test("allocation revisions pin strong edges, shortcuts, storage identities and o
   expect(link(first.root).revision).toBe(first.root[6].revision);
   const token = (await derive(first.root)).token;
   expect(await nodeKey(link(first.root), "old")).toBe(
-    `userspace/heap/old/n-0yvf/v.0zg0/t.0zh20/d_${hex(await sha384(token))}/${first.root[6].revision}`,
+    `userspace/heap/old/n-0yve/v.0zg0/t.0zh20/d_${hex(await sha384(token))}/${first.root[6].revision}`,
   );
   storage.objects.delete(capability(link(first.root)));
   const second = await Trie.build(basin, [["ab", 1n]], plain);
@@ -409,7 +413,7 @@ test("stable buckets preserve canonical value-edge packing", async () => {
   const b = await Trie.build(basin, input.toReversed(), consumer);
   expect(a.root[6].sha384).toEqual(b.root[6].sha384);
   expect(storage.objects.size).toBe(count);
-  expect(a.root[3].height).toBe(2);
+  expect(a.root[3].height).toBe(3);
   for (const node of storage.objects.values())
     expect(node.edges.length).toBeLessThanOrEqual(320);
   for (const i of [0, 1, 254, 255, 256, 511])

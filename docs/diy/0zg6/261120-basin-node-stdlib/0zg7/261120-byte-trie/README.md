@@ -6,7 +6,6 @@ prerequisites:
 
 [access-token]: <../../../../../glossary/access-token.md>
 [basin]: <../../../../../glossary/basin.md>
-[block-index]: <benchmark/block-index.md>
 [client-costs]: <benchmark/client-costs.md>
 [directory-descriptors]: <benchmark/directory-descriptors.md>
 [diy/0zg6/261120-basin-node-stdlib]: <../../README.md>
@@ -48,7 +47,7 @@ The *parent*[~][diy/0zg6/261120-basin-node-stdlib] defines the common node/edge 
 ```ts
 interface TrieNode_S0<
   MigrationsT extends {
-    [index: number]: { Summary: unknown; Value: unknown };
+    [migration: number]: { Summary: unknown; Value: unknown };
   },
 > extends BasinNode_S0<
   "sync.memoremix.com",
@@ -80,7 +79,7 @@ interface TrieGroup<ValueT> {
 
 type TrieNest<
   MigrationsT extends {
-    [index: number]: { Summary: unknown; Value: unknown };
+    [migration: number]: { Summary: unknown; Value: unknown };
   },
   IndexT extends U32 & keyof MigrationsT,
 > =
@@ -120,24 +119,17 @@ interface SyncVolume_S0 extends BasinNode_S0<
   { 0: [summary: null, root: SyncDirectory_M0] }
 > {}
 
-type SyncDirectory_M0 = {
-  sha384: Uint8Array;
-  inlined: U32;
-  nesting: U32;
-  contents: SyncDirectoryContents_M0 | SyncDirectoryContentsEdge_M0;
-};
+type SyncDirectory_M0 = [
+  folder: true,
+  sha384: Uint8Array,
+  inlined: U32,
+  nesting: U32,
+  contents: SyncDirectoryContents_M0 | BasinEdge_S0<SyncDirectoryContents_M0>,
+];
 
 type SyncDirectoryContents_M0 = TrieNode_S0<{
-  0: { Summary: null; Value: SyncDirectoryEntry_M0 };
+  0: { Summary: null; Value: SyncDirectory_M0 | SyncFile_M0 };
 }>;
-
-type SyncDirectoryContentsEdge_M0 = BasinEdge_S0<BasinNode_S0<
-  "sync.memoremix.com", ".trie-node/", SyncDirectoryContents_M0[5], {0:[summary:null]}
->>;
-
-type SyncDirectoryEntry_M0 = SyncFile_M0 | [
-  folder: true, directory: SyncDirectory_M0
-];
 
 type SyncFile_M0 = [
   folder: false,
@@ -172,7 +164,7 @@ interface SyncBlock_M0 extends BasinNode_S0<
 
 type SyncPageLink_M0 = {
   prefix: Uint8Array; // absolute key prefix removed before traversing the target
-  sha384: Uint8Array;
+  sha384: Uint8Array; // SHA-384 of the complete target basin-node EnvBuf
   link: SyncLink_M0<SyncSector_M0>;
 };
 
@@ -213,7 +205,7 @@ Its selected footer is `[migration, emptySummary, { keys: [], values: [] }, null
 Each consumer migration defines its canonical `emptySummary`; it is not
 necessarily `null`.
 
-The root's *basin query*[~][node] has *height*[~][node-height] and
+An edge-free root's *basin query*[~][node] has *height*[~][node-height] one,
 *degree*[~][node-degree] zero, `breadth = 0n`, and all four descendant bounds
 (`rotations`, `versions`, `schemas`, `migrations`) null. Those descendant bounds
 are also null on a nonempty node with no *basin edges*[~][strong-edge]; they
@@ -228,7 +220,7 @@ For migration 0 with a null empty summary, the root in
   "1": "sync.memoremix.com",
   "2": ".trie-node/",
   "3": {
-    "height": 0,
+    "height": 1,
     "degree": 0,
     "breadth": "0x0",
     "rotations": null,
@@ -251,7 +243,7 @@ For migration 0 with a null empty summary, the root in
 ```
 
 An empty-byte key with a null value is a nonempty trie: `count = nullity = 1n`,
-key and reverse-key bounds each contain two empty byte strings, and length bounds
+key bounds contain two empty byte strings, and length bounds
 are `[0, 0]`. Its group contains one empty suffix and one null value.
 
 ## Strong retention and weak shortcuts
@@ -271,14 +263,14 @@ Their address may still carry the target's *height*[~][node-height].
 Each block's `leading` and `lagging` spines point to stored, non-root page-trie
 nodes on its first/last paths, indexed by *basin-node height*[~][node-height];
 missing heights are null. Each *weak hint*[~][weak-link] carries the incoming key
-prefix, target SHA-384 and allocation link. Validate identity and digest, remove
-the prefix, and check target bounds before reading. Missing/stale hints fall back
-to strong traversal; ready page reads need no shortcut lookup.
+prefix, allocation link, and SHA-384 of the target's complete stored *EnvBuf*[~][envbuf].
+The digest pins resolver-provided descriptors to the trusted block; verify it
+against fetched bytes. Remove the prefix and check target bounds before reading.
+Missing/stale hints fall back to strong traversal; ready page reads need no shortcut lookup.
 
-A directory is a descriptor whose UTF-8 basename contents trie may be inline or
-an *edge*[~][strong-edge]. This removes a separate wrapper-node species and gives
-the same trie responsibility for packing, search and retention. Directory hashes
-retain basename/kind/child-digest framing. File entries carry strong block edges.
+A directory is a `true`-tagged tuple whose UTF-8 basename contents trie may be
+inline or an *edge*[~][strong-edge]. That trie handles packing, search and retention.
+Directory hashes retain basename/kind/child-digest framing. File entries carry strong block edges.
 
 Budget inline directory contents against 1,280 entries and nesting 32. Count along
 inline trie/directory paths; a stored contents-trie edge ends that inline path.
@@ -290,7 +282,7 @@ would exceed the degree limit. Mirror the inline count in the descriptor. These
 physical rewrites preserve the entry's logical digest and consumer summary.
 Seal child contents when nesting, size or physical degree requires it. The
 basename trie independently pages wide directories. `stat` reads metadata and
-`list` scans the requested contents trie. There is no separate device index.
+`list` scans the requested contents trie.
 
 Before choosing a shortcut layout, measure first-useful-result latency, fetched
 bytes, request count, and update churn against ordinary trie traversal. Keep
@@ -481,18 +473,17 @@ The *page-spine traces*[~][page-spines] exercise the current retention graph and
 boundary paths. Prefer measured object-fetch paths over logical
 branching-factor comparisons.
 
-Pruning
-and partial reads remain selective. Readers bound nesting to 256 trie levels;
-default object/full-file limits are 64 MiB, with a 16 MiB/128-object read cache.
+Pruning and partial reads remain selective. Current readers cap trie nesting at
+256 levels to bound malformed-input recursion; compressed prefixes
+consume many key bytes at once, and each directory has its own basename trie.
+This is not a volume-wide entry count or pathname-length limit.
 
-```sh
-cargo test -p basinsync-structures
-cargo check -p basinsync-structures --target wasm32-unknown-unknown
-cargo build -p basinsync-structures --example fixture
-(cd go/structures && go test ./... && go build -o ../../.local/structures-go ./cmd/fixture)
-bun run test:structures:interop
-bun clients/structures-integration.ts
-```
+The configurable 64 MiB byte budget limits one stored object and one materialized
+file read (or requested range), not a volume or its total file sizes. Larger files
+can be read page-by-page or in bounded ranges. The configurable 16 MiB cache holds
+at most 128 objects; eviction causes refetching, not data loss, and an object larger
+than that budget is read without being retained. Physical *height*[~][node-height]
+and *degree*[~][node-degree] limits apply independently.
 
 Compare the three libraries using the *CPU and storage read measurements*[~][trie-performance].
 
@@ -502,8 +493,7 @@ Trie groups cap at 255 entries. Small high-nibble groups can remain inline after
 larger children are sealed, so 1,280 is not a strict object-wide bound for ordinary
 byte tries. Directory contents use the weighted, per-body limit above.
 
-The historical *block-index traces*[~][block-index] motivated removing the leaf
-vector. Page boundary spines now target the authoritative page trie directly.
+Page boundary spines target the authoritative page trie directly.
 The *selective export measurements*[~][selective-ordered] separate directory and
 ancestor work from unchanged bodies; earlier measurements used the prior layout.
 Current *descriptor export measurements*[~][directory-descriptors] include the

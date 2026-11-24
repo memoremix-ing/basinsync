@@ -77,13 +77,18 @@ test("page spines skip stored levels near a boundary and authenticate their targ
     ).page("/file", 65536n),
   ).toEqual(pages[0][1]);
 });
-test("directory file edges are the complete retention graph without a device index", async () => {
+test("directory tuples retain file blocks through contents tries", async () => {
   const storage = new MemoryStorage(),
     b = new Basin(storage, { seed }),
     block = await buildBlock(b, [[0n, utf8("x")]]),
     volume = await Volume.fromBlocks(b, [["/d/file", block]], ["/empty"]),
     node = object<Node>(await b.load(volume.root));
   expect(node[6].length).toBe(3);
+  const directory = node[6][2] as unknown[];
+  expect(Array.isArray(directory)).toBe(true);
+  expect(directory.length).toBe(5);
+  expect(directory[0]).toBe(true);
+  expect(directory[1]).toBeInstanceOf(Uint8Array);
   const reachable = new Set<string>();
   const visit = (e: typeof block.edge) => {
     const id = capability(link(e));

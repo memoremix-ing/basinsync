@@ -160,8 +160,8 @@ test("blocks retain page tries with only leading and lagging page spines", async
   const r = await b.load(block.edge),
     f = r.get("6");
   expect(f.length()).toBe(5);
-  expect(object<unknown[]>(f.get(3))).toEqual([]);
-  expect(object<unknown[]>(f.get(4))).toEqual([]);
+  expect(object<unknown[]>(f.get(3))).toEqual([null]);
+  expect(object<unknown[]>(f.get(4))).toEqual([null]);
   const v = await Volume.fromBlocks(b, [["/file", block]]);
   expect(await v.page("/file", 4n)).toEqual(utf8("later"));
   expect(await v.page("/file", 3n)).toBeUndefined();

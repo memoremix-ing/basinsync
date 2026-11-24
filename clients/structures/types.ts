@@ -6,7 +6,7 @@ export type Bounds<T> = null | [floor: T, ceiling: T];
 export type SCHEMA_0 = 0;
 
 export type Footers = {
-  [index: number]: [summary: unknown, ...data: Array<unknown>];
+  [migration: number]: [summary: unknown, ...data: Array<unknown>];
 };
 
 export interface BasinNode_S0<
@@ -51,7 +51,7 @@ export type BasinEdge_S0<
       : never;
   },
 > = [ // FlexBuffers vector; its footer is a map
-  protocol: typeof Symbol.match,
+  kind: typeof Symbol.match,
   domain: LazyT[1],
   path: LazyT[2],
   query: LazyT[3],
@@ -78,7 +78,7 @@ export type BasinEdge_S0<
 
 export interface TrieNode_S0<
   MigrationsT extends {
-    [index: number]: { Summary: unknown; Value: unknown };
+    [migration: number]: { Summary: unknown; Value: unknown };
   },
 > extends BasinNode_S0<
   "sync.memoremix.com",
@@ -110,7 +110,7 @@ export interface TrieGroup<ValueT> {
 
 export type TrieNest<
   MigrationsT extends {
-    [index: number]: { Summary: unknown; Value: unknown };
+    [migration: number]: { Summary: unknown; Value: unknown };
   },
   IndexT extends U32 & keyof MigrationsT,
 > =
@@ -145,24 +145,17 @@ interface SyncVolume_S0 extends BasinNode_S0<
   { 0: [summary: null, root: SyncDirectory_M0] }
 > {}
 
-type SyncDirectory_M0 = {
-  sha384: Uint8Array;
-  inlined: U32;
-  nesting: U32;
-  contents: SyncDirectoryContents_M0 | SyncDirectoryContentsEdge_M0;
-};
+type SyncDirectory_M0 = [
+  folder: true,
+  sha384: Uint8Array,
+  inlined: U32,
+  nesting: U32,
+  contents: SyncDirectoryContents_M0 | BasinEdge_S0<SyncDirectoryContents_M0>,
+];
 
 type SyncDirectoryContents_M0 = TrieNode_S0<{
-  0: { Summary: null; Value: SyncDirectoryEntry_M0 };
+  0: { Summary: null; Value: SyncDirectory_M0 | SyncFile_M0 };
 }>;
-
-type SyncDirectoryContentsEdge_M0 = BasinEdge_S0<BasinNode_S0<
-  "sync.memoremix.com", ".trie-node/", SyncDirectoryContents_M0[5], {0:[summary:null]}
->>;
-
-type SyncDirectoryEntry_M0 = SyncFile_M0 | [
-  folder: true, directory: SyncDirectory_M0
-];
 
 type SyncFile_M0 = [
   folder: false,
@@ -192,7 +185,7 @@ interface SyncBlock_M0 extends BasinNode_S0<
 
 type SyncPageLink_M0 = {
   prefix: Uint8Array; // absolute key prefix removed before traversing the target
-  sha384: Uint8Array;
+  sha384: Uint8Array; // SHA-384 of the complete target basin-node EnvBuf
   link: SyncLink_M0<SyncSector_M0>;
 };
 
@@ -207,7 +200,7 @@ export type SyncSector_M0 = TrieNode_S0<{
 }>;
 
 export interface VectorNode_S0<
-  MigrationsT extends { [index: number]: { Summary: unknown; Value: unknown } },
+  MigrationsT extends { [migration: number]: { Summary: unknown; Value: unknown } },
 > extends BasinNode_S0<
     "sync.memoremix.com",
     ".vector-node/",
@@ -227,7 +220,7 @@ export interface VectorNode_S0<
 
 // Spell out the edge summary to avoid expanding the recursive node footer.
 export type VectorEdge_S0<
-  MigrationsT extends { [index: number]: { Summary: unknown; Value: unknown } },
+  MigrationsT extends { [migration: number]: { Summary: unknown; Value: unknown } },
 > = BasinEdge_S0<
   BasinNode_S0<
     "sync.memoremix.com",
@@ -240,7 +233,7 @@ export type VectorEdge_S0<
 >;
 
 export interface BTreeNode_S0<
-  MigrationsT extends { [index: number]: { Summary: unknown; Value: unknown } },
+  MigrationsT extends { [migration: number]: { Summary: unknown; Value: unknown } },
 > extends BasinNode_S0<
     "sync.memoremix.com",
     ".btree-node/",
@@ -258,7 +251,7 @@ export interface BTreeNode_S0<
   > {}
 
 interface BPlusNode_S0<
-  MigrationsT extends { [index: number]: { Summary: unknown; Value: unknown } },
+  MigrationsT extends { [migration: number]: { Summary: unknown; Value: unknown } },
 > extends BasinNode_S0<
   "sync.memoremix.com", ".bplus-node/",
   {
@@ -278,14 +271,14 @@ interface BPlusNode_S0<
 > {}
 
 type BPlusEdge_S0<
-  MigrationsT extends { [index: number]: { Summary: unknown; Value: unknown } },
+  MigrationsT extends { [migration: number]: { Summary: unknown; Value: unknown } },
 > = BasinEdge_S0<BasinNode_S0<
   "sync.memoremix.com", ".bplus-node/", BPlusNode_S0<MigrationsT>[5],
   { [I in U32 & keyof MigrationsT]: [summary: MigrationsT[I]["Summary"]] }
 >>;
 
 type BPlusHint_S0<
-  MigrationsT extends { [index: number]: { Summary: unknown; Value: unknown } },
+  MigrationsT extends { [migration: number]: { Summary: unknown; Value: unknown } },
 > = {
   keys: [Uint8Array, Uint8Array];
   link: SyncLink_M0<BPlusNode_S0<MigrationsT>>;

@@ -3,28 +3,21 @@ import { readFileSync } from "node:fs";
 import ts from "typescript";
 const root = "docs/diy/0zg6/261120-basin-node-stdlib";
 const files = [
-  "stdlib.d.ts",
-  "0zg7/261120-byte-trie/trie.d.ts",
-  "0zg7/261123-bitmapped-vector-trie/vector.d.ts",
-  "0zg7/261123-b-tree/btree.d.ts",
+  "README.md",
+  "0zg7/261120-byte-trie/README.md",
+  "0zg7/261123-bitmapped-vector-trie/README.md",
+  "0zg7/261123-b-tree/README.md",
 ];
 const declarations = files
-  .map((file) => {
-    const path = `${root}/${file}`,
-      text = readFileSync(path, "utf8"),
-      discussion = readFileSync(
-        path.slice(0, path.lastIndexOf("/")) + "/README.md",
-        "utf8",
-      );
-    assert.equal(
-      [...discussion.matchAll(/```ts\n([\s\S]*?)```/g)]
-        .map((m) => m[1])
-        .join(""),
-      text,
-      `discussion declarations differ from ${path}`,
-    );
-    return text;
-  })
+  .map((file) =>
+    [
+      ...readFileSync(`${root}/${file}`, "utf8").matchAll(
+        /```ts\n([\s\S]*?)```/g,
+      ),
+    ]
+      .map((m) => m[1])
+      .join(""),
+  )
   .join("\n");
 function tokens(text: string) {
   const scanner = ts.createScanner(

@@ -96,6 +96,9 @@ fn canonical_collapse_and_empty_null_key() -> Result<()> {
 fn approximate_breadth_and_validation() -> Result<()> {
     let mut b = basin();
     let leaf = trie::build(&mut b, rows(1), &Plain)?;
+    assert_eq!(leaf.at(3)?.field("height")?.number()?, 1);
+    assert!(basin::query(&[], 320, 0).is_err());
+    assert!(basin::query(std::slice::from_ref(&leaf), 320, 1).is_err());
     let node = |path: &str| {
         Value::map([
             ("0", Symbol("species".into())),
@@ -220,7 +223,7 @@ fn revisions_pin_allocations_and_shared_heap_addresses() -> Result<()> {
     assert_eq!(
         basin::node_key(&pointer, "old")?,
         format!(
-            "userspace/heap/old/n-0yvf/v.0zg0/t.0zh20/d_{}/{}",
+            "userspace/heap/old/n-0yve/v.0zg0/t.0zh20/d_{}/{}",
             basin::hex(&basin::sha384(&token)),
             pointer.field("revision")?.text()?
         )

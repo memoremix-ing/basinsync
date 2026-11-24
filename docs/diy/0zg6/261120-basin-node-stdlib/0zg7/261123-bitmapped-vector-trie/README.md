@@ -42,7 +42,7 @@ synchronous, path-copied logical editors, preserving earlier snapshots:
 
 ```ts
 interface VectorNode_S0<
-  MigrationsT extends { [index: number]: { Summary: unknown; Value: unknown } },
+  MigrationsT extends { [migration: number]: { Summary: unknown; Value: unknown } },
 > extends BasinNode_S0<
     "sync.memoremix.com",
     ".vector-node/",
@@ -62,7 +62,7 @@ interface VectorNode_S0<
 
 // Spell out the edge summary to avoid expanding the recursive node footer.
 type VectorEdge_S0<
-  MigrationsT extends { [index: number]: { Summary: unknown; Value: unknown } },
+  MigrationsT extends { [migration: number]: { Summary: unknown; Value: unknown } },
 > = BasinEdge_S0<
   BasinNode_S0<
     "sync.memoremix.com",

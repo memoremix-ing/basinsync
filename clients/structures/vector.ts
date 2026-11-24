@@ -36,7 +36,7 @@ import { type Consumer } from "./trie";
 import { pack, built, type Built } from "./packed";
 export const VECTOR = ".vector-node/";
 export type VectorHeader = import("./types").VectorNode_S0<{
-  [index: number]: { Summary: unknown; Value: unknown };
+  [migration: number]: { Summary: unknown; Value: unknown };
 }>[5];
 const index = (n: bigint) => {
   check(typeof n === "bigint" && n >= 0n, "invalid vector index");

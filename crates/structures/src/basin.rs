@@ -202,7 +202,7 @@ pub fn distinct(edges: &[Edge]) -> Result<Vec<Edge>> {
 }
 pub fn empty_query() -> Value {
     Value::map([
-        ("height", 0u32.into()),
+        ("height", 1u32.into()),
         ("degree", 0u32.into()),
         ("breadth", Big(0.into())),
         ("rotations", Null),
@@ -215,6 +215,7 @@ pub fn query(edges: &[Edge], max_degree: usize, max_height: u32) -> Result<Value
     let edges = distinct(edges)?;
     ensure!(edges.len() <= max_degree, "basin degree limit");
     if edges.is_empty() {
+        ensure!(max_height >= 1, "basin height limit");
         return Ok(empty_query());
     }
     let height = edges
