@@ -20,6 +20,7 @@ prerequisites:
 [node-degree]: <../../../../../glossary/node-degree.md>
 [node-height]: <../../../../../glossary/node-height.md>
 [object-keys]: <../../../../../object-keys.md>
+[owner-mutation]: <benchmark/owner-mutation.md>
 [promoted-costs]: <benchmark/promoted-costs.md>
 [revision]: <../../../../../glossary/revision.md>
 [shortcut-reads]: <benchmark/shortcut-reads.md>
@@ -427,6 +428,7 @@ writes copy again. Structural write failures close the builder.
 entrypoints for payload ownership. Proxy drafts coalesce payload edits independently
 of structural mutation. Owners are local and do not change the stored format.
 Returning a snapshot does not publish it or resolve competing publications.
+See the *ownership measurements*[~][owner-mutation] for isolated costs and batch-size effects.
 
 ```js
 const next = produceTrie(edit, draft => {

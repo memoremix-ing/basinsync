@@ -1,0 +1,12 @@
+{
+  "runner": "T3 html_preview browser",
+  "bundle_sha384": "94927ae5b12e632a355a6f307e6a92d1ed961a10195a8127910417164d124b21b41bc24a8b87e8b8a714e101bb532e8d",
+  "checks": {
+    "frozen_proxy_values": true,
+    "snapshot_isolation": true,
+    "revocation": true,
+    "concurrent_async_scopes": true,
+    "canonical_store_and_read": true
+  },
+  "cpu_benchmark": false
+}

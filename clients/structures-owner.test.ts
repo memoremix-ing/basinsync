@@ -283,3 +283,41 @@ test("concurrent async owned scopes keep writes private through await, success a
   expect(c.get(utf8("file"))!.n).toBe(2);
   expect(base.get(utf8("file"))!.n).toBe(0);
 });
+
+test("incremental counts/heights survive deep prefix-key deletion and canonical collapse", () => {
+  function audit(n: any): { count: number; levels: number } {
+    if (n.kind === 0) {
+      expect(n.count).toBe(n.rows.length);
+      expect(n.levels).toBe(1);
+      expect(n.rows.length).toBeLessThanOrEqual(255);
+      return { count: n.rows.length, levels: 1 };
+    }
+    const children = n.children.map(([, c]: any) => audit(c));
+    const count =
+        (n.own ? 1 : 0) +
+        children.reduce((s: number, c: any) => s + c.count, 0),
+      levels = 1 + Math.max(0, ...children.map((c: any) => c.levels));
+    expect(n.count).toBe(count);
+    expect(n.levels).toBe(levels);
+    expect(count).toBeGreaterThan(255);
+    return { count, levels };
+  }
+  const base = TrieMap.from(
+    Array.from({ length: 500 }, (_, i) => ["00".repeat(i), i] as const),
+  );
+  const d = base.mutate();
+  d.set("00".repeat(500), 500);
+  const held = d.snapshot();
+  expect(audit((held as any).tree).levels).toBeGreaterThan(200);
+  for (let i = 0; i < 490; i++) d.delete("00".repeat(i));
+  const final = d.finish();
+  expect(audit((final as any).tree)).toEqual({ count: 11, levels: 1 });
+  expect(audit((base as any).tree).count).toBe(500);
+  expect(held.size).toBe(501);
+  const failed = base.mutate();
+  expect(() => {
+    for (let i = 500; i < 530; i++) failed.set("00".repeat(i), i);
+  }).toThrow("nesting");
+  expect(() => failed.finish()).toThrow("closed");
+  expect(base.size).toBe(500);
+});

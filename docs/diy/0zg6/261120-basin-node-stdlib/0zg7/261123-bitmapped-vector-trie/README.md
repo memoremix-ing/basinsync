@@ -7,6 +7,7 @@ prerequisites:
 [comparison]: <benchmark/comparison.md>
 [diy/0zg6/261120-basin-node-stdlib]: <../../README.md>
 [incremental-edits]: <benchmark/incremental-edits.md>
+[node]: <../../../../../glossary/node.md>
 [node-height]: <../../../../../glossary/node-height.md>
 [strong-edge]: <../../../../../glossary/strong-edge.md>
 
@@ -32,7 +33,7 @@ order; consumer entry callbacks receive canonical unsigned big-endian index byte
 
 Pack children inline while `inlined <= 1280` and the physical degree fits; otherwise
 seal all immediate children. Multiple logical vector levels can therefore share
-one stored *basin node*[~][strong-edge], just as with the byte trie. A logical
+one stored *basin node*[~][node], just as with the byte trie. A logical
 child does not necessarily require a GET. `shift` counts bit levels, independently of
 *basin-node height*[~][node-height]. A range includes its start and excludes its end.
 Stored updates, append and pop rebuild canonically, preserving `bits`. TypeScript also offers

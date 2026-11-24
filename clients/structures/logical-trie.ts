@@ -101,20 +101,9 @@ function branch<V>(
 ): Tree<V> {
   const count = (own ? 1 : 0) + children.reduce((s, [, c]) => s + c.count, 0),
     levels = 1 + Math.max(0, ...children.map(([, c]) => c.levels));
-  check(
-    Number.isSafeInteger(count),
-    "logical trie size exceeds safe integer limit",
-  );
-  const n: Branch<V> = { kind: 1, prefix, own, children, count, levels };
-  if (count <= CAP) return leaf([...rows(n)]);
-  if (!own && children.length === 1)
-    return prepend(
-      concat([prefix, new Uint8Array([children[0][0]])]),
-      children[0][1],
-    );
-  check(levels <= 256, "trie nesting limit");
-  return n;
+  return normalized({ kind: 1, prefix, own, children, count, levels });
 }
+
 function find<V>(
   root: Tree<V>,
   k: Uint8Array,
@@ -178,7 +167,11 @@ function edit<V>(
   if (offset === k.length) {
     if ((remove && !n.own) || (n.own && !remove && Object.is(n.own[0], value)))
       return n;
-    return branch(n.prefix, remove ? undefined : [value as V], n.children);
+    return normalized({
+      ...n,
+      own: remove ? undefined : [value as V],
+      count: n.count + (remove ? -1 : n.own ? 0 : 1),
+    });
   }
   const byte = k[offset++],
     at = lower(n.children, ([b]) => b - byte),
@@ -190,7 +183,17 @@ function edit<V>(
   const children = n.children.slice();
   if (!child.count) children.splice(at, 1);
   else children.splice(at, exists ? 1 : 0, [byte, child]);
-  return branch(n.prefix, n.own, children);
+  return normalized({
+    ...n,
+    children,
+    count: n.count + child.count - prior.count,
+    levels: levelsAfter(
+      n.levels,
+      prior.levels,
+      child.count ? child.levels : 0,
+      children,
+    ),
+  });
 }
 /** Instrument separately from timings; counts structural claims/reuses, not payload copies. */
 export type TrieMutationMetrics = {
@@ -215,14 +218,27 @@ function claim<V, T extends Tree<V>>(n: T, owner: Owner): T {
       : { ...n, owner: owner.token, children: n.children.slice() }
   ) as T;
 }
-function normalizedOwned<V>(n: Branch<V>, owner: Owner): Tree<V> {
+function levelsAfter<V>(
+  levels: number,
+  prior: number,
+  child: number,
+  children: readonly (readonly [number, Tree<V>])[],
+) {
+  if (child + 1 > levels) return child + 1;
+  return child < prior && prior + 1 === levels
+    ? 1 + Math.max(0, ...children.map(([, c]) => c.levels))
+    : levels;
+}
+function normalized<V>(n: Branch<V>, owner?: Owner): Tree<V> {
   check(
     Number.isSafeInteger(n.count),
     "logical trie size exceeds safe integer limit",
   );
   if (n.count <= CAP) {
-    if (owner.metrics) owner.metrics.rebuildEntries += n.count;
-    return { ...leaf([...rows(n)]), owner: owner.token };
+    if (owner?.metrics) owner.metrics.rebuildEntries += n.count;
+    return owner
+      ? { ...leaf([...rows(n)]), owner: owner.token }
+      : leaf([...rows(n)]);
   }
   if (!n.own && n.children.length === 1)
     return prepend(
@@ -286,7 +302,7 @@ function editOwned<V>(
     next.count += remove ? -1 : next.own ? 0 : 1;
     next.own = remove ? undefined : [value as V];
     owner.writes++;
-    return normalizedOwned(next, owner);
+    return normalized(next, owner);
   }
   const byte = k[offset++],
     at = lower(n.children, ([b]) => b - byte),
@@ -303,14 +319,13 @@ function editOwned<V>(
   if (!child.count) children.splice(at, 1);
   else children.splice(at, exists ? 1 : 0, [byte, child]);
   next.count += child.count - priorCount;
-  if (child.count && child.levels + 1 > next.levels)
-    next.levels = child.levels + 1;
-  else if (
-    (!child.count || child.levels < priorLevels) &&
-    priorLevels + 1 === next.levels
-  )
-    next.levels = 1 + Math.max(0, ...children.map(([, c]) => c.levels));
-  return normalizedOwned(next, owner);
+  next.levels = levelsAfter(
+    next.levels,
+    priorLevels,
+    child.count ? child.levels : 0,
+    children,
+  );
+  return normalized(next, owner);
 }
 
 /** Return a relative selected subtree and the original-coordinate remainder. */
