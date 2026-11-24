@@ -1,3 +1,4 @@
+import { sourceAt } from "./historical-source";
 /** Compare checked-in TypeScript implementations, keeping fixture/API work identical. */
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -33,13 +34,13 @@ const layouts = (Bun.env.TRIE_RELEASE_LAYOUTS ?? "random,lexidecimal").split(
   ",",
 );
 const files = [
-  "clients/structures/core.ts",
-  "clients/structures/trie.ts",
-  "clients/structures/types.ts",
-  "clients/structures/operation.ts",
-  "clients/flexbuffer.ts",
-  "clients/lexidecimal.ts",
-  "clients/symbols.ts",
+  "tests/clients/structures/core.ts",
+  "tests/clients/structures/trie.ts",
+  "tests/clients/structures/types.ts",
+  "tests/clients/structures/operation.ts",
+  "tests/clients/flexbuffer.ts",
+  "tests/clients/lexidecimal.ts",
+  "tests/clients/symbols.ts",
 ];
 const versions = ["baseline", "optimized"];
 const hashes: Record<string, Record<string, string>> = {};
@@ -48,12 +49,12 @@ for (const version of versions) {
   hashes[version] = {};
   for (const file of [
     ...files,
-    "clients/trie-cost-worker.ts",
-    "clients/trie-benchmark-worker.ts",
+    "tests/clients/trie-cost-worker.ts",
+    "tests/clients/trie-benchmark-worker.ts",
   ]) {
     let source: string;
     if (version === "baseline" && files.includes(file)) {
-      const p = Bun.spawnSync(["jj", "file", "show", "-r", baseRef, file]);
+      const p = sourceAt(baseRef, file);
       assert.equal(p.exitCode, 0, p.stderr.toString());
       source = p.stdout.toString();
     } else source = readFileSync(file, "utf8");
@@ -77,7 +78,7 @@ for (const layout of layouts) {
             ? "trie-cost-worker"
             : "trie-benchmark-worker";
         const p = Bun.spawn(
-          ["bun", `${root}/${version}/clients/${worker}.ts`],
+          ["bun", `${root}/${version}/tests/clients/${worker}.ts`],
           {
             stdin: "pipe",
             stdout: "pipe",

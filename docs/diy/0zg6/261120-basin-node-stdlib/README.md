@@ -18,6 +18,7 @@ prerequisites:
 [selective-ordered]: <benchmark/selective-ordered.md>
 [stdlib.d]: <stdlib.d.ts>
 [strong-edge]: <../../../glossary/strong-edge.md>
+[test-suite-audit]: <benchmark/test-suite-audit.md>
 [wasm-cpu]: <benchmark/wasm-cpu.md>
 
 # Basin node standard library
@@ -86,3 +87,6 @@ compares an experimental B+tree with independent branch/leaf budgets.
 Rust/Go logical-editor parity, native B+ readers and byte-aware physical packing
 remain candidates. Owner-tagged scopes and prefix editors remain TypeScript-only.
 These are deferred experiments, not additional format requirements.
+
+The *test audit*[~][test-suite-audit] records independent models, shared fixtures
+and mutation checks alongside retained regressions.

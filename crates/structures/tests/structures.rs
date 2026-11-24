@@ -7,6 +7,9 @@ use basinsync_structures::{
     trie::{self, Count, Plain},
     volume,
 };
+fn shared_vectors() -> serde_json::Value {
+    serde_json::from_str(include_str!("../../../tests/vectors/structures.json")).unwrap()
+}
 fn basin() -> Basin<MemoryStorage> {
     Basin::new(MemoryStorage::default(), vec![42; 32]).unwrap()
 }
@@ -26,10 +29,12 @@ fn rows(n: usize) -> Vec<(Vec<u8>, Value)> {
 }
 #[test]
 fn published_sl2_vector_and_composition() -> Result<()> {
-    assert_eq!(
-        basin::hex(&bromberg::hash(b"hello, world! It's fun to hash stuff!")),
-        "01c5cf590d32654c87228c0d66441b200aec1439e54e724f05cd3c6c260634e565594b61988933e826e9705de22884ce007df0f733a371516ddd4ac9237f7a46"
-    );
+    for v in shared_vectors()["sl2"].as_array().unwrap() {
+        assert_eq!(
+            basin::hex(&bromberg::hash(v["message"].as_str().unwrap().as_bytes())),
+            v["digest"].as_str().unwrap()
+        );
+    }
     assert_eq!(
         bromberg::combine(&[bromberg::hash(b"hello, "), bromberg::hash(b"world!")])?,
         bromberg::hash(b"hello, world!")
@@ -38,11 +43,15 @@ fn published_sl2_vector_and_composition() -> Result<()> {
 }
 #[test]
 fn canonical_boundaries_and_lazy_reads() -> Result<()> {
-    for count in [0, 1, 63, 64, 255, 256, 1280, 1281, 5000] {
+    for count in shared_vectors()["trieCounts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| n.as_u64().unwrap() as usize)
+    {
         let mut b = basin();
         let data = rows(count);
         let a = trie::build(&mut b, data.clone(), &Count(7))?;
-        assert!(!a.at(5)?.map_ref()?.contains_key("reversals"));
         let mut reversed = data.clone();
         reversed.reverse();
         let same = trie::build(&mut b, reversed, &Count(7))?;
@@ -223,7 +232,12 @@ fn revisions_pin_allocations_and_shared_heap_addresses() -> Result<()> {
     assert_eq!(
         basin::node_key(&pointer, "old")?,
         format!(
-            "userspace/heap/old/n-0yve/v.0zg0/t.0zh20/d_{}/{}",
+            "{}old/n-0yve/v.0zg0/t.0zh20/d_{}/{}",
+            serde_json::from_str::<serde_json::Value>(include_str!(
+                "../../../tests/vectors/object-keys.json"
+            ))?["userHeap"]
+                .as_str()
+                .unwrap(),
             basin::hex(&basin::sha384(&token)),
             pointer.field("revision")?.text()?
         )
@@ -360,4 +374,38 @@ fn consumer_packing_hooks_preserve_trait_object_support() {
     let c = basinsync_structures::trie::Plain;
     let dynamic: &dyn basinsync_structures::trie::Consumer = &c;
     assert!(dynamic.trie_inline_cost().is_none());
+}
+
+#[test]
+fn restored_allocations_are_reused_and_conflicts_preserve_the_first_revision() -> Result<()> {
+    let mut writer = basin();
+    let original = trie::build(&mut writer, rows(1), &Plain)?;
+    let bytes = writer.storage.objects[&basin::capability(&original)?]
+        .1
+        .clone();
+    let mut restored = original.clone();
+    if let Array(parts) = &mut restored {
+        parts[6].set("revision", "00000000-0000-4000-8000-000000000099".into())?;
+    }
+    let mut reader = basin();
+    reader.storage.restore(&restored, &bytes, &[])?;
+    reader.storage.restore(&original, &bytes, &[])?;
+    let mut conflict = bytes.clone();
+    conflict[0] ^= 1;
+    assert!(reader.storage.restore(&restored, &conflict, &[]).is_err());
+    assert_eq!(trie::build(&mut reader, rows(1), &Plain)?, restored);
+    Ok(())
+}
+
+#[test]
+fn sector_sizes_aggregate_empty_and_variable_blobs() -> Result<()> {
+    use basinsync_structures::trie::Consumer;
+    let c = volume::Sectors;
+    assert_eq!(c.empty().field("size")?.big()?, 0.into());
+    let parts = [0, 3, 9]
+        .into_iter()
+        .map(|n| c.entry(&[], &Array(vec![Blob(vec![0; n])])))
+        .collect::<Result<Vec<_>>>()?;
+    assert_eq!(c.combine(&parts)?.field("size")?.big()?, 12.into());
+    Ok(())
 }

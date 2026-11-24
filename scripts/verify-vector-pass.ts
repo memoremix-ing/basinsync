@@ -1,11 +1,11 @@
 /** Prove format-preserving vector changes with independent old/new readers. */
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
-import * as core from "../clients/structures/core";
-import { Vector } from "../clients/structures/vector";
+import * as core from "../tests/clients/structures/core";
+import { Vector } from "../tests/clients/structures/vector";
 const root = resolve(Bun.env.VECTOR_PASS_ROOT ?? ".local/vector-pass");
-const oldCore = await import(`${root}/baseline/clients/structures/core.ts`),
-  oldVector = (await import(`${root}/baseline/clients/structures/vector.ts`))
+const oldCore = await import(`${root}/baseline/tests/clients/structures/core.ts`),
+  oldVector = (await import(`${root}/baseline/tests/clients/structures/vector.ts`))
     .Vector;
 const consumer = {
   migration: 7,

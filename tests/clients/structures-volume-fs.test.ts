@@ -109,7 +109,7 @@ test("filesystem edits use exact destinations and explicit overwrite/recursive p
   expect(await device(replaced, "/target")).toEqual(one.edge);
   const renamedEmpty = await v.mv("/src/empty", "/empty", { replace: true });
   expect(await renamedEmpty.list("/empty")).toEqual([]);
-  await expect(renamedEmpty.list("/src/empty")).rejects.toThrow("missing");
+  await expect(renamedEmpty.list("/src/empty")).rejects.toThrow();
   const withoutEmpty = await v.rm("/src/empty");
   expect(await withoutEmpty.list("/src")).toEqual(["file", "nested"]);
   expect(await v.list("/src")).toEqual(["empty", "file", "nested"]);

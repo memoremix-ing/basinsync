@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { encode, toReference } from "../clients/flexbuffer";
+import { encode, toReference } from "../tests/clients/flexbuffer";
 const results = [];
 for (const n of [63, 255, 256]) {
   const zeros = encode(Array(n).fill(0)),

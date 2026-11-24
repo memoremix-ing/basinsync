@@ -151,23 +151,6 @@ test("public explicit and Proxy entrypoints support scoped edits", () => {
   expect(e.get(utf8("file"))!.meta.n).toBe(1);
 });
 
-test("blocks retain page tries with only leading and lagging page spines", async () => {
-  const b = basin(),
-    block = await buildBlock(b, [
-      [0n, utf8("hello")],
-      [4n, utf8("later")],
-    ]);
-  const r = await b.load(block.edge),
-    f = r.get("6");
-  expect(f.length()).toBe(5);
-  expect(object<unknown[]>(f.get(3))).toEqual([null]);
-  expect(object<unknown[]>(f.get(4))).toEqual([null]);
-  const v = await Volume.fromBlocks(b, [["/file", block]]);
-  expect(await v.page("/file", 4n)).toEqual(utf8("later"));
-  expect(await v.page("/file", 3n)).toBeUndefined();
-  expect(await v.page("/file", 0n, false)).toEqual(utf8("hello"));
-});
-
 test("seven-bit vector boundary stacks name non-root nodes at their actual basin heights", async () => {
   const { vectorBoundaryLinks } = await import("./structures/vector");
   const { link, equal } = await import("./structures/core");

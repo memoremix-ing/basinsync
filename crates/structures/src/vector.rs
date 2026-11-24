@@ -36,7 +36,7 @@ fn make<S: Storage, C: Consumer>(
     c: &C,
 ) -> Result<Built> {
     let width = BigInt::from(1) << shift as usize;
-    let mut bitmap = vec![0u8; ((1usize << bits) + 7) / 8];
+    let mut bitmap = vec![0u8; (1usize << bits).div_ceil(8)];
     let mut children = vec![];
     let mut values = vec![];
     for slot in 0..(1u32 << bits) {
@@ -194,7 +194,8 @@ fn parts(v: &View, migration: u32) -> Result<(Value, Vec<u8>, View)> {
     );
     let bitmap = f.item(2).owned()?.blob()?.to_vec();
     ensure!(
-        bitmap.len() == ((1usize << bits) + 7) / 8 && (bits >= 3 || bitmap[0] >> (1 << bits) == 0),
+        bitmap.len() == (1usize << bits).div_ceil(8)
+            && (bits >= 3 || bitmap[0] >> (1 << bits) == 0),
         "invalid vector bitmap length/bits"
     );
     let slots = f.item(3);
@@ -435,13 +436,13 @@ fn lookup_last_inline<S: Storage>(
     fn walk<S: Storage>(
         b: &mut Basin<S>,
         v: View,
-        base: BigInt,
-        depth: usize,
+        position: (BigInt, usize),
         migration: u32,
         accept: &mut dyn FnMut(&Value) -> bool,
         prune: &mut dyn FnMut(&Value) -> bool,
         cached_only: bool,
     ) -> Result<Option<Option<(BigInt, View)>>> {
+        let (base, depth) = position;
         ensure!(depth < 256, "vector nesting limit");
         let (h, bitmap, slots) = parts(&v, migration)?;
         if h.field("count")?.big()? == 0.into() || !prune(&v.field("6").item(1).owned()?) {
@@ -480,8 +481,7 @@ fn lookup_last_inline<S: Storage>(
                 let found = walk(
                     b,
                     child,
-                    index,
-                    depth + 1,
+                    (index, depth + 1),
                     migration,
                     accept,
                     prune,
@@ -496,7 +496,7 @@ fn lookup_last_inline<S: Storage>(
         }
         Ok(Some(None))
     }
-    walk(b, v, 0.into(), 0, migration, accept, prune, cached_only)
+    walk(b, v, (0.into(), 0), migration, accept, prune, cached_only)
 }
 
 pub fn find_last_inline<S: Storage>(

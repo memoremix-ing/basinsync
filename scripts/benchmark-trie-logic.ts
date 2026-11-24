@@ -1,3 +1,4 @@
+import { sourceAt } from "./historical-source";
 /** Matched logical-only capability splits and implementation ablations. */
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -56,34 +57,34 @@ const root = resolve(
   ),
   fixtures = resolve(Bun.env.TRIE_LOGIC_FIXTURES ?? ".local/trie-lex-zero");
 const paths = [
-  "clients/structures/core.ts",
-  "clients/structures/trie.ts",
-  "clients/structures/types.ts",
-  "clients/structures/operation.ts",
-  "clients/lexidecimal.ts",
-  "clients/flexbuffer.ts",
-  "clients/symbols.ts",
+  "tests/clients/structures/core.ts",
+  "tests/clients/structures/trie.ts",
+  "tests/clients/structures/types.ts",
+  "tests/clients/structures/operation.ts",
+  "tests/clients/lexidecimal.ts",
+  "tests/clients/flexbuffer.ts",
+  "tests/clients/symbols.ts",
 ];
 // Freeze the pre-promotion sources so named ablations retain their original meaning.
 const baseRef = Bun.env.TRIE_LOGIC_BASE_REF ?? "35e4d6ac";
 const base = Object.fromEntries(
   paths.map((p) => {
-    const child = Bun.spawnSync(["jj", "file", "show", "-r", baseRef, p]);
+    const child = sourceAt(baseRef, p);
     assert.equal(child.exitCode, 0, child.stderr.toString());
     return [p, child.stdout.toString()];
   }),
 );
-const worker = readFileSync("clients/trie-cost-worker.ts", "utf8"),
+const worker = readFileSync("tests/clients/trie-cost-worker.ts", "utf8"),
   sources: Record<string, Record<string, string>> = {};
 for (const name of names) {
   const variant = variantSources(
-    base["clients/structures/trie.ts"],
+    base["tests/clients/structures/trie.ts"],
     worker,
     name,
   );
   const files = {
     ...base,
-    "clients/structures/trie.ts": variant.trie,
+    "tests/clients/structures/trie.ts": variant.trie,
     "worker.ts": variant.worker,
   };
   sources[name] = files;

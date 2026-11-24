@@ -18,13 +18,13 @@ mkdirSync(out, { recursive: true });
 const modes = (Bun.env.SUBTREE_COW_MODES ?? "subtree,scalar,nested").split(","),
   samples: any[] = [];
 const files = [
-  "clients/subtree-cow-benchmark-worker.ts",
-  ...readdirSync("clients/structures")
+  "tests/clients/subtree-cow-benchmark-worker.ts",
+  ...readdirSync("tests/clients/structures")
     .filter((f) => f.endsWith(".ts"))
-    .map((f) => `clients/structures/${f}`),
-  "clients/flexbuffer.ts",
-  "clients/lexidecimal.ts",
-  "clients/symbols.ts",
+    .map((f) => `tests/clients/structures/${f}`),
+  "tests/clients/flexbuffer.ts",
+  "tests/clients/lexidecimal.ts",
+  "tests/clients/symbols.ts",
 ];
 const hashes = Object.fromEntries(
   files.map((f) => [
@@ -42,7 +42,7 @@ for (const mode of modes)
           : ["persistent", "clone", "native", "path", "proxy"];
     if (round % 2) styles.reverse();
     for (const style of styles) {
-      const p = Bun.spawn(["bun", "clients/subtree-cow-benchmark-worker.ts"], {
+      const p = Bun.spawn(["bun", "tests/clients/subtree-cow-benchmark-worker.ts"], {
         stdout: "pipe",
         stderr: "pipe",
         env: {

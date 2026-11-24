@@ -8,6 +8,9 @@ use basinsync_structures::{
     vector,
 };
 use num_bigint::BigInt;
+fn shared_vectors() -> serde_json::Value {
+    serde_json::from_str(include_str!("../../../tests/vectors/structures.json")).unwrap()
+}
 fn basin() -> Basin<MemoryStorage> {
     Basin::new(MemoryStorage::default(), vec![42; 32]).unwrap()
 }
@@ -61,7 +64,12 @@ fn check_btree(b: &mut Basin<MemoryStorage>, node: Value, root: bool) -> Result<
 }
 #[test]
 fn packed_btree_balances_and_retains_separator_values() -> Result<()> {
-    for n in [0, 1, 31, 32, 33, 1023, 1024, 1280, 1281, 32768] {
+    for n in shared_vectors()["orderedCounts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| n.as_u64().unwrap() as usize)
+    {
         let mut b = basin();
         let input = rows(n);
         let root = btree::build(&mut b, input.clone(), &Count(7))?;
@@ -101,7 +109,12 @@ fn packed_btree_balances_and_retains_separator_values() -> Result<()> {
 }
 #[test]
 fn packed_vector_bitmaps_sparse_indices_and_snapshot_updates() -> Result<()> {
-    for n in [0, 1, 31, 32, 33, 1023, 1024, 1280, 1281, 32768] {
+    for n in shared_vectors()["orderedCounts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| n.as_u64().unwrap() as usize)
+    {
         let mut b = basin();
         let input = rows(n).into_iter().map(|(_, v)| v).collect::<Vec<_>>();
         let root = vector::build(&mut b, input.clone(), &Count(7))?;

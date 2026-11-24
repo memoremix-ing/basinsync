@@ -9,7 +9,7 @@ const adapter = resolve(
 );
 mkdirSync(out, { recursive: true });
 const modulePath = (name: string) =>
-  JSON.stringify(resolve(`clients/structures/${name}.ts`));
+  JSON.stringify(resolve(`tests/clients/structures/${name}.ts`));
 const core = `export { Basin, MemoryStorage } from ${modulePath("core")};\n`;
 const trie = `export { Trie } from ${modulePath("trie")};\n`;
 const vector = `export { Vector } from ${modulePath("vector")};\n`;
@@ -25,13 +25,13 @@ const entries = {
 };
 const sources: Record<string, string[]> = {
   trie: [
-    resolve("clients/structures/trie.ts"),
-    resolve("clients/structures/logical-trie.ts"),
+    resolve("tests/clients/structures/trie.ts"),
+    resolve("tests/clients/structures/logical-trie.ts"),
   ],
   vector: [
-    resolve("clients/structures/vector.ts"),
-    resolve("clients/structures/packed.ts"),
-    resolve("clients/structures/logical-vector.ts"),
+    resolve("tests/clients/structures/vector.ts"),
+    resolve("tests/clients/structures/packed.ts"),
+    resolve("tests/clients/structures/logical-vector.ts"),
   ],
   collection: [
     "collection.ts",

@@ -167,9 +167,18 @@ func run() error {
 			}
 		} else if kind == "pages" {
 			for _, q := range req["queries"].([]any) {
+				basin.ClearCache()
 				v, found, e := s.ReadPage(basin, root, "/sparse", q.(*big.Int), true)
 				if e != nil {
 					return e
+				}
+				basin.ClearCache()
+				strong, strongFound, e := s.ReadPage(basin, root, "/sparse", q.(*big.Int), false)
+				if e != nil {
+					return e
+				}
+				if found != strongFound || !bytes.Equal(v, strong) {
+					return fmt.Errorf("shortcut mismatch")
 				}
 				var value any
 				if found {
@@ -198,13 +207,6 @@ func run() error {
 						weak, err := s.ReadFile(basin, root, p, true)
 						if err != nil {
 							return err
-						}
-						strong, err := s.ReadFile(basin, root, p, false)
-						if err != nil {
-							return err
-						}
-						if !bytes.Equal(weak, strong) {
-							return fmt.Errorf("shortcut mismatch")
 						}
 						rows = append(rows, []any{p, weak})
 					}

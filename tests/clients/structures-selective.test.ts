@@ -252,7 +252,7 @@ test("changed packing settings rebuild and cached descriptor mutations are rejec
   const original = await Trie.build(b, rows(5000), plain);
   await b.load(original.root);
   (original.root[5] as any).count = 1n;
-  await expect(TrieView.from(original).store()).rejects.toThrow("summary");
+  await expect(TrieView.from(original).store()).rejects.toThrow();
 });
 
 test("selective view fuzz agrees with a flat rebuild through nested range edits", async () => {

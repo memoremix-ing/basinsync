@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { encode, toReference } from "../clients/flexbuffer";
+import { encode, toReference } from "../tests/clients/flexbuffer";
 const folder = process.argv[2];
 assert(
   folder,
@@ -14,7 +14,7 @@ const names = (
 ).split(",");
 const modules = await Promise.all(
   names.map(async (name) => {
-    const root = resolve(`${folder}/${name}/clients/structures`);
+    const root = resolve(`${folder}/${name}/tests/clients/structures`);
     return {
       name,
       C: await import(`${root}/core.ts`),

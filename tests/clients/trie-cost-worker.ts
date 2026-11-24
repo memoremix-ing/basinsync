@@ -2,8 +2,8 @@
 import assert from "node:assert/strict";
 const folder = Bun.env.TRIE_COST_SOURCE;
 assert(folder, "run scripts/benchmark-trie-costs.ts");
-const C = await import(`${folder}/clients/structures/core.ts`);
-const { Trie } = await import(`${folder}/clients/structures/trie.ts`);
+const C = await import(`${folder}/tests/clients/structures/core.ts`);
+const { Trie } = await import(`${folder}/tests/clients/structures/trie.ts`);
 const input = JSON.parse(await Bun.stdin.text());
 const rows: [Uint8Array, number][] = input.entries.map(
   ([k, v]: [string, number]) => [C.key(k), v],
@@ -251,7 +251,7 @@ if (logical) {
 } else {
   if (typeof trie.getOrDefer === "function") {
     const { resolveOperation } = await import(
-      `${folder}/clients/structures/operation.ts`
+      `${folder}/tests/clients/structures/operation.ts`
     );
     const modes: ("generator" | "await")[] =
       Number(Bun.env.TRIE_COST_ROUND ?? 0) % 2

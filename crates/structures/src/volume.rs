@@ -14,24 +14,30 @@ pub const PAGE_SIZE: usize = 4096;
 pub struct Sectors;
 impl Consumer for Sectors {
     fn empty(&self) -> Value {
-        Value::map([("brombergSL2", Blob(bromberg::bytes(bromberg::IDENTITY)))])
+        Value::map([
+            ("brombergSL2", Blob(bromberg::bytes(bromberg::IDENTITY))),
+            ("size", Big(0.into())),
+        ])
     }
     fn entry(&self, _: &[u8], v: &Value) -> Result<Value> {
         ensure!(v.array()?.len() == 1, "invalid page");
-        Ok(Value::map([(
-            "brombergSL2",
-            Blob(bromberg::hash(v.at(0)?.blob()?)),
-        )]))
+        Ok(Value::map([
+            ("brombergSL2", Blob(bromberg::hash(v.at(0)?.blob()?))),
+            ("size", Big(v.at(0)?.blob()?.len().into())),
+        ]))
     }
     fn combine(&self, s: &[Value]) -> Result<Value> {
         let parts = s
             .iter()
             .map(|v| Ok(v.field("brombergSL2")?.blob()?.to_vec()))
             .collect::<Result<Vec<_>>>()?;
-        Ok(Value::map([(
-            "brombergSL2",
-            Blob(bromberg::combine(&parts)?),
-        )]))
+        let size = s.iter().try_fold(num_bigint::BigInt::from(0), |n, v| {
+            Ok::<_, anyhow::Error>(n + v.field("size")?.big()?)
+        })?;
+        Ok(Value::map([
+            ("brombergSL2", Blob(bromberg::combine(&parts)?)),
+            ("size", Big(size)),
+        ]))
     }
 }
 pub fn lex(n: &num_bigint::BigInt) -> Result<String> {
@@ -250,10 +256,8 @@ fn directory_stats(n: &Value) -> Result<(usize, usize)> {
     fn group(g: &Value) -> Result<usize> {
         let mut depth = 0;
         for v in g.field("values")?.array()? {
-            if v.at(0)?.boolean()? {
-                if matches!(v.at(4)?, Map(_)) {
-                    depth = depth.max(v.at(3)?.number()? as usize);
-                }
+            if v.at(0)?.boolean()? && matches!(v.at(4)?, Map(_)) {
+                depth = depth.max(v.at(3)?.number()? as usize);
             }
         }
         Ok(depth)
@@ -735,15 +739,13 @@ fn page_value<S: Storage>(
     full: Vec<u8>,
     shortcuts: bool,
 ) -> Result<Option<Value>> {
-    if let Some(root) = ready_source(b, f.item(2))? {
-        if let Some(value) = trie::get_cached_inline(b, root, full.clone(), 0)? {
-            return value.map(|v| v.owned()).transpose();
-        }
+    if let Some(root) = ready_source(b, f.item(2))?
+        && let Some(value) = trie::get_cached_inline(b, root, full.clone(), 0)?
+    {
+        return value.map(|v| v.owned()).transpose();
     }
-    if shortcuts {
-        if let Some(v) = shortcut_page(b, f, &full).ok().flatten() {
-            return Ok(Some(v));
-        }
+    if shortcuts && let Some(v) = shortcut_page(b, f, &full).ok().flatten() {
+        return Ok(Some(v));
     }
     let root = page_root(b, f)?;
     trie::get_inline(b, root, full, 0)?

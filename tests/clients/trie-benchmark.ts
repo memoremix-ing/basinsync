@@ -122,7 +122,7 @@ for (const n of sizes)
       for (const implementation of order) {
         const command =
           implementation === "typescript"
-            ? ["bun", "clients/trie-benchmark-worker.ts"]
+            ? ["bun", "tests/clients/trie-benchmark-worker.ts"]
             : implementation === "rust"
               ? ["target/release/examples/benchmark"]
               : [".local/trie-benchmark-go"];
@@ -203,11 +203,11 @@ for (const n of sizes)
     }
   }
 const sourceFiles = [
-  "clients/lexidecimal.ts",
-  "clients/trie-benchmark.ts",
-  "clients/flexbuffer.ts",
-  "clients/structures/core.ts",
-  "clients/structures/trie.ts",
+  "tests/clients/lexidecimal.ts",
+  "tests/clients/trie-benchmark.ts",
+  "tests/clients/flexbuffer.ts",
+  "tests/clients/structures/core.ts",
+  "tests/clients/structures/trie.ts",
   "crates/structures/src/basin.rs",
   "crates/structures/src/value.rs",
   "crates/structures/src/trie.rs",

@@ -37,4 +37,5 @@ opt-level = 2
 
 [workspace]
 members = ["crates/structures"]
+exclude = ["vendor/turso"]
 resolver = "3"

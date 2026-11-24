@@ -3,12 +3,35 @@ package structures
 import (
 	"bytes"
 	"encoding/hex"
+	"encoding/json"
 	"math"
 	"math/big"
+	"os"
 	"reflect"
 	"testing"
 )
 
+type structureCases struct {
+	Sl2 []struct {
+		Message string
+		Digest  string
+	} `json:"sl2"`
+	TrieCounts    []int `json:"trieCounts"`
+	OrderedCounts []int `json:"orderedCounts"`
+}
+
+func structureVectors(t *testing.T) structureCases {
+	t.Helper()
+	raw, err := os.ReadFile("../../tests/vectors/structures.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var v structureCases
+	if err = json.Unmarshal(raw, &v); err != nil {
+		t.Fatal(err)
+	}
+	return v
+}
 func newTestBasin(t *testing.T) *Basin {
 	t.Helper()
 	b, err := NewBasin(NewMemoryStorage(), bytes.Repeat([]byte{42}, 32))
@@ -29,9 +52,10 @@ func rows(n int) []Entry {
 	return v
 }
 func TestCodecAndPublishedSL2(t *testing.T) {
-	expected := "01c5cf590d32654c87228c0d66441b200aec1439e54e724f05cd3c6c260634e565594b61988933e826e9705de22884ce007df0f733a371516ddd4ac9237f7a46"
-	if hex.EncodeToString(Bromberg([]byte("hello, world! It's fun to hash stuff!"))) != expected {
-		t.Fatal("independent hash vector")
+	for _, v := range structureVectors(t).Sl2 {
+		if hex.EncodeToString(Bromberg([]byte(v.Message))) != v.Digest {
+			t.Fatal("independent SL2 vector", v.Message)
+		}
 	}
 	if !bytes.Equal(combineSL([][]byte{Bromberg([]byte("hello, ")), Bromberg([]byte("world!"))}), Bromberg([]byte("hello, world!"))) {
 		t.Fatal("composition")
@@ -49,7 +73,7 @@ func TestCodecAndPublishedSL2(t *testing.T) {
 	}
 }
 func TestCanonicalBoundaries(t *testing.T) {
-	for _, n := range []int{0, 1, 63, 64, 255, 256, 1280, 1281, 5000} {
+	for _, n := range structureVectors(t).TrieCounts {
 		b := newTestBasin(t)
 		input := rows(n)
 		root, err := Build(b, input, CountConsumer(7))
@@ -256,7 +280,15 @@ func TestRevisionsPinAllocationsAndSharedHeapAddresses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected := "userspace/heap/old/n-0yve/v.0zg0/t.0zh20/d_" + hex.EncodeToString(digest(token)) + "/" + text(field(first[6], "revision"))
+	raw, err := os.ReadFile("../../tests/vectors/object-keys.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var prefixes map[string]string
+	if err = json.Unmarshal(raw, &prefixes); err != nil {
+		t.Fatal(err)
+	}
+	expected := prefixes["userHeap"] + "old/n-0yve/v.0zg0/t.0zh20/d_" + hex.EncodeToString(digest(token)) + "/" + text(field(first[6], "revision"))
 	if key != expected {
 		t.Fatal(key, expected)
 	}
@@ -385,5 +417,44 @@ func TestStructuredHeightStartsAboveRawBlobs(t *testing.T) {
 			}()
 			query(edges, 320, limit)
 		}()
+	}
+}
+
+func TestRestoredAllocationsReuseFirstRevision(t *testing.T) {
+	writer := newTestBasin(t)
+	original := checked(Build(writer, rows(1), PlainConsumer()))
+	data := checked(writer.Storage.Get(original))
+	restored := checked((PendingEdge{original}).Allocated("00000000-0000-4000-8000-000000000099"))
+	reader := newTestBasin(t)
+	store := reader.Storage.(*MemoryStorage)
+	if err := store.Restore(restored, data, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Restore(original, data, nil); err != nil {
+		t.Fatal(err)
+	}
+	conflict := append([]byte{}, data...)
+	conflict[0] ^= 1
+	if store.Restore(restored, conflict, nil) == nil {
+		t.Fatal("accepted conflicting bytes")
+	}
+	result := checked(Build(reader, rows(1), PlainConsumer()))
+	if capability(result) != capability(restored) {
+		t.Fatal("did not retain the first restored revision")
+	}
+}
+
+func TestSectorSizesAggregateVariableBlobs(t *testing.T) {
+	c := sectorConsumer()
+	if bigint(field(c.Empty, "size")).Sign() != 0 {
+		t.Fatal("nonempty size identity")
+	}
+	parts := []any{}
+	for _, n := range []int{0, 3, 9} {
+		parts = append(parts, checked(c.Entry(nil, vector(make([]byte, n)))))
+	}
+	total := checked(c.Combine(parts))
+	if bigint(field(total, "size")).Cmp(big.NewInt(12)) != 0 {
+		t.Fatal("wrong aggregated byte size")
 	}
 }

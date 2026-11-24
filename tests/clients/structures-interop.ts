@@ -1,3 +1,4 @@
+import { expectedContents } from "./structure-model";
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { build, verify, Archive } from "./structure-fixture";
@@ -192,12 +193,33 @@ cases.push({
   ],
   directories: ["/empty"],
 });
+// Reproducible generated contracts augment the named boundary/regression cases.
+const generated = Number(process.env.PROPTEST_CASES ?? 8);
+assert(Number.isSafeInteger(generated) && generated > 0, "positive PROPTEST_CASES required");
+for (let c = 0; c < generated; c++) {
+  let state = c + 1;
+  const next = () => state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+  const entries = new Map<string, unknown>(), items = new Map<bigint, unknown>();
+  for (let i = 0; i < 300; i++) {
+    const k = (next() % 4096).toString(16).padStart(4, "0");
+    const value = i % 3 === 0 ? null : i % 3 === 1 ? BigInt(next()) : new Uint8Array([next() & 255]);
+    entries.set((i % 5 ? "" : "ab") + k, value);
+    items.set(BigInt(next() % 1024), value);
+  }
+  const rows = [...entries], far = 2n ** 100n + BigInt(c);
+  for (const kind of ["trie", "btree"]) cases.push({kind, seed, entries: rows});
+  items.set(far, Symbol.match);
+  cases.push({kind: "vector", seed, bits: c % 8 + 1, length: far + 1n,
+    items: [...items], queries: [0n, 1n, 1024n, far]});
+}
 mkdirSync(".local/trie-interop", { recursive: true });
 const writers = ["typescript", "rust", "go"],
   readers = [...writers];
 let count = 0;
 for (let i = 0; i < cases.length; i++) {
   const input = cases[i];
+  const model = parse<any>(stringify(expectedContents(input)));
+  writeFileSync(`.local/trie-interop/${i}-input.json`, stringify(input));
   let expected: any;
   for (const writer of writers) {
     const archive: Archive =
@@ -223,6 +245,12 @@ for (let i = 0; i < cases.length; i++) {
         ).sort(),
         `object addresses: ${writer} -> ${reader}`,
       );
+      assert.deepEqual(output.rows, model, `content model, case ${i}: ${writer} -> ${reader}`);
+      if (input.kind === "vector") {
+        const values = new Map(input.items);
+        assert.deepEqual(output.probes, input.queries.map((index: bigint) =>
+          [index, values.has(index), values.get(index) ?? null]), `sparse model, case ${i}: ${writer} -> ${reader}`);
+      }
       delete output.keys;
       if (!expected) expected = output;
       assert.deepEqual(output, expected, `case ${i}: ${writer} -> ${reader}`);

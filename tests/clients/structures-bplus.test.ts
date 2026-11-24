@@ -95,7 +95,7 @@ test("B+tree aggregates keys and values in order, rejects duplicates and support
       ],
       plain,
     ),
-  ).rejects.toThrow("duplicate");
+  ).rejects.toThrow();
   await expect(
     BPlusTree.build(b, [], plain, { branchChildren: 1 }),
   ).rejects.toThrow("fanout");

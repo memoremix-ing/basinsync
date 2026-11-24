@@ -150,6 +150,11 @@ Seal child contents when nesting, size or physical degree requires it. The
 basename trie independently pages wide directories. `stat` reads metadata and
 `list` scans the requested contents trie.
 
+Each page-range summary carries `size: bigint`, the sum of blob bytes, excluding
+keys and envelopes. Replicate it across *basin edges*[~][strong-edge] so readers
+can skip byte ranges without fetching targets. Missing sparse page IDs contribute
+no bytes to this sum; fixed-page file offsets retain their zero-filled grid semantics.
+
 Before choosing a shortcut layout, measure first-useful-result latency, fetched
 bytes, request count, and update churn against ordinary trie traversal. Keep
 content identity and consumer aggregation independent of allocation details.

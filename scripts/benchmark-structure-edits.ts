@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { cpus } from "node:os";
-import { encode } from "../clients/lexidecimal";
+import { encode } from "../tests/clients/lexidecimal";
 const out = resolve(Bun.env.STRUCTURE_EDIT_OUT ?? ".local/structure-edits"),
   adapter = resolve(
     Bun.env.TRIE_COST_COLLECTION_ADAPTER ?? ".local/collection-full/adapter",
@@ -14,17 +14,17 @@ const n = Number(Bun.env.STRUCTURE_EDIT_N ?? 100000),
   rounds = Number(Bun.env.STRUCTURE_EDIT_ROUNDS ?? 5),
   samples: any[] = [];
 const files = [
-  "clients/structure-edit-worker.ts",
-  "clients/structures/trie.ts",
-  "clients/structures/vector.ts",
-  "clients/structures/logical-trie.ts",
-  "clients/structures/logical-vector.ts",
-  "clients/structures/core.ts",
-  "clients/structures/packed.ts",
-  "clients/flexbuffer.ts",
-  "clients/lexidecimal.ts",
-  "clients/structures/operation.ts",
-  "clients/symbols.ts",
+  "tests/clients/structure-edit-worker.ts",
+  "tests/clients/structures/trie.ts",
+  "tests/clients/structures/vector.ts",
+  "tests/clients/structures/logical-trie.ts",
+  "tests/clients/structures/logical-vector.ts",
+  "tests/clients/structures/core.ts",
+  "tests/clients/structures/packed.ts",
+  "tests/clients/flexbuffer.ts",
+  "tests/clients/lexidecimal.ts",
+  "tests/clients/structures/operation.ts",
+  "tests/clients/symbols.ts",
   ...[
     "collection.ts",
     "matter.ts",
@@ -63,7 +63,7 @@ for (const layout of ["dense", "wide"]) {
     for (const kind of round % 2
       ? ["collection", "vector", "trie"]
       : ["trie", "vector", "collection"]) {
-      const p = Bun.spawn(["bun", "clients/structure-edit-worker.ts"], {
+      const p = Bun.spawn(["bun", "tests/clients/structure-edit-worker.ts"], {
         stdin: "pipe",
         stdout: "pipe",
         stderr: "pipe",

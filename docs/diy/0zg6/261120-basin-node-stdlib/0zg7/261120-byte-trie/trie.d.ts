@@ -115,6 +115,7 @@ type SyncSector_M0 = TrieNode_S0<{
   0: {
     Summary: {
       brombergSL2: Uint8Array; // homomorphic checksum over the blobs in the page range
+      size: bigint; // sum of blob bytes, excluding keys and envelopes
     };
 
     Value: [data: Uint8Array];

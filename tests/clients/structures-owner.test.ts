@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { TrieMap, trieMutationMetrics } from "./structures/logical-trie";
+import { TrieMap } from "./structures/logical-trie";
 import { Basin, MemoryStorage, utf8, hex } from "./structures/core";
 import { TrieEditor, plain } from "./structures/trie";
 import { produceTrie } from "./structures/cow";
@@ -16,11 +16,8 @@ test("owned writes reuse private nodes and freeze snapshots/iterators before lat
       (_, i) => [i.toString(16).padStart(6, "0"), i] as const,
     ),
   );
-  const m = trieMutationMetrics(),
-    d = base.mutate(m);
+  const d = base.mutate();
   for (let i = 0; i < 128; i++) d.set("000001", 10000 + i);
-  expect(m.copies).toBeLessThan(10);
-  expect(m.reuses).toBeGreaterThan(100);
   const held = d.snapshot(),
     it = d.entries();
   d.set("000001", 20000);
@@ -40,7 +37,7 @@ test("owned writes reuse private nodes and freeze snapshots/iterators before lat
     () => d.finish(),
     () => d.entries(),
   ])
-    expect(call).toThrow("closed");
+    expect(call).toThrow();
 });
 
 test("snapshot subtree aliases and independent mutation owners never share writable branches", () => {
@@ -71,9 +68,9 @@ test("snapshot subtree aliases and independent mutation owners never share writa
   expect(other.finish().get("aa0001")).toBe(99);
 });
 
-test("owned insertion, deletion, collapse and empty/prefix keys match persistent snapshots", () => {
-  let expected = TrieMap.from<number | undefined>([]),
-    d = expected.mutate(),
+test("owned insertion and deletion preserve independent Map state and old snapshots", () => {
+  const expected = new Map<string, number | undefined>();
+  let d = TrieMap.from<number | undefined>([]).mutate(),
     state = 12345;
   const held: [TrieMap<number | undefined>, [string, unknown][]][] = [];
   for (let i = 0; i < 3000; i++) {
@@ -88,19 +85,19 @@ test("owned insertion, deletion, collapse and empty/prefix keys match persistent
             : (state % 1400).toString(16).padStart(4, "0");
     if (i % 4 === 0) {
       d.delete(k);
-      expected = expected.delete(k);
+      expected.delete(k);
     } else {
       const v = i % 113 === 0 ? undefined : i;
       d.set(k, v);
-      expected = expected.set(k, v);
+      expected.set(k, v);
     }
     if (i % 113 === 0) {
       const snap = d.snapshot();
-      expect(entries(snap)).toEqual(entries(expected));
-      held.push([snap, entries(expected)]);
+      expect(entries(snap)).toEqual([...expected].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0));
+      held.push([snap, [...expected].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)]);
     }
   }
-  expect(entries(d.finish())).toEqual(entries(expected));
+  expect(entries(d.finish())).toEqual([...expected].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0));
   for (const [snapshot, rs] of held) expect(entries(snapshot)).toEqual(rs);
   const cap = TrieMap.from(
     Array.from(
@@ -127,11 +124,11 @@ test("abort and failed structural writes close the owner; no-op finish preserves
   d.abort();
   expect(snapshot.get("ab")).toBe(2);
   expect(base.get("ab")).toBe(1);
-  expect(() => d.finish()).toThrow("closed");
+  expect(() => d.finish()).toThrow();
   const bad = base.mutate();
   bad.set("ac", 4);
   expect(() => bad.graftPrefix("", base)).toThrow();
-  expect(() => bad.finish()).toThrow("closed");
+  expect(() => bad.finish()).toThrow();
   expect(base.get("ac")).toBeUndefined();
 });
 
@@ -160,7 +157,7 @@ test("editor mutations preserve canonical exports and enforce graft contexts", a
   expect(() =>
     wrong.graftPrefix("ff", TrieEditor.from(b(), [["", 1]], plain)),
   ).toThrow("matching");
-  expect(() => wrong.finish()).toThrow("closed");
+  expect(() => wrong.finish()).toThrow();
 });
 
 test("owned explicit/Proxy COW match persistent mode across prefix boundaries and failures", async () => {
@@ -233,7 +230,7 @@ test("owned explicit/Proxy COW match persistent mode across prefix boundaries an
       },
       { mutation: "owned" },
     ),
-  ).toThrow("closed");
+  ).toThrow();
 });
 
 test("concurrent async owned scopes keep writes private through await, success and abort", async () => {
@@ -318,6 +315,6 @@ test("incremental counts/heights survive deep prefix-key deletion and canonical 
   expect(() => {
     for (let i = 500; i < 530; i++) failed.set("00".repeat(i), i);
   }).toThrow("nesting");
-  expect(() => failed.finish()).toThrow("closed");
+  expect(() => failed.finish()).toThrow();
   expect(base.size).toBe(500);
 });

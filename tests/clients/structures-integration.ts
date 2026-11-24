@@ -1,3 +1,5 @@
+import { committedKeys } from "./listing";
+import { objectKeys } from "./object-keys";
 import assert from "node:assert/strict";
 import { fixture, eventually } from "./analogue-fixture";
 import {
@@ -24,7 +26,7 @@ import { Volume, BLOCK, type Directory, type File } from "./structures/volume";
 import { BasinsyncStorage } from "./structures/basinsync";
 import { epilogueStatus, latestBlob, reserveHeap, commit } from "./client";
 import { parse } from "./json0";
-import { GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
 const f = await fixture("structures");
 try {
   const bucket = await f.bucket(),
@@ -109,14 +111,8 @@ try {
   viewpoint++;
   // Wait for old-generation copies, then open new readers using only the actions.
   await eventually(
-    () =>
-      f.s3.send(
-        new ListObjectsV2Command({
-          Bucket: bucket,
-          Prefix: "userspace/heap/old/",
-        }),
-      ),
-    (v) => (v.KeyCount ?? 0) > 0,
+    () => committedKeys(f.s3, bucket, `${objectKeys.userHeap}old/`),
+    keys => keys.length > 0,
   );
   const rawRead = async (pointer: Link): Promise<Uint8Array> => {
     for (const generation of ["old", "young"] as const) {

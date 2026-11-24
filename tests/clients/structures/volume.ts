@@ -36,21 +36,22 @@ export const VOLUME = ".sync-volume/",
   PAGE_SIZE = 4096;
 export type Directory = [true, Uint8Array, Record<string, Directory | File>];
 export type File = [false, Uint8Array, Edge];
-export type SectorSummary = { brombergSL2: Uint8Array };
+export type SectorSummary = { brombergSL2: Uint8Array; size: bigint };
 export const sectors: Consumer<[Uint8Array], SectorSummary> =
   composableConsumer<[Uint8Array], SectorSummary>(
     {
       migration: 0,
-      empty: { brombergSL2: sl2.bytes(sl2.identity()) },
+      empty: { brombergSL2: sl2.bytes(sl2.identity()), size: 0n },
       entry: (_k, v) => {
         check(
           Array.isArray(v) && v.length === 1 && v[0] instanceof Uint8Array,
           "invalid page",
         );
-        return { brombergSL2: sl2.hash(v[0]) };
+        return { brombergSL2: sl2.hash(v[0]), size: BigInt(v[0].length) };
       },
       combine: (s) => ({
         brombergSL2: sl2.combine(s.map((v) => v.brombergSL2)),
+        size: s.reduce((n, v) => n + v.size, 0n),
       }),
     },
     { keyIndependent: true },

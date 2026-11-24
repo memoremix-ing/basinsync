@@ -186,14 +186,15 @@ type Stored struct {
 	Edges []Edge
 }
 type MemoryStorage struct {
-	Objects      map[string]Stored
-	Capabilities map[string]Edge
-	Reads        int
-	nextRevision uint64
+	Objects         map[string]Stored
+	Capabilities    map[string]Edge
+	Reads           int
+	nextRevision    uint64
+	allocationIndex map[string]string
 }
 
 func NewMemoryStorage() *MemoryStorage {
-	return &MemoryStorage{Objects: map[string]Stored{}, Capabilities: map[string]Edge{}}
+	return &MemoryStorage{Objects: map[string]Stored{}, Capabilities: map[string]Edge{}, allocationIndex: map[string]string{}}
 }
 func (m *MemoryStorage) Restore(e Edge, b []byte, edges []Edge) (err error) {
 	defer protect(&err)
@@ -204,16 +205,19 @@ func (m *MemoryStorage) Restore(e Edge, b []byte, edges []Edge) (err error) {
 	}
 	m.Objects[key] = Stored{e, append([]byte{}, b...), append([]Edge{}, edges...)}
 	m.Capabilities[key] = e
+	// First live restored allocation wins, matching the other implementations.
+	auth := authKey(e)
+	if _, live := m.Objects[m.allocationIndex[auth]]; !live {
+		m.allocationIndex[auth] = key
+	}
 	return nil
 }
 func (m *MemoryStorage) Put(p PendingEdge, b []byte, edges []Edge) (revision string, err error) {
 	defer protect(&err)
 	auth := authKey(p.value)
-	for _, old := range m.Objects {
-		if authKey(old.Edge) == auth {
-			require(bytes.Equal(old.Bytes, b), "immutable storage conflict")
-			return text(field(old.Edge[6], "revision")), nil
-		}
+	if old, ok := m.Objects[m.allocationIndex[auth]]; ok {
+		require(bytes.Equal(old.Bytes, b), "immutable storage conflict")
+		return text(field(old.Edge[6], "revision")), nil
 	}
 	// Predictable UUIDv4-shaped identities are for this in-memory test store only.
 	for {

@@ -7,7 +7,7 @@ import ts from "typescript";
 const out = resolve(".local/subtree-cow/sizes");
 mkdirSync(out, { recursive: true });
 const module = (f: string) =>
-  JSON.stringify(resolve(`clients/structures/${f}.ts`));
+  JSON.stringify(resolve(`tests/clients/structures/${f}.ts`));
 const base = `export {Basin,MemoryStorage} from ${module("core")}; export {Trie,TrieEditor} from ${module("trie")};`;
 const entries = {
   base,
@@ -23,7 +23,7 @@ const entries = {
 const source = Object.fromEntries(
   ["logical-trie", "trie-view", "cow", "cow-values", "cow-proxy"].map(
     (name) => {
-      const text = readFileSync(`clients/structures/${name}.ts`, "utf8"),
+      const text = readFileSync(`tests/clients/structures/${name}.ts`, "utf8"),
         ast = ts.createSourceFile(
           name + ".ts",
           text,

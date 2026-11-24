@@ -103,11 +103,18 @@ export async function verify(a: Archive) {
       rows.push([hex(k), v]);
   } else if (a.kind === "pages") {
     const volume = new Volume(basin, a.root);
-    for (const page of a.queries!)
+    for (const page of a.queries!) {
+      basin.clearCache();
+      const bytes = await volume.page("/sparse", page);
+      basin.clearCache();
+      const strong = await volume.page("/sparse", page, false);
+      if (hex(bytes ?? new Uint8Array()) !== hex(strong ?? new Uint8Array()) || (bytes === undefined) !== (strong === undefined))
+        throw Error("shortcut mismatch");
       rows.push([
         page as unknown as string,
-        (await volume.page("/sparse", page)) ?? null,
+        bytes ?? null,
       ]);
+    }
   } else {
     const volume = new Volume(basin, a.root);
     const walk = async (prefix: string) => {
@@ -122,10 +129,7 @@ export async function verify(a: Archive) {
           rows.push([p, null]);
           await walk(p);
         } else {
-          const weak = await volume.read(p),
-            strong = await volume.read(p, { shortcuts: false });
-          if (hex(weak) !== hex(strong)) throw Error("shortcut mismatch");
-          rows.push([p, weak]);
+          rows.push([p, await volume.read(p)]);
         }
       }
     };

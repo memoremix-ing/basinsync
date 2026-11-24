@@ -13,7 +13,7 @@ Bun 1.4.5; fresh read cache for each case, one-byte sparse pages, and an in-memo
 resolver doing no I/O. These are request/byte counts, not network timing or
 realistic file-transfer benchmarks. All reads were checked; repeating the same
 read with a warm cache required zero object GETs. *Raw traces and source
-fingerprints*[~][shortcut-reads]. Reproduce with `bun clients/volume-shortcut-trace.ts`.
+fingerprints*[~][shortcut-reads]. Reproduce with `bun tests/clients/volume-shortcut-trace.ts`.
 
 | Fixture / selected index | Direct GETs | Shortcut GETs |
 | --- | ---: | ---: |

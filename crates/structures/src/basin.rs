@@ -292,6 +292,7 @@ pub struct MemoryStorage {
     pub capabilities: BTreeMap<String, Edge>,
     pub reads: usize,
     next_revision: u64,
+    allocation_index: BTreeMap<String, String>,
     pub edges: BTreeMap<String, Vec<Edge>>,
 }
 impl MemoryStorage {
@@ -303,6 +304,12 @@ impl MemoryStorage {
         }
         self.edges.insert(k.clone(), edges.to_vec());
         self.objects.insert(k.clone(), (e.clone(), b.to_vec()));
+        // Match the TypeScript store: the first live restored allocation wins.
+        let auth = auth_key(e)?;
+        let prior = self.allocation_index.get(&auth);
+        if prior.is_none_or(|key| !self.objects.contains_key(key)) {
+            self.allocation_index.insert(auth, k.clone());
+        }
         self.capabilities.insert(k, e.clone());
         Ok(())
     }
@@ -310,11 +317,13 @@ impl MemoryStorage {
 impl Storage for MemoryStorage {
     fn put(&mut self, pending: &PendingEdge, b: &[u8], edges: &[Edge]) -> Result<String> {
         let auth = auth_key(pending.as_value())?;
-        for (e, old) in self.objects.values() {
-            if auth_key(e)? == auth {
-                ensure!(old == b, "immutable storage conflict");
-                return Ok(footer(e)?.field("revision")?.text()?.into());
-            }
+        if let Some((e, old)) = self
+            .allocation_index
+            .get(&auth)
+            .and_then(|k| self.objects.get(k))
+        {
+            ensure!(old == b, "immutable storage conflict");
+            return Ok(footer(e)?.field("revision")?.text()?.into());
         }
         // Predictable UUIDv4-shaped identities are for this in-memory test store only.
         let revision = loop {

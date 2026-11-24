@@ -65,7 +65,7 @@ const samples: any[] = [];
 const fixtureReports: any[] = [];
 for (const config of configurations) {
   const fixtures = `${dir}/fixtures-${config.start}`;
-  const generator = Bun.spawn(["bun", "clients/trie-benchmark.ts"], {
+  const generator = Bun.spawn(["bun", "tests/clients/trie-benchmark.ts"], {
     env: {
       ...Bun.env,
       TRIE_BENCH_OUT: fixtures,
@@ -91,8 +91,8 @@ for (const config of configurations) {
           : ["typescript", "collection"]) {
           const worker =
             implementation === "collection"
-              ? "clients/legacy-collection-benchmark-worker.ts"
-              : "clients/trie-benchmark-worker.ts";
+              ? "tests/clients/legacy-collection-benchmark-worker.ts"
+              : "tests/clients/trie-benchmark-worker.ts";
           const child = Bun.spawn(["bun", worker], {
             env: { ...Bun.env, LEGACY_COLLECTION_ADAPTER: adapter },
             stdin: "pipe",
@@ -144,13 +144,13 @@ for (const config of configurations) {
 // Fingerprint every timed source, including the unmodified external dependencies.
 const files = [
   "scripts/benchmark-legacy-collection.ts",
-  "clients/legacy-collection-benchmark-worker.ts",
-  "clients/trie-benchmark-worker.ts",
-  "clients/trie-benchmark.ts",
-  "clients/lexidecimal.ts",
-  "clients/flexbuffer.ts",
-  "clients/structures/core.ts",
-  "clients/structures/trie.ts",
+  "tests/clients/legacy-collection-benchmark-worker.ts",
+  "tests/clients/trie-benchmark-worker.ts",
+  "tests/clients/trie-benchmark.ts",
+  "tests/clients/lexidecimal.ts",
+  "tests/clients/flexbuffer.ts",
+  "tests/clients/structures/core.ts",
+  "tests/clients/structures/trie.ts",
 ];
 const report = {
   recorded_at: new Date().toISOString(),

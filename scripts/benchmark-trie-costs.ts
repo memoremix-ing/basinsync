@@ -1,3 +1,4 @@
+import { sourceAt } from "./historical-source";
 /** Ablations use isolated source snapshots; no integrity bypass enters production. */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -8,19 +9,19 @@ const dir = resolve(Bun.env.TRIE_COST_OUT ?? `.local/trie-costs-${Date.now()}`);
 mkdirSync(dir, { recursive: true });
 const baseRef = Bun.env.TRIE_COST_BASE_REF ?? "@-";
 const files = [
-  "clients/flexbuffer.ts",
-  "clients/lexidecimal.ts",
-  "clients/symbols.ts",
-  "clients/structures/core.ts",
-  "clients/structures/trie.ts",
-  "clients/structures/types.ts",
-  "clients/structures/operation.ts",
+  "tests/clients/flexbuffer.ts",
+  "tests/clients/lexidecimal.ts",
+  "tests/clients/symbols.ts",
+  "tests/clients/structures/core.ts",
+  "tests/clients/structures/trie.ts",
+  "tests/clients/structures/types.ts",
+  "tests/clients/structures/operation.ts",
 ];
 const donorRef = Bun.env.TRIE_COST_DONOR_REF ?? "35e4d6ac";
 const baseline: Record<string, string> = {},
   current: Record<string, string> = {};
 for (const file of files) {
-  const child = Bun.spawnSync(["jj", "file", "show", "-r", baseRef, file]);
+  const child = sourceAt(baseRef, file);
   assert(
     file.endsWith("/operation.ts") || child.exitCode === 0,
     child.stderr.toString(),
@@ -28,7 +29,7 @@ for (const file of files) {
   baseline[file] = file.endsWith("/operation.ts")
     ? readFileSync(file, "utf8")
     : child.stdout.toString();
-  const donor = Bun.spawnSync(["jj", "file", "show", "-r", donorRef, file]);
+  const donor = sourceAt(donorRef, file);
   assert.equal(donor.exitCode, 0, donor.stderr.toString());
   current[file] = donor.stdout.toString();
 }
@@ -36,9 +37,9 @@ const cut = (text: string, a: string, b: string) =>
   text.slice(text.indexOf(a), text.indexOf(b, text.indexOf(a)));
 const transplant = (text: string, donor: string, a: string, b: string) =>
   text.replace(cut(text, a, b), cut(donor, a, b));
-const core = "clients/structures/core.ts",
-  trie = "clients/structures/trie.ts",
-  flex = "clients/flexbuffer.ts";
+const core = "tests/clients/structures/core.ts",
+  trie = "tests/clients/structures/trie.ts",
+  flex = "tests/clients/flexbuffer.ts";
 const helper =
   '\nexport function isPromiseLike<T>(v:T|PromiseLike<T>): v is PromiseLike<T> { return v !== null && (typeof v === "object" || typeof v === "function") && typeof (v as PromiseLike<T>).then === "function"; }\n';
 // Reconstitute classic async control flow while retaining precisely the same lookup plans.
@@ -205,7 +206,7 @@ for (const layout of layouts) {
     const offset = round % names.length,
       order = [...names.slice(offset), ...names.slice(0, offset)];
     for (const variant of order) {
-      const child = Bun.spawn(["bun", "clients/trie-cost-worker.ts"], {
+      const child = Bun.spawn(["bun", "tests/clients/trie-cost-worker.ts"], {
         stdin: "pipe",
         stdout: "pipe",
         stderr: "pipe",
@@ -272,7 +273,7 @@ const report = {
       Object.fromEntries(files.map((f) => [f, hash(variants[v][f])])),
     ]),
   ),
-  worker_sha384: hash(readFileSync("clients/trie-cost-worker.ts", "utf8")),
+  worker_sha384: hash(readFileSync("tests/clients/trie-cost-worker.ts", "utf8")),
   samples,
 };
 writeFileSync(`${dir}/report.json`, JSON.stringify(report, null, 2));

@@ -101,7 +101,9 @@ function recordEdit<V>(value: V, scope: CowContext<any, any>): ValueEdit<V> {
       if (!v || typeof v !== "object") return v;
       if (v instanceof Uint8Array) return new ReadonlyCowBytes(v, scope);
       let child = s.children.get(p);
-      if (!child || child.base !== v) {
+      // finish() may have installed this child's copy during an intermediate
+      // read. Only explicit replacement/deletion detaches its draft identity.
+      if (!child) {
         child = wrap(v, s);
         s.children.set(p, child);
       }
@@ -191,7 +193,7 @@ function recordEdit<V>(value: V, scope: CowContext<any, any>): ValueEdit<V> {
   function finish(s: State): any {
     if (!s.copy) return s.base;
     for (const [k, c] of s.children)
-      if (Object.hasOwn(s.copy, k) && s.copy[k] === c.base)
+      if (Object.hasOwn(s.copy, k))
         s.copy[k] = finish(c);
     properties(s.copy);
     markValid(s.copy);

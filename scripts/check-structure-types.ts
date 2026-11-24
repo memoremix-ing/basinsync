@@ -32,9 +32,21 @@ function tokens(text: string) {
   }
   return out;
 }
+function schemas(text: string) {
+  const source = ts.createSourceFile("schemas.ts", text, ts.ScriptTarget.Latest, true);
+  const found = new Map<string, ReturnType<typeof tokens>>();
+  for (const statement of source.statements) {
+    assert(ts.isInterfaceDeclaration(statement) || ts.isTypeAliasDeclaration(statement),
+      "schemas contain only named type/interface declarations");
+    const name = statement.name.text;
+    assert(!found.has(name), `duplicate schema ${name}`);
+    found.set(name, tokens(statement.getText(source)));
+  }
+  return [...found].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
+}
 assert.deepEqual(
-  tokens(readFileSync("clients/structures/types.ts", "utf8")),
-  tokens(declarations),
+  schemas(readFileSync("tests/clients/structures/types.ts", "utf8")),
+  schemas(declarations),
   "public declarations differ from documented schemas",
 );
 console.log("Documented and public structure declarations agree");

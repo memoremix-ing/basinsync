@@ -172,12 +172,12 @@ fn main() -> Result<()> {
                 .array()?
                 .iter()
                 .map(|q| {
-                    Ok(Array(vec![
-                        q.clone(),
-                        volume::page(&mut basin, root, "/sparse", &q.big()?, true)?
-                            .map(Blob)
-                            .unwrap_or(Null),
-                    ]))
+                    basin.clear_cache();
+                    let bytes = volume::page(&mut basin, root, "/sparse", &q.big()?, true)?;
+                    basin.clear_cache();
+                    let strong = volume::page(&mut basin, root, "/sparse", &q.big()?, false)?;
+                    anyhow::ensure!(bytes == strong, "shortcut mismatch");
+                    Ok(Array(vec![q.clone(), bytes.map(Blob).unwrap_or(Null)]))
                 })
                 .collect::<Result<_>>()?
         } else {
@@ -198,8 +198,6 @@ fn main() -> Result<()> {
                         walk(b, root, &path, out)?
                     } else {
                         let bytes = volume::read(b, root, &path, true)?;
-                        let strong = volume::read(b, root, &path, false)?;
-                        anyhow::ensure!(bytes == strong, "shortcut mismatch");
                         out.push(Array(vec![path.as_str().into(), Blob(bytes)]));
                     }
                 }

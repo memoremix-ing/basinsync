@@ -11,7 +11,7 @@ const base = resolve(source),
   fixtures = resolve(process.argv[3] ?? ".local/trie-lex-zero");
 const root = resolve(process.argv[4] ?? `.local/trie-groups-${Date.now()}`);
 mkdirSync(root, { recursive: true });
-const workerOriginal = readFileSync("clients/trie-cost-worker.ts", "utf8");
+const workerOriginal = readFileSync("tests/clients/trie-cost-worker.ts", "utf8");
 const results: any[] = [];
 const variants = (
   Bun.env.TRIE_GROUP_VARIANTS ?? "baseline,group255,group256"
@@ -30,7 +30,7 @@ for (const v of variants) {
     ].includes(v),
     early = ["early-equal", "group256-early", "all"].includes(v),
     hoist = ["hoist-length", "all"].includes(v);
-  const triePath = `${folder}/clients/structures/trie.ts`;
+  const triePath = `${folder}/tests/clients/structures/trie.ts`;
   let trie = readFileSync(triePath, "utf8");
   const groupCap = v.startsWith("group255")
     ? 255
@@ -66,7 +66,7 @@ for (const v of variants) {
   }\n`;
   }
   writeFileSync(triePath, trie);
-  const corePath = `${folder}/clients/structures/core.ts`;
+  const corePath = `${folder}/tests/clients/structures/core.ts`;
   let core = readFileSync(corePath, "utf8");
   if (hoist)
     core = core.replace(
@@ -149,8 +149,8 @@ writeFileSync(
           Object.fromEntries(
             [
               "worker.ts",
-              "clients/structures/core.ts",
-              "clients/structures/trie.ts",
+              "tests/clients/structures/core.ts",
+              "tests/clients/structures/trie.ts",
             ].map((p) => [p, sha(readFileSync(`${root}/${v}/${p}`, "utf8"))]),
           ),
         ]),

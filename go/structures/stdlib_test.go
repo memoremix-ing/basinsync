@@ -64,7 +64,7 @@ func checkBTreeNode(t *testing.T, b *Basin, node Node, root bool) int {
 	return count
 }
 func TestPackedBTreeAndVector(t *testing.T) {
-	for _, n := range []int{0, 1, 31, 32, 33, 1023, 1024, 1280, 1281, 32768} {
+	for _, n := range structureVectors(t).OrderedCounts {
 		b := newTestBasin(t)
 		input := standardRows(n)
 		root, e := BuildBTree(b, input, CountConsumer(7))

@@ -1,3 +1,4 @@
+import { sourceAt } from "./historical-source";
 /** Run frozen vector controls in fresh processes; all serialized roots must agree. */
 import assert from "node:assert/strict";
 import {
@@ -10,7 +11,7 @@ import {
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { cpus } from "node:os";
-import { encode } from "../clients/lexidecimal";
+import { encode } from "../tests/clients/lexidecimal";
 const root = resolve(Bun.env.VECTOR_PASS_ROOT ?? ".local/vector-pass"),
   rounds = Number(Bun.env.VECTOR_PASS_ROUNDS ?? 3),
   n = Number(Bun.env.VECTOR_PASS_N ?? 100000);
@@ -22,10 +23,10 @@ const variants = (
   hashes: Record<string, any> = {};
 // Freeze current dependencies and reconstruct the historical controls on a fresh run.
 // Existing snapshots remain untouched so fingerprints continue to describe measured code.
-const vectorPath = "clients/structures/vector.ts";
+const vectorPath = "tests/clients/structures/vector.ts";
 if (variants.some((v) => !existsSync(`${root}/${v}/${vectorPath}`))) {
   const ref = Bun.env.VECTOR_PASS_BASE_REF ?? "c7ef9501";
-  const prior = Bun.spawnSync(["jj", "file", "show", "-r", ref, vectorPath]);
+  const prior = sourceAt(ref, vectorPath);
   assert.equal(prior.exitCode, 0, prior.stderr.toString());
   const baseline = prior.stdout.toString(),
     current = readFileSync(vectorPath, "utf8");
@@ -95,18 +96,18 @@ if (variants.some((v) => !existsSync(`${root}/${v}/${vectorPath}`))) {
     builder: current,
   };
   const files = [
-    "clients/structure-comparison-worker.ts",
-    "clients/flexbuffer.ts",
-    "clients/lexidecimal.ts",
-    "clients/symbols.ts",
-    ...readdirSync("clients/structures")
+    "tests/clients/structure-comparison-worker.ts",
+    "tests/clients/flexbuffer.ts",
+    "tests/clients/lexidecimal.ts",
+    "tests/clients/symbols.ts",
+    ...readdirSync("tests/clients/structures")
       .filter((f) => f.endsWith(".ts"))
-      .map((f) => `clients/structures/${f}`),
+      .map((f) => `tests/clients/structures/${f}`),
   ];
   for (const variant of variants) {
     assert(controls[variant], "unknown vector control");
     if (existsSync(`${root}/${variant}/${vectorPath}`)) continue;
-    mkdirSync(`${root}/${variant}/clients/structures`, { recursive: true });
+    mkdirSync(`${root}/${variant}/tests/clients/structures`, { recursive: true });
     for (const file of files)
       writeFileSync(
         `${root}/${variant}/${file}`,
@@ -117,13 +118,13 @@ if (variants.some((v) => !existsSync(`${root}/${v}/${vectorPath}`))) {
 for (const v of variants) {
   const base = `${root}/${v}`;
   const files = [
-    "clients/structure-comparison-worker.ts",
-    ...readdirSync(`${base}/clients/structures`)
+    "tests/clients/structure-comparison-worker.ts",
+    ...readdirSync(`${base}/tests/clients/structures`)
       .filter((f) => f.endsWith(".ts"))
-      .map((f) => `clients/structures/${f}`),
-    "clients/flexbuffer.ts",
-    "clients/lexidecimal.ts",
-    "clients/symbols.ts",
+      .map((f) => `tests/clients/structures/${f}`),
+    "tests/clients/flexbuffer.ts",
+    "tests/clients/lexidecimal.ts",
+    "tests/clients/symbols.ts",
   ];
   hashes[v] = Object.fromEntries(
     files.map((f) => [
@@ -155,7 +156,7 @@ for (const layout of ["dense", "wide"]) {
   for (let round = 0; round < rounds; round++)
     for (const variant of round % 2 ? variants.toReversed() : variants) {
       const p = Bun.spawn(
-        ["bun", `${root}/${variant}/clients/structure-comparison-worker.ts`],
+        ["bun", `${root}/${variant}/tests/clients/structure-comparison-worker.ts`],
         {
           stdin: "pipe",
           stdout: "pipe",

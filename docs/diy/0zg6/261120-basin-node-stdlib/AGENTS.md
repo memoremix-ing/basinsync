@@ -24,6 +24,11 @@ Apply these when implementing or benchmarking this tutorial family:
   destination collisions and moves into descendants.
 - Rotate transient ownership before snapshots/iterators escape or subtrees are
   grafted; an owner tag alone does not prove a branch has only one parent.
+- Share cross-language contract vectors and compare editors to independent models.
+  Avoid assertions about private layouts, instrumentation or diagnostic wording;
+  retain named regressions and prove new oracles detect deliberately broken behavior.
+  Exercise lifecycle sequences across boundaries: publish/resume/grow, retain/reread/
+  mutate, and pending/reject/evict, rather than testing each operation only in isolation.
 - Verify shared unchanged branches, old snapshots, owned versus borrowed data,
   canonical output and cross-language reads. Record request/byte counts as well as CPU.
 - Optional shortcut indexes should not add cold-path fetches merely to discover

@@ -8,11 +8,11 @@ const out = Bun.env.OWNER_OUT ?? ".local/owner",
 assert(Number.isInteger(rounds) && rounds > 0);
 mkdirSync(out, { recursive: true });
 const sources = [
-  "clients/subtree-cow-benchmark-worker.ts",
+  "tests/clients/subtree-cow-benchmark-worker.ts",
   "scripts/benchmark-owner-trie.ts",
-  ...readdirSync("clients/structures")
+  ...readdirSync("tests/clients/structures")
     .filter((f) => f.endsWith(".ts"))
-    .map((f) => "clients/structures/" + f),
+    .map((f) => "tests/clients/structures/" + f),
 ];
 const hashes = Object.fromEntries(
   sources.map((p) => [
@@ -35,7 +35,7 @@ for (let round = 0; round < rounds; round++)
                 : "persistent"
               : api;
           const p = Bun.spawn(
-            ["bun", "clients/subtree-cow-benchmark-worker.ts"],
+            ["bun", "tests/clients/subtree-cow-benchmark-worker.ts"],
             {
               stdout: "pipe",
               stderr: "pipe",

@@ -66,16 +66,18 @@ func combineSL(digests [][]byte) []byte {
 	return slBytes(m)
 }
 func sectorConsumer() Consumer {
-	return Consumer{Empty: map[string]any{"brombergSL2": slBytes(slIdentity())}, Entry: func(_ []byte, v any) (any, error) {
+	return Consumer{Empty: map[string]any{"brombergSL2": slBytes(slIdentity()), "size": new(big.Int)}, Entry: func(_ []byte, v any) (any, error) {
 		a := array(v)
 		require(len(a) == 1, "invalid page")
-		return map[string]any{"brombergSL2": Bromberg(blob(a[0]))}, nil
+		return map[string]any{"brombergSL2": Bromberg(blob(a[0])), "size": big.NewInt(int64(len(blob(a[0]))))}, nil
 	}, Combine: func(v []any) (any, error) {
 		parts := make([][]byte, len(v))
+		size := new(big.Int)
 		for i, s := range v {
 			parts[i] = blob(field(s, "brombergSL2"))
+			size.Add(size, bigint(field(s, "size")))
 		}
-		return map[string]any{"brombergSL2": combineSL(parts)}, nil
+		return map[string]any{"brombergSL2": combineSL(parts), "size": size}, nil
 	}}
 }
 func lex(n *big.Int) string {

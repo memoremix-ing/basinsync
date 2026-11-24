@@ -9,7 +9,7 @@ import { toObject, encode as extensionEncode } from "./flexbuffer";
 import { commit, form, epilogueStatus as fullStatus, latestBlob, sha384, sha384Bytes, type ApiError, type CommitResponse, type Timelines, type ViewpointMismatch, reserveHeap, type HeapResponse, type HeapNode } from "./client";
 import { parse, stringify } from "./json0";
 import { key, fromKey } from "./timeline";
-import { decodeBulkOrder } from "./bulkorder";
+import { decodeBulkOrder, fromKey as bulkBounds } from "./bulkorder";
 import { key as epilogueKey, encode as lex, decode as unlex } from "./lexidecimal";
 import { encodeEvent, markerAt, deltasAt, legacyDeltasAt, entriesAt, rangesAt, eventTuples, encodeTuples, encodeWalEvent, entryDigest, commandFrames, trimRetryMargins, type WalDelta, type Marker } from "./events";
 import { ingestWal } from "./wal";
@@ -201,6 +201,13 @@ async function flowBlob(bucket:string,flow:string,viewpoint:bigint):Promise<Uint
     throw error;
   }
 }
+// Archive partitioning depends on worker scheduling; locate the requested event.
+async function archivedEvent(bucket:string,milestone:bigint){
+  const Key=(await committedKeys(s3,bucket,objectKeys.analogue)).find(key=>{const b=bulkBounds(key);return b.lowest<=milestone&&milestone<b.highest;});
+  if(!Key)return undefined;
+  const object=await s3.send(new GetObjectCommand({Bucket:bucket,Key})),body=await object.Body!.transformToByteArray(),order=decodeBulkOrder(body);
+  return {object,body,order,event:order.events[Number(milestone-order.index.lowest)]};
+}
 async function eventually<T>(read:()=>Promise<T>,done:(value:T)=>boolean):Promise<T>{
   const deadline=Date.now()+15000;let last:unknown;
   while(Date.now()<deadline){try{const value=await read();if(done(value))return value;last=value;}catch(error){last=error;}await Bun.sleep(10);}
@@ -357,8 +364,8 @@ try {
     const next=fetch(`${app.url}/api/v0/epilogue`,{method:"PUT",body:form("collision",bytes("second"),1n),signal:AbortSignal.timeout(120000)}).then(r=>{done++;return r});await batchLogged(app.log,2);assert.equal(done,0);
     proxy.release.resolve();await status(await first,201);await status(await next,201);assert.equal(proxy.retries(),259);
     const payload=await get(b,1n),original=proxy.originals.get(key(1n))!.body;assert.equal(entryDigest(payload),entryDigest(original));assert.notEqual(sha384(payload),sha384(original));
-    const archives=await eventually(()=>s3.send(new ListObjectsV2Command({Bucket:b,Prefix:objectKeys.analogue})),r=>r.KeyCount===1);
-    const archived=await s3.send(new GetObjectCommand({Bucket:b,Key:archives.Contents![0].Key!}));assert.deepEqual(decodeBulkOrder(await archived.Body!.transformToByteArray()).events[0],trimRetryMargins(payload),"archive handoff trims the accepted event without changing its command bytes");
+    const archived=await eventually(()=>archivedEvent(b,1n),Boolean);assert(archived);
+    assert.deepEqual(archived.event,trimRetryMargins(payload),"archive handoff preserves accepted command bytes");
     assert.equal((deltasAt(await get(b,2n)).turso["default.turso"] as WalDelta).physical.parent,entryDigest(payload));await assertManifestRange(b,1n,payload);await stop(app.process);
     const replayed=await server(b);assert.equal((await fullStatus(replayed.url,"collision")).latest?.viewpoint,1n);await stop(replayed.process);
     const backed=await server(b,endpoint,{BASINSYNC_BACKUP_INTERVAL_MS:"10"});await eventually(()=>basinBackup(b),cp=>cp?.milestone===2n);await stop(backed.process);
@@ -388,10 +395,9 @@ try {
     const b=await bucket(),proxy=collisionProxy(b,r=>new URL(r.url).pathname.includes(`/${objectKeys.analogue}`),false,false,3);
     const app=await server(b,proxy.url,{BASINSYNC_BULK_MAX_AGE_MS:"10",BASINSYNC_BULK_TARGET_BYTES:"1"});
     await status(await commit(app.url,"bulk-margin",a,0n),201);
-    await eventually(async()=>proxy.retries(),n=>n===3);
-    // The last counted retry may still be uploading; VersityGW lists its temporary file until the PUT completes.
-    const archives=await eventually(()=>s3.send(new ListObjectsV2Command({Bucket:b,Prefix:objectKeys.analogue})),r=>r.KeyCount===1);
-    const {object,body}=await eventually(async()=>{const object=await s3.send(new GetObjectCommand({Bucket:b,Key:archives.Contents![0].Key!}));return {object,body:await object.Body!.transformToByteArray()};},r=>envelopes(r.body).at(-1)!.content[0]===3);
+    await eventually(async()=>proxy.retries(),n=>n>=3);
+    const archived=await eventually(()=>archivedEvent(b,1n),r=>!!r&&envelopes(r.body).at(-1)!.content[0]===3);assert(archived);
+    const {object,body}=archived;
     const order=decodeBulkOrder(body);
     assert.deepEqual(order.events[0],trimRetryMargins(await get(b,1n)));assert.equal(envelopes(body).at(-1)!.content[0],3);
     assert.equal(object.Metadata!["bulkmanifest-range"],`bytes=${order.range.start}-${order.range.end-1}`);

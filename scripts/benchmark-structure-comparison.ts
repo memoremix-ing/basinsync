@@ -4,7 +4,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { cpus, platform, arch } from "node:os";
-import { encode } from "../clients/lexidecimal";
+import { encode } from "../tests/clients/lexidecimal";
 const out = resolve(Bun.env.STRUCTURE_OUT ?? ".local/structure-comparison");
 mkdirSync(out, { recursive: true });
 const n = Number(Bun.env.STRUCTURE_N ?? 100000),
@@ -16,17 +16,17 @@ const adapter = resolve(
   Bun.env.TRIE_COST_COLLECTION_ADAPTER ?? ".local/collection-full/adapter",
 );
 const sourceFiles = [
-  "clients/structure-comparison-worker.ts",
-  "clients/structures/core.ts",
-  "clients/structures/trie.ts",
-  "clients/structures/vector.ts",
-  "clients/structures/packed.ts",
-  "clients/structures/operation.ts",
-  "clients/structures/logical-trie.ts",
-  "clients/structures/logical-vector.ts",
-  "clients/flexbuffer.ts",
-  "clients/lexidecimal.ts",
-  "clients/symbols.ts",
+  "tests/clients/structure-comparison-worker.ts",
+  "tests/clients/structures/core.ts",
+  "tests/clients/structures/trie.ts",
+  "tests/clients/structures/vector.ts",
+  "tests/clients/structures/packed.ts",
+  "tests/clients/structures/operation.ts",
+  "tests/clients/structures/logical-trie.ts",
+  "tests/clients/structures/logical-vector.ts",
+  "tests/clients/flexbuffer.ts",
+  "tests/clients/lexidecimal.ts",
+  "tests/clients/symbols.ts",
   ...[
     "collection.ts",
     "matter.ts",
@@ -71,7 +71,7 @@ for (const layout of cases) {
         cold: 128,
       });
       for (const kind of kinds) {
-        const p = Bun.spawn(["bun", "clients/structure-comparison-worker.ts"], {
+        const p = Bun.spawn(["bun", "tests/clients/structure-comparison-worker.ts"], {
           stdin: "pipe",
           stdout: "pipe",
           stderr: "pipe",

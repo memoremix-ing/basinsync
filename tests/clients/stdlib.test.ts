@@ -1,3 +1,5 @@
+import { vectors } from "./vectors";
+const shared = vectors<{sl2: {message: string; digest: string}[]; trieCounts: number[]; orderedCounts: number[]}>("structures");
 import { test, expect } from "bun:test";
 import {
   Basin,
@@ -17,7 +19,7 @@ const seed = new Uint8Array(32).fill(42),
       i % 7 === 0 ? null : BigInt(i),
     ]);
 test("vector bitmaps, packing, canonical rebuilds, sparse bigint indices and snapshots", async () => {
-  for (const n of [0, 1, 31, 32, 33, 1023, 1024, 1280, 1281, 32768]) {
+  for (const n of shared.orderedCounts) {
     const s = new MemoryStorage(),
       b = new Basin(s, { seed }),
       input = Array.from({ length: n }, (_, i) =>
@@ -88,7 +90,7 @@ test("vector bitmaps, packing, canonical rebuilds, sparse bigint indices and sna
   ).rejects.toThrow("duplicate");
 }, 30000);
 test("B-tree separator values, canonical collapse, ordered scans, lazy branches and pruning", async () => {
-  for (const n of [0, 1, 31, 32, 33, 1023, 1024, 1280, 1281, 32768]) {
+  for (const n of shared.orderedCounts) {
     const s = new MemoryStorage(),
       b = new Basin(s, { seed }),
       input = rows(n),

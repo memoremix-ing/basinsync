@@ -101,11 +101,11 @@ for (const n of [20000, 350000]) {
       });
 }
 const sources = [
-  "clients/volume-shortcut-trace.ts",
-  ...readdirSync("clients/structures")
+  "tests/clients/volume-shortcut-trace.ts",
+  ...readdirSync("tests/clients/structures")
     .filter((f) => f.endsWith(".ts"))
-    .map((f) => `clients/structures/${f}`),
-  "clients/flexbuffer.ts",
+    .map((f) => `tests/clients/structures/${f}`),
+  "tests/clients/flexbuffer.ts",
 ];
 const result = {
   runtime: Bun.version,
