@@ -12,10 +12,14 @@ import {
   validateNode,
   u32,
   validateEdge,
+  isPromiseLike,
 } from "./core";
 import { Reference } from "../flexbuffer";
 import { type Consumer } from "./trie";
 import { pack, built, type Built } from "./packed";
+import { type Operation, resolveOperation } from "./operation";
+import { BTreeMap } from "./logical-btree";
+export { BTreeMap } from "./logical-btree";
 export const BTREE = ".btree-node/";
 export type BTreeHeader = import("./types").BTreeNode_S0<{
   [index: number]: { Summary: unknown; Value: unknown };
@@ -59,7 +63,12 @@ export class BTree<V = unknown, M = null> {
     const rows = [] as { key: Uint8Array; value: V; summary: M }[];
     for (const [k, v] of input) {
       const bytes = key(k);
-      rows.push({ key: bytes, value: v, summary: await c.entry(bytes, v) });
+      const summary = c.entry(bytes, v);
+      rows.push({
+        key: bytes,
+        value: v,
+        summary: isPromiseLike(summary) ? await summary : summary,
+      });
     }
     rows.sort((a, b) => compare(a.key, b.key));
     for (let i = 1; i < rows.length; i++)
@@ -101,6 +110,10 @@ export class BTree<V = unknown, M = null> {
         own.length,
         c.edges ? own.flatMap((r) => c.edges!(r.value)) : [],
       );
+      const combined = part.length
+        ? c.combine(part.map((r) => r.summary))
+        : c.empty;
+      const summary = isPromiseLike(combined) ? await combined : combined;
       return built(
         basin,
         BTREE,
@@ -112,7 +125,7 @@ export class BTree<V = unknown, M = null> {
         },
         [
           c.migration,
-          part.length ? await c.combine(part.map((r) => r.summary)) : c.empty,
+          summary,
           own.map((r) => r.key),
           own.map((r) => r.value),
           depth ? p.slots : null,
@@ -123,7 +136,19 @@ export class BTree<V = unknown, M = null> {
     const b = await build(rows, depth, true);
     return new BTree(basin, await basin.seal(b.node, b.edges), c);
   }
+  private readonly plans = new WeakMap<
+    Reference,
+    ReturnType<BTree<V, M>["parseParts"]>
+  >();
   private parts(r: Reference) {
+    let p = this.plans.get(r);
+    if (!p) {
+      p = this.parseParts(r);
+      this.plans.set(r, p);
+    }
+    return p;
+  }
+  private parseParts(r: Reference) {
     validateNode(r, BTREE);
     const h = checkedHeader(object<BTreeHeader>(r.get("5"))),
       f = r.get("6");
@@ -150,41 +175,94 @@ export class BTree<V = unknown, M = null> {
           : children.isNull()),
       "invalid B-tree node",
     );
-    return { h, f, keys, values, children };
+    const bytes = Array.from({ length: keys.length() }, (_, i) =>
+      keys.get(i).blobValue()!,
+    );
+    for (let i = 1; i < bytes.length; i++)
+      check(compare(bytes[i - 1], bytes[i]) < 0, "invalid B-tree key order");
+    return {
+      h,
+      f,
+      keys,
+      values,
+      children,
+      bytes,
+      sources: new Map<number, Reference | Edge>(),
+    };
   }
-  async getView(raw: Uint8Array | string): Promise<Reference | undefined> {
-    const k = key(raw),
-      h = this.root[5] as BTreeHeader;
+  /** Ready reads allocate no Promise; missing edges suspend at the traversal boundary. */
+  getViewOrDefer(raw: Uint8Array | string): Operation<Reference | undefined> {
+    const k = key(raw);
+    validateEdge(this.root);
+    const h = checkedHeader(this.root[5] as BTreeHeader);
     if (!h.keys || compare(k, h.keys[0]) < 0 || compare(k, h.keys[1]) > 0)
       return;
-    let r = await this.basin.load(this.root);
-    for (let depth = 0; depth < 256; depth++) {
-      const { keys, values, children } = this.parts(r);
+    const cached = this.basin.peek(this.root);
+    return cached
+      ? this.seek(cached, k, 0)
+      : () => this.resume(this.root, k, 0);
+  }
+  private *resume(
+    edge: Edge,
+    k: Uint8Array,
+    depth: number,
+  ): Generator<PromiseLike<unknown>, Reference | undefined, unknown> {
+    const r = (yield this.basin.load(edge)) as Reference;
+    const next = this.seek(r, k, depth);
+    return typeof next === "function" ? yield* next() : next;
+  }
+  private seek(
+    r: Reference,
+    k: Uint8Array,
+    depth: number,
+  ): Operation<Reference | undefined> {
+    for (;;) {
+      check(depth++ < 256, "B-tree nesting limit");
+      const p = this.parts(r);
       let lo = 0,
-        hi = keys.length();
+        hi = p.bytes.length;
       while (lo < hi) {
-        const mid = (lo + hi) >> 1;
-        if (compare(keys.get(mid).blobValue()!, k) < 0) lo = mid + 1;
+        const mid = (lo + hi) >>> 1;
+        if (compare(p.bytes[mid], k) < 0) lo = mid + 1;
         else hi = mid;
       }
-      if (lo < keys.length() && equal(keys.get(lo).blobValue()!, k))
-        return values.get(lo);
-      if (children.isNull()) return;
-      const next = children.get(lo);
-      if (next.isMap()) r = next;
-      else {
-        const e = edgeFrom(next),
-          h = e[5] as BTreeHeader;
+      if (lo < p.bytes.length && equal(p.bytes[lo], k)) return p.values.get(lo);
+      if (p.children.isNull()) return;
+      let next = p.sources.get(lo);
+      if (!next) {
+        const at = p.children.get(lo);
+        next = at.isMap() ? at : edgeFrom(at);
+        p.sources.set(lo, next);
+      }
+      if (Array.isArray(next)) {
+        const h = checkedHeader(next[5] as BTreeHeader);
         if (!h.keys || compare(k, h.keys[0]) < 0 || compare(k, h.keys[1]) > 0)
           return;
-        r = await this.basin.load(e);
-      }
+        const cached = this.basin.peek(next);
+        if (!cached) return () => this.resume(next as Edge, k, depth);
+        r = cached;
+      } else r = next;
     }
-    throw Error("B-tree nesting limit");
+  }
+  getOrDefer(raw: Uint8Array | string): Operation<V | undefined> {
+    const op = this.getViewOrDefer(raw);
+    if (typeof op === "function")
+      return function* () {
+        const r = yield* op();
+        return r === undefined ? undefined : object<V>(r);
+      };
+    return op === undefined ? undefined : object<V>(op);
+  }
+  async getView(raw: Uint8Array | string): Promise<Reference | undefined> {
+    return resolveOperation(this.getViewOrDefer(raw));
   }
   async get(raw: Uint8Array | string): Promise<V | undefined> {
-    const r = await this.getView(raw);
-    return r === undefined ? undefined : object<V>(r);
+    return resolveOperation(this.getOrDefer(raw));
+  }
+  async edit(): Promise<BTreeEditor<V, M>> {
+    const rows: [Uint8Array, V][] = [];
+    for await (const row of this.entries()) rows.push(row);
+    return new BTreeEditor(this.basin, this.consumer, BTreeMap.from(rows));
   }
   async *entries(
     from: Uint8Array | string = new Uint8Array(),
@@ -239,5 +317,48 @@ export class BTree<V = unknown, M = null> {
       else rows.set(id, c.set);
     }
     return BTree.build(this.basin, rows, this.consumer);
+  }
+}
+
+/** In-memory edits path-copy; store performs canonical full export. */
+export class BTreeEditor<V, M = null> {
+  constructor(
+    readonly basin: Basin,
+    readonly consumer: Consumer<V, M>,
+    private readonly tree: BTreeMap<V> = BTreeMap.empty(),
+  ) {}
+  static from<V, M>(
+    basin: Basin,
+    rows: Iterable<[Uint8Array | string, V]>,
+    consumer: Consumer<V, M>,
+  ) {
+    return new BTreeEditor(basin, consumer, BTreeMap.from(rows));
+  }
+  get size() {
+    return this.tree.size;
+  }
+  get(k: Uint8Array | string) {
+    return this.tree.get(k);
+  }
+  has(k: Uint8Array | string) {
+    return this.tree.has(k);
+  }
+  set(k: Uint8Array | string, v: V) {
+    const next = this.tree.set(k, v);
+    return next === this.tree
+      ? this
+      : new BTreeEditor(this.basin, this.consumer, next);
+  }
+  delete(k: Uint8Array | string) {
+    const next = this.tree.delete(k);
+    return next === this.tree
+      ? this
+      : new BTreeEditor(this.basin, this.consumer, next);
+  }
+  entries(from?: Uint8Array | string, to?: Uint8Array | string) {
+    return this.tree.entries(from, to);
+  }
+  store() {
+    return BTree.build(this.basin, this.tree.entries(), this.consumer);
   }
 }

@@ -75,3 +75,22 @@ test("volume updates read metadata but no unchanged file or sector bodies", asyn
   expect(await updated.list("/empty")).toEqual([]);
   expect(await v.read("/change")).toEqual(utf8("old"));
 });
+test("listed file links bypass a separately stored device index", async () => {
+  const storage = new MemoryStorage(),
+    basin = new Basin(storage, { seed });
+  const volume = await Volume.build(
+    basin,
+    Array.from(
+      { length: 400 },
+      (_, i) => [`/f${i}`, utf8(`file-${i}`)] as [string, Uint8Array],
+    ),
+  );
+  const reader = new Volume(new Basin(storage, { seed }), volume.root);
+  expect((await reader.list()).length).toBe(400);
+  const get = storage.get.bind(storage);
+  storage.get = async (e) => {
+    if (e[2] === ".trie-node/") throw Error("shortcut fetched an index");
+    return get(e);
+  };
+  expect(await reader.read("/f250")).toEqual(utf8("file-250"));
+});

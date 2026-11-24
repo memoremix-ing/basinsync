@@ -4,6 +4,8 @@ prerequisites:
 ---
 
 [AGENTS]: <AGENTS.md>
+[client-browser]: <benchmark/client-browser.md>
+[continuations]: <benchmark/continuations.md>
 [diy/0zg6/261120-basin-node-stdlib/0zg7/261120-byte-trie]: <0zg7/261120-byte-trie/README.md>
 [diy/0zg6/261120-basin-node-stdlib/0zg7/261123-b-tree]: <0zg7/261123-b-tree/README.md>
 [diy/0zg6/261120-basin-node-stdlib/0zg7/261123-bitmapped-vector-trie]: <0zg7/261123-bitmapped-vector-trie/README.md>
@@ -140,20 +142,19 @@ Follow the *implementation and benchmark guidance*[~][AGENTS] when changing this
 - For format-preserving optimizations, compare serialized bytes and cross-language
   reads, including uncached loads, snapshots, prefixes and packing boundaries.
 
-## Remaining work
+## Progress and remaining work
 
-Prioritize selective canonical export, so path edits avoid scanning/repacking the
-whole structure. Consumer summaries that depend on full keys need an explicit
-reuse/recompute contract.
-
-Next, measure bounded directory nodes and page-range navigation for the
-*volume shortcuts*[~][diy/0zg6/261120-basin-node-stdlib/0zg7/261120-byte-trie].
-`Volume.update` still reads/rebuilds unchanged files; metadata-only filesystem
-operations already reuse their blocks.
+TypeScript now selectively exports compatible unchanged trie subtrees; consumer
+summaries explicitly opt into composable reuse. Volume metadata is paged, updates
+retain unchanged file blocks, and point reads use ready-only hints. All three
+languages read the revised volume layout.
 
 The *B-tree*[~][diy/0zg6/261120-basin-node-stdlib/0zg7/261123-b-tree]
-still needs measured lookup-plan/deferred-read and logical-editor work.
-Owner-tagged scopes and prefix editors are TypeScript-only; vector transients,
-Rust/Go editing parity and browser/Wasm CPU measurements remain candidates.
-Restart-from-root versus retained continuations under matching cache misses is
-also unmeasured. These are deferred experiments, not additional format requirements.
+has cached/deferred reads and persistent logical editing. Its canonical export
+still rebuilds. *Browser CPU measurements*[~][client-browser] cover all three
+logical structures; *matching-miss measurements*[~][continuations] support keeping
+retained continuations for now.
+
+Native logical-editor parity, vector transients, selective B-tree/directory export
+and Wasm CPU remain candidates. Owner-tagged scopes and prefix editors remain
+TypeScript-only. These are deferred experiments, not additional format requirements.

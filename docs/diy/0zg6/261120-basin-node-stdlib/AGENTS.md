@@ -26,6 +26,8 @@ Apply these when implementing or benchmarking this tutorial family:
   grafted; an owner tag alone does not prove a branch has only one parent.
 - Verify shared unchanged branches, old snapshots, owned versus borrowed data,
   canonical output and cross-language reads. Record request/byte counts as well as CPU.
+- Optional shortcut indexes should not add cold-path fetches merely to discover
+  hints; measure ready-only navigation against direct authoritative traversal.
 - Carry measured techniques across structures as candidates, then measure again;
   performance in one structure, runtime or language is not evidence for another.
 - Compare explicit path updates, whole-value copies and Proxy drafts separately under
