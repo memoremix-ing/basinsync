@@ -41,5 +41,6 @@ Apply these when implementing or benchmarking this tutorial family:
 Byte ownership must survive subclass behavior: `Buffer.slice()` is a view. Test
 Buffer-backed inputs and use copying constructors where ownership is promised.
 
-Keep schema declarations in Markdown code blocks as the source of truth; mechanically
-check public types against them rather than keeping parallel declaration files in docs.
+Keep authoritative schema declarations in `.d.ts` files within docs; link to them
+from Markdown rather than duplicating code blocks, and mechanically check public
+types against those declarations.

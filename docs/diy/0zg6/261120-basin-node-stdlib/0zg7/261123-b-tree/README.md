@@ -5,6 +5,7 @@ prerequisites:
 ---
 
 [bplus]: <benchmark/bplus.md>
+[btree.d]: <btree.d.ts>
 [diy/0zg6/261120-basin-node-stdlib]: <../../README.md>
 [editor-reads]: <benchmark/editor-reads.md>
 [node-height]: <../../../../../glossary/node-height.md>
@@ -37,25 +38,7 @@ remain distinct. In-memory edits path-copy branches, splitting overflow and
 borrowing/merging on deletion. Export reuses aligned unchanged subtrees for
 explicitly composable consumers; rank shifts may require wider repacking.
 
-```ts
-interface BTreeNode_S0<
-  MigrationsT extends { [migration: number]: { Summary: unknown; Value: unknown } },
-> extends BasinNode_S0<
-    "sync.memoremix.com",
-    ".btree-node/",
-    { count: bigint; depth: U32; inlined: U32; keys: Bounds<Uint8Array> },
-    {
-      [I in U32 & keyof MigrationsT]: [
-        summary: MigrationsT[I]["Summary"],
-        keys: Array<Uint8Array>,
-        values: Array<MigrationsT[I]["Value"]>,
-        children: null | Array<
-          BTreeNode_S0<MigrationsT> | BasinEdge_S0<BTreeNode_S0<MigrationsT>>
-        >,
-      ];
-    }
-  > {}
-```
+*B-tree and B+tree schema declarations*[~][btree.d].
 
 ```js
 const tree = await BTree.build(basin, [["abcd", value]], consumer);
@@ -93,44 +76,6 @@ Validate capability, digest and bounds before using one; fall back to strong
 traversal. Leaf keys own their values; equal separator keys descend right.
 Branches contain null values, leaves null children. Generic summaries aggregate
 in full key order; duplicate separator copies do not contribute.
-
-```ts
-
-interface BPlusNode_S0<
-  MigrationsT extends { [migration: number]: { Summary: unknown; Value: unknown } },
-> extends BasinNode_S0<
-  "sync.memoremix.com", ".bplus-node/",
-  {
-    count: bigint; depth: U32; inlined: U32; routing: U32; keys: Bounds<Uint8Array>;
-    policy: { leafKeys: U32; branchChildren: U32; leafInline: U32; branchInline: U32 };
-  },
-  {
-    [I in U32 & keyof MigrationsT]: [
-      summary: MigrationsT[I]["Summary"],
-      keys: Array<Uint8Array>,
-      values: null | Array<MigrationsT[I]["Value"]>,
-      children: null | Array<BPlusNode_S0<MigrationsT> | BPlusEdge_S0<MigrationsT>>,
-      leading: Array<null | BPlusHint_S0<MigrationsT>>,
-      lagging: Array<null | BPlusHint_S0<MigrationsT>>,
-    ];
-  }
-> {}
-
-type BPlusEdge_S0<
-  MigrationsT extends { [migration: number]: { Summary: unknown; Value: unknown } },
-> = BasinEdge_S0<BasinNode_S0<
-  "sync.memoremix.com", ".bplus-node/", BPlusNode_S0<MigrationsT>[5],
-  { [I in U32 & keyof MigrationsT]: [summary: MigrationsT[I]["Summary"]] }
->>;
-
-type BPlusHint_S0<
-  MigrationsT extends { [migration: number]: { Summary: unknown; Value: unknown } },
-> = {
-  keys: [Uint8Array, Uint8Array];
-  link: SyncLink_M0<BPlusNode_S0<MigrationsT>>;
-  sha384: Uint8Array;
-};
-```
 
 ```js
 const tree = await BPlusTree.build(basin, rows, consumer, {
