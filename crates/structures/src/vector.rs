@@ -32,13 +32,14 @@ fn make<S: Storage, C: Consumer>(
     base: &BigInt,
     span: &BigInt,
     shift: u32,
+    bits: u32,
     c: &C,
 ) -> Result<Built> {
     let width = BigInt::from(1) << shift as usize;
-    let mut bitmap = 0u32;
+    let mut bitmap = vec![0u8; ((1usize << bits) + 7) / 8];
     let mut children = vec![];
     let mut values = vec![];
-    for slot in 0..32u32 {
+    for slot in 0..(1u32 << bits) {
         let lo = base + &width * slot;
         let hi = &lo + &width;
         let part = rows
@@ -49,12 +50,12 @@ fn make<S: Storage, C: Consumer>(
         if part.is_empty() {
             continue;
         }
-        bitmap |= 1 << slot;
+        bitmap[slot as usize / 8] |= 1 << (slot % 8);
         if shift == 0 {
             values.push(part[0].value.clone());
         } else {
             let child_span = (span - &width * slot).min(width.clone());
-            children.push(make(b, &part, &lo, &child_span, shift - 5, c)?);
+            children.push(make(b, &part, &lo, &child_span, shift - bits, bits, c)?);
         }
     }
     let refs = values
@@ -74,21 +75,30 @@ fn make<S: Storage, C: Consumer>(
         Value::map([
             ("length", Big(span.clone())),
             ("count", Big(rows.len().into())),
+            ("bits", bits.into()),
             ("shift", shift.into()),
             ("inlined", p.inlined.into()),
         ]),
         vec![
             c.migration().into(),
             summary,
-            bitmap.into(),
+            Blob(bitmap),
             Array(if shift == 0 { values } else { p.slots }),
         ],
         p.edges,
     )
 }
 pub fn build<S: Storage, C: Consumer>(b: &mut Basin<S>, values: Vec<Value>, c: &C) -> Result<Edge> {
+    build_with_bits(b, values, c, 5)
+}
+pub fn build_with_bits<S: Storage, C: Consumer>(
+    b: &mut Basin<S>,
+    values: Vec<Value>,
+    c: &C,
+    bits: u32,
+) -> Result<Edge> {
     let length = BigInt::from(values.len());
-    build_entries(
+    build_entries_with_bits(
         b,
         length,
         values
@@ -97,6 +107,7 @@ pub fn build<S: Storage, C: Consumer>(b: &mut Basin<S>, values: Vec<Value>, c: &
             .map(|(i, v)| (i.into(), v))
             .collect(),
         c,
+        bits,
     )
 }
 pub fn build_entries<S: Storage, C: Consumer>(
@@ -105,6 +116,26 @@ pub fn build_entries<S: Storage, C: Consumer>(
     input: Vec<(BigInt, Value)>,
     c: &C,
 ) -> Result<Edge> {
+    build_entries_with_bits(b, length, input, c, 5)
+}
+pub fn build_entries_with_bits<S: Storage, C: Consumer>(
+    b: &mut Basin<S>,
+    length: BigInt,
+    input: Vec<(BigInt, Value)>,
+    c: &C,
+    bits: u32,
+) -> Result<Edge> {
+    let n = build_node_entries(b, length, input, c, bits)?;
+    b.seal(n.node, &n.edges)
+}
+pub(crate) fn build_node_entries<S: Storage, C: Consumer>(
+    b: &mut Basin<S>,
+    length: BigInt,
+    input: Vec<(BigInt, Value)>,
+    c: &C,
+    bits: u32,
+) -> Result<Built> {
+    ensure!((1..=8).contains(&bits), "vector bits must be 1..8");
     nonnegative(&length)?;
     let mut rows = input
         .into_iter()
@@ -124,12 +155,11 @@ pub fn build_entries<S: Storage, C: Consumer>(
         "duplicate vector index"
     );
     let mut shift = 0;
-    while length > (BigInt::from(1) << (shift + 5) as usize) {
-        shift += 5;
-        ensure!(shift < 1280, "vector nesting limit");
+    while length > (BigInt::from(1) << (shift + bits) as usize) {
+        shift += bits;
+        ensure!(shift / bits < 256, "vector nesting limit");
     }
-    let n = make(b, &rows, &0.into(), &length, shift, c)?;
-    b.seal(n.node, &n.edges)
+    make(b, &rows, &0.into(), &length, shift, bits, c)
 }
 fn root(e: &Edge, migration: u32) -> Result<&Value> {
     basin::validate_edge(e)?;
@@ -141,14 +171,20 @@ fn root(e: &Edge, migration: u32) -> Result<&Value> {
     );
     e.at(5)
 }
-fn parts(v: &View, migration: u32) -> Result<(Value, u32, View)> {
+fn parts(v: &View, migration: u32) -> Result<(Value, Vec<u8>, View)> {
     basin::validate_node(v.reader()?, Some(PATH))?;
     let h = v.field("5").owned()?;
     let len = h.field("length")?.big()?;
     let count = h.field("count")?.big()?;
     let shift = h.field("shift")?.number()?;
+    let bits = h.field("bits")?.number()?;
     ensure!(
-        len >= 0.into() && count >= 0.into() && count <= len && shift % 5 == 0 && shift < 1280,
+        len >= 0.into()
+            && count >= 0.into()
+            && count <= len
+            && (1..=8).contains(&bits)
+            && shift % bits == 0
+            && shift / bits < 256,
         "invalid vector header"
     );
     let f = v.field("6");
@@ -156,11 +192,19 @@ fn parts(v: &View, migration: u32) -> Result<(Value, u32, View)> {
         f.reader()?.get_vector()?.len() == 4 && f.item(0).owned()?.number()? == migration,
         "unsupported vector migration"
     );
-    let bitmap = f.item(2).owned()?.number()?;
+    let bitmap = f.item(2).owned()?.blob()?.to_vec();
+    ensure!(
+        bitmap.len() == ((1usize << bits) + 7) / 8 && (bits >= 3 || bitmap[0] >> (1 << bits) == 0),
+        "invalid vector bitmap length/bits"
+    );
     let slots = f.item(3);
     ensure!(
         packed::plain_vector(slots.reader()?)
-            && slots.reader()?.get_vector()?.len() == bitmap.count_ones() as usize,
+            && slots.reader()?.get_vector()?.len()
+                == bitmap
+                    .iter()
+                    .map(|b| b.count_ones() as usize)
+                    .sum::<usize>(),
         "invalid vector bitmap"
     );
     Ok((h, bitmap, slots))
@@ -176,21 +220,39 @@ pub fn get_view<S: Storage>(
     if index >= &h.field("length")?.big()? || h.field("count")?.big()? == 0.into() {
         return Ok(None);
     }
-    let mut v = View::root(b.load(e)?);
+    let v = View::root(b.load(e)?);
+    get_inline(b, v, index, migration)
+}
+pub fn get_inline<S: Storage>(
+    b: &mut Basin<S>,
+    mut v: View,
+    index: &BigInt,
+    migration: u32,
+) -> Result<Option<View>> {
+    nonnegative(index)?;
+    let (h, _, _) = parts(&v, migration)?;
+    if index >= &h.field("length")?.big()? || h.field("count")?.big()? == 0.into() {
+        return Ok(None);
+    }
+    let bits = h.field("bits")?.number()?;
     let mut local = index.clone();
     for _ in 0..256 {
         let (h, bitmap, slots) = parts(&v, migration)?;
+        ensure!(
+            h.field("bits")?.number()? == bits,
+            "inconsistent vector bits"
+        );
         let shift = h.field("shift")?.number()?;
-        let slot = ((&local >> shift as usize) & BigInt::from(31))
+        let slot = ((&local >> shift as usize) & BigInt::from((1u32 << bits) - 1))
             .to_u32_digits()
             .1
             .first()
             .copied()
             .unwrap_or(0);
-        if bitmap & (1 << slot) == 0 {
+        if bitmap[slot as usize / 8] & (1 << (slot % 8)) == 0 {
             return Ok(None);
         }
-        let rank = (bitmap & ((1u64 << slot) - 1) as u32).count_ones() as usize;
+        let rank = rank(&bitmap, slot);
         let at = slots.item(rank);
         if shift == 0 {
             return Ok(Some(at));
@@ -214,11 +276,19 @@ pub fn get<S: Storage>(
         .map(|v| v.owned())
         .transpose()
 }
+fn rank(bitmap: &[u8], slot: u32) -> usize {
+    bitmap[..slot as usize / 8]
+        .iter()
+        .map(|b| b.count_ones() as usize)
+        .sum::<usize>()
+        + (bitmap[slot as usize / 8] & ((1u16 << (slot % 8)) - 1) as u8).count_ones() as usize
+}
 struct Walk<'a, S: Storage> {
     basin: &'a mut Basin<S>,
     from: &'a BigInt,
     to: &'a BigInt,
     migration: u32,
+    bits: u32,
     accept: &'a mut dyn FnMut(&Value, &Value) -> bool,
     emit: &'a mut dyn FnMut(BigInt, View) -> Result<bool>,
 }
@@ -226,6 +296,10 @@ impl<S: Storage> Walk<'_, S> {
     fn walk(&mut self, v: View, base: BigInt, depth: usize) -> Result<bool> {
         ensure!(depth < 256, "vector nesting limit");
         let (h, bitmap, slots) = parts(&v, self.migration)?;
+        ensure!(
+            h.field("bits")?.number()? == self.bits,
+            "inconsistent vector bits"
+        );
         if &base >= self.to
             || &base + h.field("length")?.big()? <= *self.from
             || h.field("count")?.big()? == 0.into()
@@ -235,15 +309,15 @@ impl<S: Storage> Walk<'_, S> {
         }
         let shift = h.field("shift")?.number()?;
         let width = BigInt::from(1) << shift as usize;
-        for slot in 0..32 {
-            if bitmap & (1 << slot) == 0 {
+        for slot in 0..(1u32 << self.bits) {
+            if bitmap[slot as usize / 8] & (1 << (slot % 8)) == 0 {
                 continue;
             }
             let start = &base + &width * slot;
             if &start >= self.to || &start + &width <= *self.from {
                 continue;
             }
-            let rank = (bitmap & ((1u64 << slot) - 1) as u32).count_ones() as usize;
+            let rank = rank(&bitmap, slot);
             let at = slots.item(rank);
             if shift == 0 {
                 if !(self.emit)(start, at)? {
@@ -291,6 +365,7 @@ pub fn visit<S: Storage>(
             from,
             to,
             migration,
+            bits: h.field("bits")?.number()?,
             accept,
             emit,
         }
@@ -339,5 +414,11 @@ pub fn update<S: Storage, C: Consumer>(
             rows.remove(&i);
         }
     }
-    build_entries(b, length, rows.into_iter().collect(), c)
+    build_entries_with_bits(
+        b,
+        length,
+        rows.into_iter().collect(),
+        c,
+        root(e, c.migration())?.field("bits")?.number()?,
+    )
 }

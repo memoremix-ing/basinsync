@@ -104,22 +104,29 @@ type SyncLink_M0<LazyT extends BasinNode_S0<string, string>> = {
   [Symbol.unscopables]?: LazyT;
 };
 
-interface SyncBlock_M0 extends BasinNode_S0<
-  "sync.memoremix.com",
-  ".sync-block/",
-  null,
-  {
-    0: [
-      summary: null,
-      // (lexidecmal trie keys encoded from sparse page numbers)
-      pages: SyncSector_M0,
-      // (sorted for binary search)
-      leaves: Array<
-        [page: bigint, span: U32, link: SyncLink_M0<SyncSector_M0>]
-      >,
-    ];
-  }
-> {}
+interface SyncBlock_M0
+  extends BasinNode_S0<
+    "sync.memoremix.com",
+    ".sync-block/",
+    null,
+    {
+      0: [
+        summary: null,
+        // (lexidecmal trie keys encoded from sparse page numbers)
+        pages: SyncSector_M0 | BasinEdge_S0<SyncSector_M0>,
+        leaves: SyncLeaves_M0 | BasinEdge_S0<SyncLeaves_M0>, // dense, page-sorted; seven bits per level
+        leading: Array<null | SyncLink_M0<SyncLeaves_M0>>, // basin height indexes; exclude vector root
+        lagging: Array<null | SyncLink_M0<SyncLeaves_M0>>,
+      ];
+    }
+  > {}
+
+type SyncLeaves_M0 = VectorNode_S0<{
+  0: {
+    Summary: null;
+    Value: [page: bigint, span: U32, link: SyncLink_M0<SyncSector_M0>];
+  };
+}>;
 
 type SyncSector_M0 = TrieNode_S0<{
   0: {

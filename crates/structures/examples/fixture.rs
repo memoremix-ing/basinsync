@@ -24,11 +24,16 @@ fn main() -> Result<()> {
                 .iter()
                 .map(|v| Ok((v.at(0)?.big()?, v.at(1)?.clone())))
                 .collect::<Result<Vec<_>>>()?;
-            vector::build_entries(
+            vector::build_entries_with_bits(
                 &mut basin,
                 req.field("length")?.big()?,
                 rows,
                 &trie::Count(7),
+                req.map_ref()?
+                    .get("bits")
+                    .map(Value::number)
+                    .transpose()?
+                    .unwrap_or(5),
             )?
         } else if kind == "btree" {
             let rows = req

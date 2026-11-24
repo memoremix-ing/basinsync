@@ -188,14 +188,20 @@ export interface SyncBlock_M0
       0: [
         summary: null,
         // (lexidecmal trie keys encoded from sparse page numbers)
-        pages: SyncSector_M0,
-        // (sorted for binary search)
-        leaves: Array<
-          [page: bigint, span: U32, link: SyncLink_M0<SyncSector_M0>]
-        >,
+        pages: SyncSector_M0 | BasinEdge_S0<SyncSector_M0>,
+        leaves: SyncLeaves_M0 | BasinEdge_S0<SyncLeaves_M0>, // dense, page-sorted; seven bits per level
+        leading: Array<null | SyncLink_M0<SyncLeaves_M0>>, // basin height indexes; exclude vector root
+        lagging: Array<null | SyncLink_M0<SyncLeaves_M0>>,
       ];
     }
   > {}
+
+export type SyncLeaves_M0 = VectorNode_S0<{
+  0: {
+    Summary: null;
+    Value: [page: bigint, span: U32, link: SyncLink_M0<SyncSector_M0>];
+  };
+}>;
 
 export type SyncSector_M0 = TrieNode_S0<{
   0: {
@@ -212,19 +218,33 @@ export interface VectorNode_S0<
 > extends BasinNode_S0<
     "sync.memoremix.com",
     ".vector-node/",
-    { length: bigint; count: bigint; shift: U32; inlined: U32 },
+    { length: bigint; count: bigint; bits: U32; shift: U32; inlined: U32 },
     {
       [I in U32 & keyof MigrationsT]: [
         summary: MigrationsT[I]["Summary"],
-        bitmap: U32,
+        bitmap: Uint8Array, // LSB-first packed bits; exactly ceil(2**bits / 8) bytes
         slots: Array<
           | MigrationsT[I]["Value"]
           | VectorNode_S0<MigrationsT>
-          | BasinEdge_S0<VectorNode_S0<MigrationsT>>
+          | VectorEdge_S0<MigrationsT>
         >,
       ];
     }
   > {}
+
+// Spell out the edge summary to avoid expanding the recursive node footer.
+export type VectorEdge_S0<
+  MigrationsT extends { [index: number]: { Summary: unknown; Value: unknown } },
+> = BasinEdge_S0<
+  BasinNode_S0<
+    "sync.memoremix.com",
+    ".vector-node/",
+    VectorNode_S0<MigrationsT>[5],
+    {
+      [I in U32 & keyof MigrationsT]: [summary: MigrationsT[I]["Summary"]];
+    }
+  >
+>;
 
 export interface BTreeNode_S0<
   MigrationsT extends { [index: number]: { Summary: unknown; Value: unknown } },

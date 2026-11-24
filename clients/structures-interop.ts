@@ -110,6 +110,29 @@ cases.push({
   ],
   queries: [0n, 1n, 31n, 2n ** 200n + 31n],
 });
+cases.push({
+  kind: "pages",
+  seed,
+  pages: Array.from({ length: 20000 }, (_, i) => [
+    BigInt(i),
+    new Uint8Array([i & 255]),
+  ]),
+  queries: [0n, 17000n, 19999n, 20000n],
+});
+for (const bits of [1, 2, 3, 4, 6, 7, 8]) {
+  const n = 2 ** bits;
+  cases.push({
+    kind: "vector",
+    seed,
+    bits,
+    length: 2n ** 200n + BigInt(n),
+    items: [
+      ...Array.from({ length: n }, (_, i) => [BigInt(i), BigInt(i)]),
+      [2n ** 200n + BigInt(n - 1), Symbol.match],
+    ],
+    queries: [0n, BigInt(n - 1), BigInt(n), 2n ** 200n + BigInt(n - 1)],
+  });
+}
 mkdirSync(".local/trie-interop", { recursive: true });
 const writers = ["typescript", "rust", "go"],
   readers = [...writers];

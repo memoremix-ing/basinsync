@@ -1,4 +1,4 @@
-/** Experimental Proxy drafts. Records/arrays are deep COW; bytes are atomic read-only views. */
+/** Opt-in Proxy drafts. Records/arrays are deep COW; bytes are atomic read-only views. */
 import { check } from "./core";
 import {
   CowContext,

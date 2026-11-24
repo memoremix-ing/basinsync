@@ -1,9 +1,9 @@
 use crate::{
     Value,
     basin::{self, Basin, DOMAIN, Edge, Storage},
-    bromberg,
+    bromberg, packed,
     trie::{self, Consumer, View},
-    value,
+    value, vector,
 };
 use Value::*;
 use anyhow::{Context, Result, ensure};
@@ -254,22 +254,86 @@ pub fn build_block<S: Storage>(
     let mut leaves = vec![];
     collect(basin, &t.node, &[], &mut leaves)?;
     leaves.sort_by_key(|v| v.at(0).and_then(Value::big).unwrap());
-    leaves.truncate(64);
     let digest = t.node.index(6)?.at(1)?.field("brombergSL2")?.clone();
+    let count = leaves.len();
+    let shortcuts = vector::build_node_entries(
+        basin,
+        count.into(),
+        leaves
+            .into_iter()
+            .enumerate()
+            .map(|(i, v)| (i.into(), v))
+            .collect(),
+        &trie::Plain,
+        7,
+    )?;
+    let mut p = packed::pack(
+        basin,
+        vec![
+            packed::Built {
+                node: t.node,
+                edges: t.edges,
+            },
+            shortcuts,
+        ],
+        0,
+        vec![],
+    )?;
+    let trailing = p.slots.pop().unwrap();
+    let pages = p.slots.pop().unwrap();
+    let leading = vector_spine(basin, &trailing, false)?;
+    let lagging = vector_spine(basin, &trailing, true)?;
     let node = Value::map([
         ("0", Symbol("species".into())),
         ("1", DOMAIN.into()),
         ("2", BLOCK.into()),
-        ("3", t.node.index(3)?.clone()),
+        (
+            "3",
+            basin::query(&p.edges, basin.max_degree, basin.max_height)?,
+        ),
         ("4", 0u32.into()),
         ("5", Null),
-        ("6", Array(vec![0u32.into(), Null, t.node, Array(leaves)])),
+        (
+            "6",
+            Array(vec![0u32.into(), Null, pages, trailing, leading, lagging]),
+        ),
     ]);
-    let edge = basin.seal(node, &t.edges)?;
+    let edge = basin.seal(node, &p.edges)?;
     Ok(BlockRoot {
         edge,
         digest: digest.blob()?.to_vec(),
     })
+}
+fn vector_spine<S: Storage>(basin: &mut Basin<S>, root: &Value, last: bool) -> Result<Value> {
+    let mut node = root.clone();
+    if matches!(node, Array(_)) {
+        node = View::root(basin.load(&node)?).owned()?;
+    }
+    let mut spine = vec![Null; node.index(3)?.field("height")?.number()? as usize];
+    for _ in 0..256 {
+        if node.index(5)?.field("shift")?.number()? == 0
+            || node.index(5)?.field("count")?.big()? == 0.into()
+        {
+            return Ok(Array(spine));
+        }
+        let slots = node.index(6)?.at(3)?.array()?;
+        let child = slots[if last { slots.len() - 1 } else { 0 }].clone();
+        node = if matches!(child, Array(_)) {
+            spine[child.at(3)?.field("height")?.number()? as usize] = basin::weak(&child)?;
+            View::root(basin.load(&child)?).owned()?
+        } else {
+            child
+        };
+    }
+    anyhow::bail!("vector nesting limit")
+}
+fn page_root<S: Storage>(basin: &mut Basin<S>, footer: &View) -> Result<View> {
+    let pages = footer.item(2);
+    if pages.reader()?.flexbuffer_type() == flexbuffers::FlexBufferType::Map {
+        Ok(pages)
+    } else {
+        Ok(View::root(basin.load(&pages.owned()?)?))
+    }
 }
 pub fn build_with_directories<S: Storage>(
     basin: &mut Basin<S>,
@@ -383,9 +447,7 @@ fn open_block<S: Storage>(
     {
         let b = View::root(bytes);
         if basin::validate_node(b.reader()?, Some(BLOCK)).is_ok() {
-            let digest = b
-                .field("6")
-                .item(2)
+            let digest = page_root(basin, &b.field("6"))?
                 .field("6")
                 .item(1)
                 .field("brombergSL2")
@@ -407,13 +469,12 @@ fn open_block<S: Storage>(
     basin::validate_node(block.reader()?, Some(BLOCK))?;
     let footer = block.field("6");
     ensure!(
-        footer.reader()?.get_vector()?.len() == 4
+        footer.reader()?.get_vector()?.len() == 6
             && value::item(footer.reader()?, 0)?.get_i64()? == 0,
         "unsupported block migration"
     );
     ensure!(
-        footer
-            .item(2)
+        page_root(basin, &footer)?
             .field("6")
             .item(1)
             .field("brombergSL2")
@@ -432,9 +493,10 @@ pub fn read<S: Storage>(
 ) -> Result<Vec<u8>> {
     let (footer, expected) = open_block(basin, root, name, shortcuts)?;
     let mut pages = vec![];
+    let pages_root = page_root(basin, &footer)?;
     trie::visit_inline(
         basin,
-        footer.item(2),
+        pages_root,
         &[],
         &[],
         0,
@@ -467,28 +529,50 @@ pub fn read<S: Storage>(
     ensure!(bromberg::hash(&bytes) == expected, "file checksum mismatch");
     Ok(bytes)
 }
+fn shortcut_record<S: Storage>(
+    basin: &mut Basin<S>,
+    root: &View,
+    index: &num_bigint::BigInt,
+) -> Result<View> {
+    if root.reader()?.flexbuffer_type() == flexbuffers::FlexBufferType::Map {
+        vector::get_inline(basin, root.clone(), index, 0)?.context("shortcut vector hole")
+    } else {
+        vector::get_view(basin, &root.owned()?, index, 0)?.context("shortcut vector hole")
+    }
+}
 fn shortcut_page<S: Storage>(
     basin: &mut Basin<S>,
     leaves: &View,
     page: &num_bigint::BigInt,
     full: &[u8],
 ) -> Result<Option<Value>> {
-    let list = leaves.reader()?.get_vector()?;
-    ensure!(list.len() <= 64, "invalid shortcut cache");
-    let (mut lo, mut hi) = (0, list.len());
+    let edge = leaves.owned()?;
+    let header = if matches!(edge, Array(_)) {
+        edge.at(5)?
+    } else {
+        edge.index(5)?
+    };
+    ensure!(
+        header.field("bits")?.number()? == 7,
+        "invalid shortcut vector"
+    );
+    let length = header.field("length")?.big()?;
+    let mut lo = num_bigint::BigInt::from(0);
+    let mut hi = length;
     while lo < hi {
-        let mid = (lo + hi) / 2;
-        let start = leaves.item(mid).item(0).owned()?.big()?;
+        let mid = (&lo + &hi) >> 1usize;
+        let record = shortcut_record(basin, leaves, &mid)?;
+        let start = record.item(0).owned()?.big()?;
         if start <= *page {
-            lo = mid + 1
+            lo = mid + 1u32;
         } else {
-            hi = mid
+            hi = mid;
         }
     }
-    if lo == 0 {
+    if lo == 0.into() {
         return Ok(None);
     }
-    let record = leaves.item(lo - 1);
+    let record = shortcut_record(basin, leaves, &(lo - 1u32))?;
     let low = record.item(0).owned()?.big()?;
     let span = record.item(1).owned()?.number()?;
     if page >= &(&low + span) {
@@ -545,7 +629,8 @@ pub fn page<S: Storage>(
     let value = if let Some(v) = found {
         Some(v)
     } else {
-        trie::get_inline(basin, footer.item(2), full, 0)?
+        let pages_root = page_root(basin, &footer)?;
+        trie::get_inline(basin, pages_root, full, 0)?
             .map(|v| v.owned())
             .transpose()?
     };
@@ -570,7 +655,7 @@ pub fn read_range<S: Storage>(
     if length == 0 {
         return Ok(vec![]);
     }
-    let pages = footer.item(2);
+    let pages = page_root(basin, &footer)?;
     let header = pages.field("5").owned()?;
     let keys = header.field("keys")?;
     if keys.is_null() {
@@ -670,4 +755,28 @@ pub fn update<S: Storage>(
         }
     }
     build_with_directories(basin, files.into_iter().collect(), directories)
+}
+
+#[cfg(test)]
+mod boundary_tests {
+    use super::*;
+    #[test]
+    fn seven_bit_spines_use_basin_heights_and_preserve_gaps() -> Result<()> {
+        let mut b = Basin::new(basin::MemoryStorage::default(), vec![42; 32])?;
+        let rows = (0..98305u32).map(|i| (i.into(), i.into())).collect();
+        let n = vector::build_node_entries(&mut b, 98305u32.into(), rows, &trie::Plain, 7)?;
+        let leading = vector_spine(&mut b, &n.node, false)?;
+        let lagging = vector_spine(&mut b, &n.node, true)?;
+        assert_eq!(leading.array()?.len(), 2);
+        assert!(!leading.at(1)?.is_null());
+        assert!(lagging.at(1)?.is_null());
+        for stack in [leading, lagging] {
+            for (h, link) in stack.array()?.iter().enumerate() {
+                if !link.is_null() {
+                    assert_eq!(link.field("height")?.number()? as usize, h);
+                }
+            }
+        }
+        Ok(())
+    }
 }

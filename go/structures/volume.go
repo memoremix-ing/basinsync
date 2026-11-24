@@ -234,11 +234,50 @@ func BuildBlock(b *Basin, input []PageInput) (block BlockRoot, err error) {
 	leaves := []any{}
 	collectLeaves(b, t.Node, nil, &leaves)
 	sort.Slice(leaves, func(i, j int) bool { return bigint(at(leaves[i], 0)).Cmp(bigint(at(leaves[j], 0))) < 0 })
-	if len(leaves) > 64 {
-		leaves = leaves[:64]
+	shortcutRows := make([]VectorEntry, len(leaves))
+	for i, v := range leaves {
+		shortcutRows[i] = VectorEntry{big.NewInt(int64(i)), v}
 	}
-	node := Node{"0": Symbol{Name: "species"}, "1": Domain, "2": BlockPath, "3": t.Node["3"], "4": int64(0), "5": nil, "6": vector(int64(0), nil, t.Node, leaves)}
-	return BlockRoot{b.seal(node, t.Edges), blob(field(at(t.Node["6"], 1), "brombergSL2"))}, nil
+	shortcuts := buildVectorNodeEntries(b, big.NewInt(int64(len(shortcutRows))), shortcutRows, PlainConsumer(), 7)
+	sum := blob(at(t.Node["6"], 1).(map[string]any)["brombergSL2"])
+	packed := packChildren(b, []packedBuilt{{node: t.Node, edges: t.Edges}, shortcuts}, 0, nil)
+	pages, trailing := packed.slots[0], packed.slots[1]
+	leading, lagging := vectorSpine(b, trailing, false), vectorSpine(b, trailing, true)
+	node := Node{"0": Symbol{Name: "species"}, "1": Domain, "2": BlockPath, "3": query(packed.edges, b.MaxDegree, b.MaxHeight), "4": int64(0), "5": nil, "6": vector(int64(0), nil, pages, trailing, leading, lagging)}
+	return BlockRoot{b.seal(node, packed.edges), sum}, nil
+}
+func vectorSpine(b *Basin, root any, last bool) []any {
+	var n any = root
+	if e, ok := n.([]any); ok {
+		n = b.load(e).owned(0)
+	}
+	spine := make([]any, int(integer(field(field(n, "3"), "height"))))
+	for depth := 0; depth < 256; depth++ {
+		if integer(field(field(n, "5"), "shift")) == 0 || bigint(field(field(n, "5"), "count")).Sign() == 0 {
+			return spine
+		}
+		slots := array(at(field(n, "6"), 3))
+		at := 0
+		if last {
+			at = len(slots) - 1
+		}
+		child := slots[at]
+		if e, ok := child.([]any); ok {
+			spine[int(integer(field(e[3], "height")))] = weak(e)
+			n = b.load(e).owned(0)
+		} else {
+			n = child
+		}
+	}
+	require(false, "vector nesting limit")
+	return nil
+}
+func pageRoot(b *Basin, footer Ref) Ref {
+	pages := footer.item(2)
+	if pages.typ == 9 {
+		return pages
+	}
+	return b.load(array(pages.owned(0)))
 }
 func BuildVolume(b *Basin, input []FileInput, directories ...string) (root Edge, err error) {
 	defer protect(&err)
@@ -363,7 +402,7 @@ func tryWeak(b *Basin, file []any) (edge Edge, err error) {
 	require(capability(edge) == weakKey(file[2]), "shortcut capability mismatch")
 	r := b.load(edge)
 	validateNode(r, BlockPath)
-	sum := r.get("6").item(2).get("6").item(1).get("brombergSL2").bytes()
+	sum := pageRoot(b, r.get("6")).get("6").item(1).get("brombergSL2").bytes()
 	require(bytes.Equal(sum, blob(file[1])), "shortcut summary mismatch")
 	return edge, nil
 }
@@ -392,8 +431,8 @@ func openBlock(b *Basin, root Edge, name string, shortcuts bool) (footer Ref, ex
 	block := b.load(edge)
 	validateNode(block, BlockPath)
 	footer = block.get("6")
-	require(footer.len() == 4 && integer(footer.item(0).owned(0)) == 0, "unsupported block migration")
-	require(bytes.Equal(footer.item(2).get("6").item(1).get("brombergSL2").bytes(), blob(file[1])), "block summary mismatch")
+	require(footer.len() == 6 && integer(footer.item(0).owned(0)) == 0, "unsupported block migration")
+	require(bytes.Equal(pageRoot(b, footer).get("6").item(1).get("brombergSL2").bytes(), blob(file[1])), "block summary mismatch")
 	return footer, blob(file[1]), nil
 }
 func ReadFile(b *Basin, root Edge, name string, shortcuts bool) (data []byte, err error) {
@@ -409,7 +448,7 @@ func ReadFile(b *Basin, root Edge, name string, shortcuts bool) (data []byte, er
 	}
 	pages := []page{}
 	end := 0
-	visitInline(b, footer.item(2), nil, nil, 0, func(any, any) bool { return true }, func(k []byte, r Ref) (bool, error) {
+	visitInline(b, pageRoot(b, footer), nil, nil, 0, func(any, any) bool { return true }, func(k []byte, r Ref) (bool, error) {
 		p := unlex(string(k))
 		offset := new(big.Int).Mul(p, big.NewInt(PageSize))
 		require(offset.IsInt64() && offset.Sign() >= 0 && offset.Int64() <= int64(b.MaxBytes), "file read byte limit")
@@ -434,24 +473,32 @@ func ReadFile(b *Basin, root Edge, name string, shortcuts bool) (data []byte, er
 
 func shortcutPage(b *Basin, leaves Ref, page *big.Int, full []byte) (value any, err error) {
 	defer protect(&err)
-	require(leaves.typ == 10 && leaves.len() <= 64, "invalid shortcut cache")
 	resolver, ok := b.Storage.(Resolver)
 	if !ok {
 		return nil, nil
 	}
-	low, high := 0, leaves.len()
-	for low < high {
-		mid := (low + high) / 2
-		if bigint(leaves.item(mid).item(0).owned(0)).Cmp(page) <= 0 {
-			low = mid + 1
+	var root Ref = leaves
+	if root.typ != 9 {
+		root = b.load(array(root.owned(0)))
+	}
+	h, _, _ := vectorParts(root, 0)
+	require(integer(field(h, "bits")) == 7, "invalid shortcut vector")
+	low, high := new(big.Int), new(big.Int).Set(bigint(field(h, "length")))
+	for low.Cmp(high) < 0 {
+		mid := new(big.Int).Rsh(new(big.Int).Add(low, high), 1)
+		record := getVectorInline(b, root, mid, 0)
+		require(record != nil, "shortcut vector hole")
+		if bigint(record.item(0).owned(0)).Cmp(page) <= 0 {
+			low.Add(mid, big.NewInt(1))
 		} else {
-			high = mid
+			high.Set(mid)
 		}
 	}
-	if low == 0 {
+	if low.Sign() == 0 {
 		return nil, nil
 	}
-	record := leaves.item(low - 1)
+	record := getVectorInline(b, root, new(big.Int).Sub(low, big.NewInt(1)), 0)
+	require(record != nil, "shortcut vector hole")
 	start := bigint(record.item(0).owned(0))
 	span := uint32Value(record.item(1).owned(0))
 	end := new(big.Int).Add(start, new(big.Int).SetUint64(uint64(span)))
@@ -501,7 +548,7 @@ func ReadPage(b *Basin, root Edge, name string, index *big.Int, shortcuts bool) 
 		}
 	}
 	if value == nil {
-		r := getInline(b, footer.item(2), full, 0)
+		r := getInline(b, pageRoot(b, footer), full, 0)
 		if r == nil {
 			return nil, false, nil
 		}
@@ -522,7 +569,7 @@ func ReadRange(b *Basin, root Edge, name string, start uint64, length int, short
 	if length == 0 {
 		return []byte{}, nil
 	}
-	pages := footer.item(2)
+	pages := pageRoot(b, footer)
 	keys := pages.get("5").get("keys").owned(0)
 	if keys == nil {
 		return []byte{}, nil

@@ -201,3 +201,34 @@ fn malformed_structural_maps_are_not_vectors() -> Result<()> {
     assert!(btree::get(&mut b, &bad, &[0xaa], 7).is_err());
     Ok(())
 }
+
+#[test]
+fn consumer_selected_vector_width_survives_updates() -> Result<()> {
+    for bits in 1..=8 {
+        let mut b = basin();
+        let last = (BigInt::from(1) << 200usize) + ((1u32 << bits) - 1);
+        let root = vector::build_entries_with_bits(
+            &mut b,
+            &last + 1u32,
+            vec![
+                (0.into(), Null),
+                (((1u32 << bits) - 1).into(), Symbol("match".into())),
+                (last.clone(), 42u32.into()),
+            ],
+            &Count(7),
+            bits,
+        )?;
+        assert_eq!(vector::get(&mut b, &root, &last, 7)?, Some(42u32.into()));
+        let next = vector::update(
+            &mut b,
+            &root,
+            vec![(last.clone(), Some(43u32.into()))],
+            &last + 1u32,
+            &Count(7),
+        )?;
+        assert_eq!(next.at(5)?.field("bits")?.number()?, bits);
+        assert_eq!(vector::get(&mut b, &next, &last, 7)?, Some(43u32.into()));
+        assert_eq!(vector::get(&mut b, &root, &last, 7)?, Some(42u32.into()));
+    }
+    Ok(())
+}

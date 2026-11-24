@@ -30,12 +30,12 @@ func indexBytes(i *big.Int) []byte {
 	}
 	return b
 }
-func vectorBuildNode(b *Basin, rows []vectorRow, base, span *big.Int, shift uint, c Consumer) packedBuilt {
+func vectorBuildNode(b *Basin, rows []vectorRow, base, span *big.Int, shift uint, c Consumer, bitsPerNode uint) packedBuilt {
 	width := new(big.Int).Lsh(big.NewInt(1), shift)
-	bitmap := uint32(0)
+	bitmap := make([]byte, ((1<<bitsPerNode)+7)/8)
 	children := []packedBuilt{}
 	values := []any{}
-	for slot := 0; slot < 32; slot++ {
+	for slot := 0; slot < (1 << bitsPerNode); slot++ {
 		lo := new(big.Int).Add(base, new(big.Int).Mul(width, big.NewInt(int64(slot))))
 		hi := new(big.Int).Add(lo, width)
 		part := []vectorRow{}
@@ -47,7 +47,7 @@ func vectorBuildNode(b *Basin, rows []vectorRow, base, span *big.Int, shift uint
 		if len(part) == 0 {
 			continue
 		}
-		bitmap |= 1 << slot
+		bitmap[slot/8] |= 1 << (slot % 8)
 		if shift == 0 {
 			values = append(values, part[0].value)
 		} else {
@@ -55,7 +55,7 @@ func vectorBuildNode(b *Basin, rows []vectorRow, base, span *big.Int, shift uint
 			if size.Cmp(width) > 0 {
 				size.Set(width)
 			}
-			children = append(children, vectorBuildNode(b, part, lo, size, shift-5, c))
+			children = append(children, vectorBuildNode(b, part, lo, size, shift-bitsPerNode, c, bitsPerNode))
 		}
 	}
 	p := packChildren(b, children, len(values), valueEdges(values, c))
@@ -71,18 +71,28 @@ func vectorBuildNode(b *Basin, rows []vectorRow, base, span *big.Int, shift uint
 	if shift > 0 {
 		slots = p.slots
 	}
-	return packedNode(b, VectorPath, map[string]any{"length": new(big.Int).Set(span), "count": big.NewInt(int64(len(rows))), "shift": int64(shift), "inlined": int64(p.inlined)}, vector(c.Migration, summary, int64(bitmap), slots), p.edges)
+	return packedNode(b, VectorPath, map[string]any{"length": new(big.Int).Set(span), "count": big.NewInt(int64(len(rows))), "bits": int64(bitsPerNode), "shift": int64(shift), "inlined": int64(p.inlined)}, vector(c.Migration, summary, bitmap, slots), p.edges)
 }
-func BuildVector(b *Basin, values []any, c Consumer) (edge Edge, err error) {
+func BuildVector(b *Basin, values []any, c Consumer, options ...uint) (edge Edge, err error) {
 	defer protect(&err)
 	rows := make([]VectorEntry, len(values))
 	for i, v := range values {
 		rows[i] = VectorEntry{big.NewInt(int64(i)), v}
 	}
-	return BuildVectorEntries(b, big.NewInt(int64(len(values))), rows, c)
+	return BuildVectorEntries(b, big.NewInt(int64(len(values))), rows, c, options...)
 }
-func BuildVectorEntries(b *Basin, length *big.Int, input []VectorEntry, c Consumer) (edge Edge, err error) {
+func BuildVectorEntries(b *Basin, length *big.Int, input []VectorEntry, c Consumer, options ...uint) (edge Edge, err error) {
 	defer protect(&err)
+	n := buildVectorNodeEntries(b, length, input, c, options...)
+	return b.seal(n.node, n.edges), nil
+}
+func buildVectorNodeEntries(b *Basin, length *big.Int, input []VectorEntry, c Consumer, options ...uint) packedBuilt {
+	bitsPerNode := uint(5)
+	require(len(options) <= 1, "too many vector options")
+	if len(options) > 0 {
+		bitsPerNode = options[0]
+	}
+	require(bitsPerNode >= 1 && bitsPerNode <= 8, "vector bits must be 1..8")
 	nonnegative(length)
 	rows := []vectorRow{}
 	for _, r := range input {
@@ -95,29 +105,31 @@ func BuildVectorEntries(b *Basin, length *big.Int, input []VectorEntry, c Consum
 		require(rows[i-1].index.Cmp(rows[i].index) != 0, "duplicate vector index")
 	}
 	shift := uint(0)
-	for length.Cmp(new(big.Int).Lsh(big.NewInt(1), shift+5)) > 0 {
-		shift += 5
-		require(shift < 1280, "vector nesting limit")
+	for length.Cmp(new(big.Int).Lsh(big.NewInt(1), shift+bitsPerNode)) > 0 {
+		shift += bitsPerNode
+		require(shift/bitsPerNode < 256, "vector nesting limit")
 	}
-	n := vectorBuildNode(b, rows, new(big.Int), length, shift, c)
-	return b.seal(n.node, n.edges), nil
+	n := vectorBuildNode(b, rows, new(big.Int), length, shift, c, bitsPerNode)
+	return n
 }
 func vectorRoot(e Edge, migration int64) any {
 	validateEdge(e)
 	require(text(e[1]) == Domain && text(e[2]) == VectorPath && integer(field(e[6], "0")) == migration, "unsupported vector migration")
 	return e[5]
 }
-func vectorParts(r Ref, migration int64) (h any, bitmap uint32, slots Ref) {
+func vectorParts(r Ref, migration int64) (h any, bitmap []byte, slots Ref) {
 	validateNode(r, VectorPath)
 	h = r.get("5").owned(0)
 	length, count := bigint(field(h, "length")), bigint(field(h, "count"))
 	shift := uint32Value(field(h, "shift"))
-	require(length.Sign() >= 0 && count.Sign() >= 0 && count.Cmp(length) <= 0 && shift%5 == 0 && shift < 1280, "invalid vector header")
+	bitsPerNode := uint32Value(field(h, "bits"))
+	require(length.Sign() >= 0 && count.Sign() >= 0 && count.Cmp(length) <= 0 && bitsPerNode >= 1 && bitsPerNode <= 8 && shift%bitsPerNode == 0 && shift/bitsPerNode < 256, "invalid vector header")
 	f := r.get("6")
 	require(f.len() == 4 && integer(f.item(0).owned(0)) == migration, "unsupported vector migration")
-	bitmap = uint32Value(f.item(2).owned(0))
+	bitmap = blob(f.item(2).owned(0))
+	require(len(bitmap) == ((1<<bitsPerNode)+7)/8 && (bitsPerNode >= 3 || bitmap[0]>>(1<<bitsPerNode) == 0), "invalid vector bitmap length/bits")
 	slots = f.item(3)
-	require(plainVector(slots) && slots.len() == bits.OnesCount32(bitmap), "invalid vector bitmap")
+	require(plainVector(slots) && slots.len() == vectorRank(bitmap, uint(len(bitmap)*8)), "invalid vector bitmap")
 	return
 }
 func GetVectorView(b *Basin, e Edge, index *big.Int, migration int64) (v *Ref, err error) {
@@ -127,19 +139,28 @@ func GetVectorView(b *Basin, e Edge, index *big.Int, migration int64) (v *Ref, e
 	if index.Cmp(bigint(field(h, "length"))) >= 0 || bigint(field(h, "count")).Sign() == 0 {
 		return nil, nil
 	}
-	r := b.load(e)
+	return getVectorInline(b, b.load(e), index, migration), nil
+}
+func getVectorInline(b *Basin, r Ref, index *big.Int, migration int64) *Ref {
+	nonnegative(index)
+	h, _, _ := vectorParts(r, migration)
+	if index.Cmp(bigint(field(h, "length"))) >= 0 || bigint(field(h, "count")).Sign() == 0 {
+		return nil
+	}
+	bitsPerNode := uint32Value(field(h, "bits"))
 	local := new(big.Int).Set(index)
 	for depth := 0; depth < 256; depth++ {
 		h, bitmap, slots := vectorParts(r, migration)
+		require(uint32Value(field(h, "bits")) == bitsPerNode, "inconsistent vector bits")
 		shift := uint(uint32Value(field(h, "shift")))
-		slot := uint(new(big.Int).And(new(big.Int).Rsh(local, shift), big.NewInt(31)).Uint64())
-		if bitmap&(1<<slot) == 0 {
-			return nil, nil
+		slot := uint(new(big.Int).And(new(big.Int).Rsh(local, shift), big.NewInt((1<<bitsPerNode)-1)).Uint64())
+		if bitmap[slot/8]&(1<<(slot%8)) == 0 {
+			return nil
 		}
-		rank := bits.OnesCount32(bitmap & uint32((uint64(1)<<slot)-1))
+		rank := vectorRank(bitmap, uint(slot))
 		at := slots.item(rank)
 		if shift == 0 {
-			return &at, nil
+			return &at
 		}
 		local.Mod(local, new(big.Int).Lsh(big.NewInt(1), shift))
 		if at.typ == 9 {
@@ -149,7 +170,7 @@ func GetVectorView(b *Basin, e Edge, index *big.Int, migration int64) (v *Ref, e
 		}
 	}
 	require(false, "vector nesting limit")
-	return nil, nil
+	return nil
 }
 func GetVector(b *Basin, e Edge, index *big.Int, migration int64) (value any, found bool, err error) {
 	defer protect(&err)
@@ -160,31 +181,44 @@ func GetVector(b *Basin, e Edge, index *big.Int, migration int64) (value any, fo
 	return v.owned(0), true, nil
 }
 
+func vectorRank(bitmap []byte, slot uint) int {
+	n := 0
+	for _, b := range bitmap[:slot/8] {
+		n += bits.OnesCount8(b)
+	}
+	if slot%8 != 0 {
+		n += bits.OnesCount8(bitmap[slot/8] & byte((1<<(slot%8))-1))
+	}
+	return n
+}
+
 type vectorWalk struct {
-	basin     *Basin
-	from, to  *big.Int
-	migration int64
-	accept    func(any, any) bool
-	emit      func(*big.Int, Ref) (bool, error)
+	basin       *Basin
+	from, to    *big.Int
+	migration   int64
+	bitsPerNode uint32
+	accept      func(any, any) bool
+	emit        func(*big.Int, Ref) (bool, error)
 }
 
 func (w *vectorWalk) walk(r Ref, base *big.Int, depth int) bool {
 	require(depth < 256, "vector nesting limit")
 	h, bitmap, slots := vectorParts(r, w.migration)
+	require(uint32Value(field(h, "bits")) == w.bitsPerNode, "inconsistent vector bits")
 	if base.Cmp(w.to) >= 0 || new(big.Int).Add(base, bigint(field(h, "length"))).Cmp(w.from) <= 0 || bigint(field(h, "count")).Sign() == 0 || !w.accept(h, r.get("6").item(1).owned(0)) {
 		return true
 	}
 	shift := uint(uint32Value(field(h, "shift")))
 	width := new(big.Int).Lsh(big.NewInt(1), shift)
-	for slot := 0; slot < 32; slot++ {
-		if bitmap&(1<<slot) == 0 {
+	for slot := 0; slot < (1 << w.bitsPerNode); slot++ {
+		if bitmap[slot/8]&(1<<(slot%8)) == 0 {
 			continue
 		}
 		start := new(big.Int).Add(base, new(big.Int).Mul(width, big.NewInt(int64(slot))))
 		if start.Cmp(w.to) >= 0 || new(big.Int).Add(start, width).Cmp(w.from) <= 0 {
 			continue
 		}
-		at := slots.item(bits.OnesCount32(bitmap & uint32((uint64(1)<<slot)-1)))
+		at := slots.item(vectorRank(bitmap, uint(slot)))
 		if shift == 0 {
 			if !checked(w.emit(start, at)) {
 				return false
@@ -212,7 +246,7 @@ func VisitVector(b *Basin, e Edge, from, to *big.Int, migration int64, accept fu
 	require(from.Cmp(to) <= 0, "invalid vector range")
 	h := vectorRoot(e, migration)
 	if from.Cmp(to) < 0 && from.Cmp(bigint(field(h, "length"))) < 0 && bigint(field(h, "count")).Sign() > 0 && accept(h, field(e[6], "1")) {
-		w := vectorWalk{b, from, to, migration, accept, emit}
+		w := vectorWalk{b, from, to, migration, uint32Value(field(h, "bits")), accept, emit}
 		w.walk(b.load(e), new(big.Int), 0)
 	}
 	return nil
@@ -249,5 +283,5 @@ func UpdateVector(b *Basin, e Edge, changes []VectorChange, length *big.Int, c C
 	for _, r := range values {
 		rows = append(rows, r)
 	}
-	return BuildVectorEntries(b, length, rows, c)
+	return BuildVectorEntries(b, length, rows, c, uint(uint32Value(field(vectorRoot(e, c.Migration), "bits"))))
 }

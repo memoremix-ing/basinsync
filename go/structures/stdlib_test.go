@@ -218,3 +218,51 @@ func TestMalformedStructuralMapsAreNotVectors(t *testing.T) {
 		t.Fatal("map accepted as keys vector")
 	}
 }
+
+func TestConsumerVectorWidthSurvivesUpdates(t *testing.T) {
+	for width := uint(1); width <= 8; width++ {
+		b := newTestBasin(t)
+		last := new(big.Int).Add(new(big.Int).Lsh(big.NewInt(1), 200), big.NewInt((1<<width)-1))
+		length := new(big.Int).Add(last, big.NewInt(1))
+		root, err := BuildVectorEntries(b, length, []VectorEntry{{big.NewInt(0), nil}, {big.NewInt((1 << width) - 1), Symbol{Name: "match"}}, {last, int64(42)}}, CountConsumer(7), width)
+		if err != nil {
+			t.Fatal(err)
+		}
+		next, err := UpdateVector(b, root, []VectorChange{{Index: last, Value: int64(43)}}, length, CountConsumer(7))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if uint(integer(field(next[5], "bits"))) != width {
+			t.Fatal("lost width")
+		}
+		for _, p := range []struct {
+			root Edge
+			want int64
+		}{{root, 42}, {next, 43}} {
+			v, found, err := GetVector(b, p.root, last, 7)
+			if err != nil || !found || v != p.want {
+				t.Fatalf("value %v %v %v", v, found, err)
+			}
+		}
+	}
+}
+
+func TestSevenBitBoundarySpines(t *testing.T) {
+	b := newTestBasin(t)
+	rows := make([]VectorEntry, 98305)
+	for i := range rows {
+		rows[i] = VectorEntry{big.NewInt(int64(i)), int64(i)}
+	}
+	built := buildVectorNodeEntries(b, big.NewInt(int64(len(rows))), rows, PlainConsumer(), 7)
+	leading, lagging := vectorSpine(b, built.node, false), vectorSpine(b, built.node, true)
+	if len(leading) != 2 || len(lagging) != 2 || leading[1] == nil || lagging[1] != nil {
+		t.Fatal("boundary height gaps", leading, lagging)
+	}
+	for _, stack := range [][]any{leading, lagging} {
+		for h, link := range stack {
+			if link != nil && integer(field(link, "height")) != int64(h) {
+				t.Fatal("height index")
+			}
+		}
+	}
+}

@@ -46,7 +46,11 @@ func run() error {
 				a := v.([]any)
 				rows = append(rows, s.VectorEntry{Index: a[0].(*big.Int), Value: a[1]})
 			}
-			root, err = s.BuildVectorEntries(basin, req["length"].(*big.Int), rows, s.CountConsumer(7))
+			bits := uint(5)
+			if n, ok := req["bits"]; ok {
+				bits = uint(n.(int64))
+			}
+			root, err = s.BuildVectorEntries(basin, req["length"].(*big.Int), rows, s.CountConsumer(7), bits)
 		} else if kind == "btree" {
 			rows := []s.Entry{}
 			for _, v := range req["entries"].([]any) {

@@ -8,6 +8,7 @@ prerequisites:
 [basin]: <../../../../../glossary/basin.md>
 [client-costs]: <benchmark/client-costs.md>
 [diy/0zg6/261120-basin-node-stdlib]: <../../README.md>
+[diy/0zg6/261120-basin-node-stdlib/0zg7/261123-bitmapped-vector-trie]: <../261123-bitmapped-vector-trie/README.md>
 [envbuf]: <../../../../../glossary/envbuf.md>
 [flexbuffers]: <../../../../../glossary/flexbuffers.md>
 [flow]: <../../../../../glossary/flow.md>
@@ -153,22 +154,29 @@ type SyncLink_M0<LazyT extends BasinNode_S0<string, string>> = {
 ## Blocks and sectors
 
 ```ts
-interface SyncBlock_M0 extends BasinNode_S0<
-  "sync.memoremix.com",
-  ".sync-block/",
-  null,
-  {
-    0: [
-      summary: null,
-      // (lexidecmal trie keys encoded from sparse page numbers)
-      pages: SyncSector_M0,
-      // (sorted for binary search)
-      leaves: Array<
-        [page: bigint, span: U32, link: SyncLink_M0<SyncSector_M0>]
-      >,
-    ];
-  }
-> {}
+interface SyncBlock_M0
+  extends BasinNode_S0<
+    "sync.memoremix.com",
+    ".sync-block/",
+    null,
+    {
+      0: [
+        summary: null,
+        // (lexidecmal trie keys encoded from sparse page numbers)
+        pages: SyncSector_M0 | BasinEdge_S0<SyncSector_M0>,
+        leaves: SyncLeaves_M0 | BasinEdge_S0<SyncLeaves_M0>, // dense, page-sorted; seven bits per level
+        leading: Array<null | SyncLink_M0<SyncLeaves_M0>>, // basin height indexes; exclude vector root
+        lagging: Array<null | SyncLink_M0<SyncLeaves_M0>>,
+      ];
+    }
+  > {}
+
+type SyncLeaves_M0 = VectorNode_S0<{
+  0: {
+    Summary: null;
+    Value: [page: bigint, span: U32, link: SyncLink_M0<SyncSector_M0>];
+  };
+}>;
 
 type SyncSector_M0 = TrieNode_S0<{
   0: {
@@ -266,11 +274,20 @@ must not contribute to retention *degree*[~][node-degree] or
 *height*[~][node-height], nor be accidentally collected as declared edges.
 Their address may still carry the target's *height*[~][node-height].
 
-The shortcut layout itself needs a size boundary: an entirely inline directory
-tree or `leaves` array can grow without bound. Partitioning or partial caches
-can preserve direct access without duplicating the whole index at every root.
-Directory digests include UTF-8 byte-sorted, length-framed basenames and
-the corresponding child digests, so a rename changes directory identity.
+Store all page-sorted leaf shortcuts in a dense seven-bit/128-way
+*vector*[~][diy/0zg6/261120-basin-node-stdlib/0zg7/261123-bitmapped-vector-trie].
+Inline its root when packing permits; its ordinary *basin edges*[~][strong-edge]
+retain shortcut-index nodes, while leaf links remain *weak*[~][weak-link].
+`leading` and `lagging` cache the first/last paths' stored, non-root vector nodes,
+indexed from *basin-node height*[~][node-height] zero; missing heights are null.
+These links do not add retainers. Binary-search vector entries by page number.
+
+Directory scaling proposal: make directories *basin nodes*[~][node], inlining
+nested directories while packing permits and using *strong edges*[~][strong-edge]
+when they spill. Index immediate children by UTF-8 basename with a byte trie, so
+wide flat directories also split. Keep file links *weak*[~][weak-link] and the
+device trie authoritative for file retention. This directory format is proposed;
+the current directory tree remains inline.
 
 Before choosing a shortcut layout, measure first-useful-result latency, fetched
 bytes, request count, and update churn against ordinary trie traversal. Keep
@@ -368,6 +385,8 @@ const removed = edit.deletePrefix(utf8("/old/"));
 Graft requires an empty destination unless `"replace"` explicitly removes its range.
 Copy/move reject missing sources and destinations inside them; moving onto itself
 is a no-op. These are byte prefixes: use `/dir/` to distinguish `/dir2/`.
+A filesystem move must additionally update directory entries/hashes and handle
+pathname conflicts and empty directories; prefix relocation alone does not do that.
 
 `TrieView.from(trie)` provides lazy equivalents, recording source snapshots,
 prefix mounts/tombstones and point overrides. Resolve the longest matching prefix;
@@ -394,6 +413,10 @@ path-copy `updateIn` and prefix operations. Exceptions discard the recipe; sync
 recipes return an editor, async recipes a Promise. Inputs remain immutable;
 assigned values and escaped working copies cannot mutate the returned snapshot.
 Only draft mutations are used; recipe return values are ignored.
+Each flushed key update still copies its trie path, sharing untouched branches.
+An owner-tagged transient would reuse writable branches inside a scope, copying
+only on first write; that optimization is not implemented. Proxy drafts coalesce
+payload edits per key, independently of trie-branch ownership.
 
 ```js
 const next = produceTrie(edit, draft => {
@@ -401,7 +424,9 @@ const next = produceTrie(edit, draft => {
 }, { keyEncoding: "utf8" });
 ```
 
-The opt-in Proxy experiment supports nested property writes and explicit operations:
+Use explicit path updates in the core; opt into `produceTrieProxy` for suitable
+UI edits. Both are supported public entrypoints. Proxy drafts support nested
+property writes and explicit operations:
 
 ```js
 const next = produceTrieProxy(edit, (draft, operations) => {

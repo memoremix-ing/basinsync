@@ -10,3 +10,6 @@ export * from "./operation";
 export * from "./trie-view";
 export { produceTrie } from "./cow";
 export type { TrieDraft, CowOptions } from "./cow";
+
+export { produceTrieProxy } from "./cow-proxy";
+export type { CowValue, CowBytes, ProxyTrieDraft } from "./cow-proxy";

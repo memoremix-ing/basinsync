@@ -15,8 +15,11 @@ import {
   object,
   validateNode,
   edgeFrom,
+  query,
 } from "./core";
 import { Trie, Consumer, plain, Header, TRIE } from "./trie";
+import { pack } from "./packed";
+import { Vector, vectorBoundaryLinks } from "./vector";
 import { encode, Reference } from "../flexbuffer";
 import { encode as lex, decode as unlex } from "../lexidecimal";
 import * as sl2 from "./bromberg";
@@ -120,20 +123,35 @@ export async function buildBlock(
   }
   await collect(t.node, new Uint8Array());
   leaves.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
-  leaves.length = Math.min(leaves.length, 64);
+  const shortcuts = await Vector.buildNode(basin, leaves, plain, { bits: 7 });
+  const packed = await pack(basin, [t, shortcuts], 0, []);
+  const { leading, lagging } = await vectorBoundaryLinks(
+    basin,
+    packed.slots[1],
+  );
+  const edges = packed.edges,
+    pagesRoot = packed.slots[0];
   const node = {
     0: Symbol.species,
     1: DOMAIN,
     2: BLOCK,
-    3: t.node[3],
+    3: query(
+      edges,
+      basin.options.maxDegree ?? 320,
+      basin.options.maxHeight ?? 128,
+    ),
     4: 0,
     5: null,
-    6: [0, null, t.node, leaves],
+    6: [0, null, pagesRoot, packed.slots[1], leading, lagging],
   } as Node;
   return {
-    edge: await basin.seal(node, t.edges),
+    edge: await basin.seal(node, edges),
     digest: t.node[6][1].brombergSL2,
   };
+}
+async function pageRoot(basin: Basin, footer: Reference): Promise<Reference> {
+  const pages = footer.get(2);
+  return pages.isMap() ? pages : basin.load(edgeFrom(pages));
 }
 export class Volume {
   constructor(
@@ -285,7 +303,7 @@ export class Volume {
           const block = await this.basin.load(found);
           validateNode(block, BLOCK);
           const sum = object<SectorSummary>(
-            block.get("6").get(2).get("6").get(1),
+            (await pageRoot(this.basin, block.get("6"))).get("6").get(1),
           );
           if (equal(sum.brombergSL2, file[1])) e = found;
         }
@@ -298,12 +316,14 @@ export class Volume {
     validateNode(block, BLOCK);
     const footer = block.get("6");
     check(
-      footer.length() === 4 && footer.get(0).intValue() === 0,
+      footer.length() === 6 && footer.get(0).intValue() === 0,
       "unsupported block migration",
     );
     check(
       equal(
-        object<SectorSummary>(footer.get(2).get("6").get(1)).brombergSL2,
+        object<SectorSummary>(
+          (await pageRoot(this.basin, footer)).get("6").get(1),
+        ).brombergSL2,
         file[1],
       ),
       "block summary mismatch",
@@ -319,7 +339,7 @@ export class Volume {
     const { footer } = await this.openBlock(name, shortcuts);
     const value = await new Trie<[Uint8Array], SectorSummary>(
       this.basin,
-      footer.get(2),
+      await pageRoot(this.basin, footer),
       sectors,
     ).get(utf8(lex(index)));
     if (value === undefined) return undefined;
@@ -336,7 +356,7 @@ export class Volume {
     );
     const pages = new Trie<[Uint8Array], SectorSummary>(
       this.basin,
-      footer.get(2),
+      await pageRoot(this.basin, footer),
       sectors,
     );
     if (options.length !== undefined) {
@@ -351,7 +371,9 @@ export class Volume {
         "invalid file range",
       );
       if (length === 0) return new Uint8Array();
-      const header = object<Header>(footer.get(2).get("5"));
+      const header = object<Header>(
+        (await pageRoot(this.basin, footer)).get("5"),
+      );
       if (!header.keys) return new Uint8Array();
       const highest = unlex(
         new TextDecoder("utf-8", { fatal: true }).decode(header.keys[1]),
@@ -369,63 +391,78 @@ export class Volume {
         ),
       );
       let actual = out.length;
-      const leaves = footer.get(3);
-      check(
-        leaves.isVector() && leaves.length() <= 64,
-        "invalid shortcut cache",
-      );
+      const leavesRoot = footer.get(3);
+      let leaves:
+        | Vector<[bigint, number, Link], null, Edge | Reference>
+        | undefined;
       for (let page = first; page <= boundedLast; page++) {
         const full = utf8(lex(page));
         let value: [Uint8Array] | undefined;
         if (options.shortcuts !== false && this.basin.storage.resolve) {
-          let lo = 0,
-            hi = leaves.length();
-          while (lo < hi) {
-            const mid = (lo + hi) >> 1;
-            if (leaves.get(mid).get(0).bigintValue()! <= page) lo = mid + 1;
-            else hi = mid;
-          }
-          if (lo > 0) {
-            const record = leaves.get(lo - 1),
-              low = record.get(0).bigintValue()!,
-              span = record.get(1).intValue()!;
-            if (page < low + BigInt(span)) {
-              try {
-                const capabilityLink = object<Link>(record.get(2)),
-                  edge = await this.basin.storage.resolve(capabilityLink);
-                if (
-                  edge &&
-                  capability(link(edge)) === capability(capabilityLink)
-                ) {
-                  const loaded = await this.basin.load(edge);
-                  validateNode(loaded, TRIE);
-                  const h = object<Header>(loaded.get("5"));
-                  if (h.keys) {
-                    const minimum = utf8(lex(low)),
-                      base = minimum.subarray(
-                        0,
-                        minimum.length - h.keys[0].length,
-                      );
-                    if (
-                      equal(concat([base, h.keys[0]]), minimum) &&
-                      equal(
-                        concat([base, h.keys[1]]),
-                        utf8(lex(low + BigInt(span) - 1n)),
-                      ) &&
-                      full.length >= base.length &&
-                      equal(full.subarray(0, base.length), base)
-                    )
-                      value = await new Trie<[Uint8Array], SectorSummary>(
-                        this.basin,
-                        loaded,
-                        sectors,
-                      ).get(full.subarray(base.length));
+          try {
+            leaves ??= new Vector<
+              [bigint, number, Link],
+              null,
+              Edge | Reference
+            >(
+              this.basin,
+              leavesRoot.isMap() ? leavesRoot : edgeFrom(leavesRoot),
+              plain,
+            );
+            check(leaves.bits === 7, "invalid shortcut vector");
+            let lo = 0n,
+              hi = leaves.length;
+            while (lo < hi) {
+              const mid = (lo + hi) >> 1n,
+                record = await leaves.get(mid);
+              check(record, "shortcut vector hole");
+              if (record[0] <= page) lo = mid + 1n;
+              else hi = mid;
+            }
+            if (lo > 0n) {
+              const record = await leaves.get(lo - 1n);
+              check(record, "shortcut vector hole");
+              const [low, span] = record;
+              if (page < low + BigInt(span)) {
+                try {
+                  const capabilityLink = record[2],
+                    edge = await this.basin.storage.resolve(capabilityLink);
+                  if (
+                    edge &&
+                    capability(link(edge)) === capability(capabilityLink)
+                  ) {
+                    const loaded = await this.basin.load(edge);
+                    validateNode(loaded, TRIE);
+                    const h = object<Header>(loaded.get("5"));
+                    if (h.keys) {
+                      const minimum = utf8(lex(low)),
+                        base = minimum.subarray(
+                          0,
+                          minimum.length - h.keys[0].length,
+                        );
+                      if (
+                        equal(concat([base, h.keys[0]]), minimum) &&
+                        equal(
+                          concat([base, h.keys[1]]),
+                          utf8(lex(low + BigInt(span) - 1n)),
+                        ) &&
+                        full.length >= base.length &&
+                        equal(full.subarray(0, base.length), base)
+                      )
+                        value = await new Trie<[Uint8Array], SectorSummary>(
+                          this.basin,
+                          loaded,
+                          sectors,
+                        ).get(full.subarray(base.length));
+                    }
                   }
+                } catch {
+                  /* fall back to the retaining trie */
                 }
-              } catch {
-                /* fall back to the retaining trie */
               }
             }
+          } catch {
+            /* Shortcut-index misses also fall back to the retaining page trie. */
           }
         }
         value ??= await pages.get(full);

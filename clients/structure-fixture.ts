@@ -33,13 +33,18 @@ export async function build(input: {
   pages?: [bigint, Uint8Array][];
   items?: [bigint, unknown][];
   length?: bigint;
+  bits?: number;
   queries?: bigint[];
 }): Promise<Archive> {
   const storage = new MemoryStorage(),
     b = new Basin(storage, { seed: input.seed });
   const root =
     input.kind === "vector"
-      ? (await Vector.buildEntries(b, input.length!, input.items!, count)).root
+      ? (
+          await Vector.buildEntries(b, input.length!, input.items!, count, {
+            bits: input.bits,
+          })
+        ).root
       : input.kind === "btree"
         ? (await BTree.build(b, input.entries!, count)).root
         : input.kind === "trie"
