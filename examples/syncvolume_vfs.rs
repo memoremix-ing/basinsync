@@ -3,7 +3,7 @@
 mod objects;
 use anyhow::{Context, Result, ensure};
 use basinsync::{
-    structures::basin::Basin,
+    structures::{basin::Basin, profile},
     turso::{
         self,
         volume::{DatabaseFile, LoadMode, SyncVolume, checkpoint},
@@ -16,16 +16,25 @@ use std::time::{Duration, Instant};
 struct Phase {
     ms: f64,
     io: Stats,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    profile: Option<profile::Report>,
 }
 fn measure<T>(store: &DiskObjects, f: impl FnOnce() -> Result<T>) -> Result<(T, Phase)> {
     store.reset();
+    profile::start();
     let t = Instant::now();
-    let result = f()?;
+    let result = {
+        let _profile = profile::span("phase");
+        f()?
+    };
+    let ms = t.elapsed().as_secs_f64() * 1000.;
+    let profile = profile::finish();
     Ok((
         result,
         Phase {
-            ms: t.elapsed().as_secs_f64() * 1000.,
+            ms,
             io: store.stats(),
+            profile: profile::ENABLED.then_some(profile),
         },
     ))
 }
@@ -51,6 +60,7 @@ struct Sample {
     load_primary: Phase,
     first_query: Phase,
     load_kernel: Phase,
+    hydrate_all: Phase,
     warm_queries: Phase,
     local_commit: Phase,
     backup: Phase,
@@ -126,11 +136,14 @@ fn sample(
         Some(v) => v.open("/kernel.turso"),
         None => DatabaseFile::from_image(&store.read_raw("initial/kernel.turso")?),
     })?;
-    // This explicit complete-file materialization is outside the warm/backup timings.
-    ensure!(
-        primary.snapshot()?.image()? == image && kernel.snapshot()?.image()? == kernel_image,
-        "restored image mismatch"
-    );
+    // Keep complete-file verification separate from the subsequent warm/backup timings.
+    let (_, hydrate_all) = measure(&store, || {
+        ensure!(
+            primary.snapshot()?.image()? == image && kernel.snapshot()?.image()? == kernel_image,
+            "restored image mismatch"
+        );
+        Ok(())
+    })?;
     let (_, warm_queries) = measure(&store, || {
         for n in 0..64 {
             ensure!(
@@ -170,7 +183,10 @@ fn sample(
             )?))
         } else {
             for (name, view) in [("default.turso", &next), ("kernel.turso", &next_kernel)] {
-                let (file, _digest) = view.export()?;
+                let (file, _digest) = {
+                    let _profile = profile::span("flat.export");
+                    view.export()?
+                };
                 store.write_raw(&format!("next/{name}"), &std::fs::read(file.path())?)?;
             }
             Ok(None)
@@ -216,6 +232,7 @@ fn sample(
         load_primary,
         first_query,
         load_kernel,
+        hydrate_all,
         warm_queries,
         local_commit,
         backup,

@@ -12,6 +12,10 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
+fn sync(file: &fs::File) -> std::io::Result<()> {
+    let _profile = basinsync::structures::profile::span("storage.sync");
+    file.sync_all()
+}
 #[derive(Default, Clone, Debug, serde::Serialize)]
 pub struct Stats {
     pub gets: u64,
@@ -53,6 +57,7 @@ impl DiskObjects {
         self.stats.lock().unwrap().clone()
     }
     fn wait(&self, size: usize) {
+        let _profile = basinsync::structures::profile::span("storage.wait");
         let transfer = if self.bytes_per_second == 0 {
             Duration::ZERO
         } else {
@@ -61,6 +66,7 @@ impl DiskObjects {
         std::thread::sleep(self.delay + transfer);
     }
     pub fn read_raw(&self, key: &str) -> Result<Vec<u8>> {
+        let _profile = basinsync::structures::profile::span("storage.body_read");
         ensure!(
             !*self.fail_reads.lock().unwrap(),
             "injected object read failure"
@@ -78,6 +84,7 @@ impl DiskObjects {
         Ok(bytes)
     }
     pub fn write_raw(&self, key: &str, bytes: &[u8]) -> Result<()> {
+        let _profile = basinsync::structures::profile::span("storage.body_write");
         let path = self.root.join(key);
         fs::create_dir_all(path.parent().unwrap())?;
         if path.exists() {
@@ -92,7 +99,7 @@ impl DiskObjects {
         self.wait(bytes.len());
         let mut file = tempfile::NamedTempFile::new_in(path.parent().unwrap())?;
         file.write_all(bytes)?;
-        file.as_file().sync_all()?;
+        sync(file.as_file())?;
         match file.persist_noclobber(&path) {
             Ok(_) => {}
             Err(e) if e.error.kind() == std::io::ErrorKind::AlreadyExists => {
@@ -100,7 +107,7 @@ impl DiskObjects {
             }
             Err(e) => return Err(e.error.into()),
         }
-        fs::File::open(path.parent().unwrap())?.sync_all()?;
+        sync(&fs::File::open(path.parent().unwrap())?)?;
         let mut s = self.stats.lock().unwrap();
         s.puts += 1;
         s.put_bytes += bytes.len() as u64;
@@ -117,6 +124,7 @@ impl DiskObjects {
 }
 impl Storage for DiskObjects {
     fn put(&mut self, pending: &PendingEdge, bytes: &[u8], _: &[Edge]) -> Result<String> {
+        let _profile = basinsync::structures::profile::span("storage.put");
         let dir = Self::address(pending.as_value())?;
         let path = self.root.join(&dir).join("edge");
         if !path.exists() {
@@ -124,13 +132,13 @@ impl Storage for DiskObjects {
             let edge = pending.allocated(&uuid::Uuid::new_v4().to_string())?;
             let mut file = tempfile::NamedTempFile::new_in(path.parent().unwrap())?;
             file.write_all(&value::encode(&edge)?)?;
-            file.as_file().sync_all()?;
+            sync(file.as_file())?;
             match file.persist_noclobber(&path) {
                 Ok(_) => {}
                 Err(e) if e.error.kind() == std::io::ErrorKind::AlreadyExists => {}
                 Err(e) => return Err(e.error.into()),
             }
-            fs::File::open(path.parent().unwrap())?.sync_all()?;
+            sync(&fs::File::open(path.parent().unwrap())?)?;
         } else {
             self.stats.lock().unwrap().reused += 1;
         }
@@ -148,6 +156,7 @@ impl Storage for DiskObjects {
         Ok(basin::footer(&edge)?.field("revision")?.text()?.into())
     }
     fn get(&mut self, edge: &Edge) -> Result<Vec<u8>> {
+        let _profile = basinsync::structures::profile::span("storage.get");
         let dir = Self::address(edge)?;
         let stored = fs::read(self.root.join(&dir).join("edge"))?;
         let allocation = value::read(flexbuffers::Reader::get_root(stored.as_slice())?)?;

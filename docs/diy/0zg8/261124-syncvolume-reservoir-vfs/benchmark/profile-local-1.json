@@ -1,0 +1,3257 @@
+[
+  {
+    "mode": "flat",
+    "round": 0,
+    "rows": 256,
+    "inline_pages": 1,
+    "latency_ms": 0,
+    "mib_per_sec": 0,
+    "database_bytes": 4554752,
+    "kernel_bytes": 262144,
+    "initial_backup_bytes": 4816896,
+    "load_primary": {
+      "ms": 2.8322920000000003,
+      "io": {
+        "gets": 1,
+        "get_bytes": 4554752,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 2.832167,
+          "exclusive_ms": 1.021084
+        },
+        "storage.body_read": {
+          "calls": 1,
+          "inclusive_ms": 0.720458,
+          "exclusive_ms": 0.7202500000000001
+        },
+        "storage.wait": {
+          "calls": 1,
+          "inclusive_ms": 0.00020800000000000001,
+          "exclusive_ms": 0.00020800000000000001
+        },
+        "turso.connect": {
+          "calls": 1,
+          "inclusive_ms": 1.090625,
+          "exclusive_ms": 1.090625
+        }
+      }
+    },
+    "first_query": {
+      "ms": 0.116,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 0.115833,
+          "exclusive_ms": 0.115833
+        }
+      }
+    },
+    "load_kernel": {
+      "ms": 1.2207080000000001,
+      "io": {
+        "gets": 1,
+        "get_bytes": 262144,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 1.220542,
+          "exclusive_ms": 0.3847090000000001
+        },
+        "storage.body_read": {
+          "calls": 1,
+          "inclusive_ms": 0.082166,
+          "exclusive_ms": 0.082124
+        },
+        "storage.wait": {
+          "calls": 1,
+          "inclusive_ms": 0.000042,
+          "exclusive_ms": 0.000042
+        },
+        "turso.connect": {
+          "calls": 1,
+          "inclusive_ms": 0.753667,
+          "exclusive_ms": 0.753667
+        }
+      }
+    },
+    "hydrate_all": {
+      "ms": 11.207625,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "cow.copy": {
+          "calls": 2,
+          "inclusive_ms": 10.946042,
+          "exclusive_ms": 0.7483710000000011
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 11.2075,
+          "exclusive_ms": 0.18979199999999885
+        },
+        "sha384": {
+          "calls": 74,
+          "inclusive_ms": 10.197670999999998,
+          "exclusive_ms": 10.197670999999998
+        },
+        "turso.checkpoint": {
+          "calls": 2,
+          "inclusive_ms": 0.07166600000000001,
+          "exclusive_ms": 0.07166600000000001
+        }
+      }
+    },
+    "warm_queries": {
+      "ms": 1.205125,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 1.204792,
+          "exclusive_ms": 1.204792
+        }
+      }
+    },
+    "local_commit": {
+      "ms": 1.2075,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 1.2073749999999999,
+          "exclusive_ms": 0.5741249999999999
+        },
+        "turso.checkpoint": {
+          "calls": 2,
+          "inclusive_ms": 0.63325,
+          "exclusive_ms": 0.63325
+        }
+      }
+    },
+    "backup": {
+      "ms": 35.386041,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 2,
+        "put_bytes": 4816896,
+        "reused": 0
+      },
+      "profile": {
+        "cow.copy": {
+          "calls": 2,
+          "inclusive_ms": 10.254833,
+          "exclusive_ms": 1.447499000000001
+        },
+        "flat.export": {
+          "calls": 2,
+          "inclusive_ms": 10.428875,
+          "exclusive_ms": 0.1740419999999986
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 35.385833999999996,
+          "exclusive_ms": 1.9392509999999987
+        },
+        "sha384": {
+          "calls": 74,
+          "inclusive_ms": 8.807333999999999,
+          "exclusive_ms": 8.807333999999999
+        },
+        "storage.body_write": {
+          "calls": 2,
+          "inclusive_ms": 23.017708,
+          "exclusive_ms": 0.9060830000000024
+        },
+        "storage.sync": {
+          "calls": 4,
+          "inclusive_ms": 22.111499999999996,
+          "exclusive_ms": 22.111499999999996
+        },
+        "storage.wait": {
+          "calls": 2,
+          "inclusive_ms": 0.000125,
+          "exclusive_ms": 0.000125
+        }
+      }
+    }
+  },
+  {
+    "mode": "lazy",
+    "round": 0,
+    "rows": 256,
+    "inline_pages": 1,
+    "latency_ms": 0,
+    "mib_per_sec": 0,
+    "database_bytes": 4554752,
+    "kernel_bytes": 262144,
+    "initial_backup_bytes": 4599072,
+    "load_primary": {
+      "ms": 6.283792,
+      "io": {
+        "gets": 4,
+        "get_bytes": 166704,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "basin.load": {
+          "calls": 8,
+          "inclusive_ms": 1.440543,
+          "exclusive_ms": 0.08854100000000016
+        },
+        "basin.node_reader": {
+          "calls": 182,
+          "inclusive_ms": 0.15420699999999987,
+          "exclusive_ms": 0.09728800000000007
+        },
+        "flexbuffers.decode": {
+          "calls": 256,
+          "inclusive_ms": 0.22870899999999972,
+          "exclusive_ms": 0.22870899999999972
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 6.2834579999999995,
+          "exclusive_ms": 0.002290999999999599
+        },
+        "sha384": {
+          "calls": 4,
+          "inclusive_ms": 0.555876,
+          "exclusive_ms": 0.555876
+        },
+        "storage.body_read": {
+          "calls": 4,
+          "inclusive_ms": 0.410624,
+          "exclusive_ms": 0.408707
+        },
+        "storage.get": {
+          "calls": 4,
+          "inclusive_ms": 0.7784589999999999,
+          "exclusive_ms": 0.31850199999999995
+        },
+        "storage.wait": {
+          "calls": 4,
+          "inclusive_ms": 0.001917,
+          "exclusive_ms": 0.001917
+        },
+        "turso.connect": {
+          "calls": 1,
+          "inclusive_ms": 4.215958,
+          "exclusive_ms": 3.0326259999999996
+        },
+        "vfs.source": {
+          "calls": 6,
+          "inclusive_ms": 1.183332,
+          "exclusive_ms": 0.15620699999999985
+        },
+        "volume.file_lookup": {
+          "calls": 1,
+          "inclusive_ms": 0.9365,
+          "exclusive_ms": 0.059540999999999955
+        },
+        "volume.open": {
+          "calls": 1,
+          "inclusive_ms": 6.281167,
+          "exclusive_ms": 1.1287090000000006
+        },
+        "volume.page": {
+          "calls": 2,
+          "inclusive_ms": 1.027125,
+          "exclusive_ms": 0.20454400000000011
+        }
+      }
+    },
+    "first_query": {
+      "ms": 1.574125,
+      "io": {
+        "gets": 2,
+        "get_bytes": 33648,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "basin.load": {
+          "calls": 6,
+          "inclusive_ms": 0.707916,
+          "exclusive_ms": 0.05849899999999994
+        },
+        "basin.node_reader": {
+          "calls": 204,
+          "inclusive_ms": 0.18300499999999978,
+          "exclusive_ms": 0.11896800000000009
+        },
+        "flexbuffers.decode": {
+          "calls": 278,
+          "inclusive_ms": 0.21779199999999982,
+          "exclusive_ms": 0.21779199999999982
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 1.573584,
+          "exclusive_ms": 0.21379199999999998
+        },
+        "sha384": {
+          "calls": 2,
+          "inclusive_ms": 0.208625,
+          "exclusive_ms": 0.208625
+        },
+        "storage.body_read": {
+          "calls": 2,
+          "inclusive_ms": 0.181417,
+          "exclusive_ms": 0.181251
+        },
+        "storage.get": {
+          "calls": 2,
+          "inclusive_ms": 0.42937400000000003,
+          "exclusive_ms": 0.21883199999999997
+        },
+        "storage.wait": {
+          "calls": 2,
+          "inclusive_ms": 0.000166,
+          "exclusive_ms": 0.000166
+        },
+        "vfs.source": {
+          "calls": 2,
+          "inclusive_ms": 1.3597920000000001,
+          "exclusive_ms": 0.07166600000000001
+        },
+        "volume.page": {
+          "calls": 2,
+          "inclusive_ms": 1.288126,
+          "exclusive_ms": 0.28399300000000033
+        }
+      }
+    },
+    "load_kernel": {
+      "ms": 4.388834,
+      "io": {
+        "gets": 3,
+        "get_bytes": 41304,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "basin.load": {
+          "calls": 8,
+          "inclusive_ms": 0.746791,
+          "exclusive_ms": 0.06095800000000004
+        },
+        "basin.node_reader": {
+          "calls": 138,
+          "inclusive_ms": 0.12024400000000009,
+          "exclusive_ms": 0.07720000000000005
+        },
+        "flexbuffers.decode": {
+          "calls": 199,
+          "inclusive_ms": 0.1865429999999999,
+          "exclusive_ms": 0.1865429999999999
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 4.3885,
+          "exclusive_ms": 0.00137499999999946
+        },
+        "sha384": {
+          "calls": 3,
+          "inclusive_ms": 0.232625,
+          "exclusive_ms": 0.232625
+        },
+        "storage.body_read": {
+          "calls": 3,
+          "inclusive_ms": 0.198375,
+          "exclusive_ms": 0.19754099999999997
+        },
+        "storage.get": {
+          "calls": 3,
+          "inclusive_ms": 0.442291,
+          "exclusive_ms": 0.214791
+        },
+        "storage.wait": {
+          "calls": 3,
+          "inclusive_ms": 0.000834,
+          "exclusive_ms": 0.000834
+        },
+        "turso.connect": {
+          "calls": 1,
+          "inclusive_ms": 3.041,
+          "exclusive_ms": 2.1075419999999996
+        },
+        "vfs.source": {
+          "calls": 6,
+          "inclusive_ms": 0.9334580000000001,
+          "exclusive_ms": 0.08087499999999996
+        },
+        "volume.file_lookup": {
+          "calls": 1,
+          "inclusive_ms": 0.287208,
+          "exclusive_ms": 0.03262400000000004
+        },
+        "volume.open": {
+          "calls": 1,
+          "inclusive_ms": 4.387125,
+          "exclusive_ms": 1.058917
+        },
+        "volume.page": {
+          "calls": 2,
+          "inclusive_ms": 0.8525830000000001,
+          "exclusive_ms": 0.13667500000000016
+        }
+      }
+    },
+    "hydrate_all": {
+      "ms": 77.562417,
+      "io": {
+        "gets": 261,
+        "get_bytes": 4391064,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "basin.load": {
+          "calls": 864,
+          "inclusive_ms": 30.827998999999917,
+          "exclusive_ms": 2.4746439999999974
+        },
+        "basin.node_reader": {
+          "calls": 27816,
+          "inclusive_ms": 10.596657999998227,
+          "exclusive_ms": 6.906399999999806
+        },
+        "cow.copy": {
+          "calls": 2,
+          "inclusive_ms": 77.234041,
+          "exclusive_ms": 1.110384000000012
+        },
+        "flexbuffers.decode": {
+          "calls": 37968,
+          "inclusive_ms": 11.027127999998255,
+          "exclusive_ms": 11.027127999998255
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 77.562083,
+          "exclusive_ms": 0.18379199999999685
+        },
+        "sha384": {
+          "calls": 335,
+          "inclusive_ms": 22.572748999999998,
+          "exclusive_ms": 22.572748999999998
+        },
+        "storage.body_read": {
+          "calls": 261,
+          "inclusive_ms": 7.902122999999999,
+          "exclusive_ms": 7.8939509999999995
+        },
+        "storage.get": {
+          "calls": 261,
+          "inclusive_ms": 17.320413999999992,
+          "exclusive_ms": 8.425206000000005
+        },
+        "storage.wait": {
+          "calls": 261,
+          "inclusive_ms": 0.008172000000000025,
+          "exclusive_ms": 0.008172000000000025
+        },
+        "turso.checkpoint": {
+          "calls": 2,
+          "inclusive_ms": 0.14425,
+          "exclusive_ms": 0.14425
+        },
+        "vfs.source": {
+          "calls": 294,
+          "inclusive_ms": 64.17836099999998,
+          "exclusive_ms": 2.9133919999999978
+        },
+        "volume.page": {
+          "calls": 288,
+          "inclusive_ms": 61.264969000000036,
+          "exclusive_ms": 13.902015
+        }
+      }
+    },
+    "warm_queries": {
+      "ms": 0.995959,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 0.9957919999999999,
+          "exclusive_ms": 0.8079189999999999
+        },
+        "vfs.source": {
+          "calls": 64,
+          "inclusive_ms": 0.18787299999999998,
+          "exclusive_ms": 0.18787299999999998
+        }
+      }
+    },
+    "local_commit": {
+      "ms": 3.0835,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 3.083375,
+          "exclusive_ms": 0.4609580000000002
+        },
+        "turso.checkpoint": {
+          "calls": 2,
+          "inclusive_ms": 2.616625,
+          "exclusive_ms": 2.599999
+        },
+        "vfs.source": {
+          "calls": 11,
+          "inclusive_ms": 0.022418,
+          "exclusive_ms": 0.022418
+        }
+      }
+    },
+    "backup": {
+      "ms": 488.105125,
+      "io": {
+        "gets": 1,
+        "get_bytes": 1448,
+        "puts": 7,
+        "put_bytes": 208008,
+        "reused": 290
+      },
+      "profile": {
+        "basin.load": {
+          "calls": 1,
+          "inclusive_ms": 0.059375,
+          "exclusive_ms": 0.004458999999999998
+        },
+        "basin.node_reader": {
+          "calls": 25,
+          "inclusive_ms": 0.008543999999999998,
+          "exclusive_ms": 0.005545999999999999
+        },
+        "basin.query": {
+          "calls": 618,
+          "inclusive_ms": 2.4294589999999934,
+          "exclusive_ms": 2.4294589999999934
+        },
+        "basin.seal": {
+          "calls": 297,
+          "inclusive_ms": 148.76991300000006,
+          "exclusive_ms": 1.391746000000002
+        },
+        "checkpoint.blocks": {
+          "calls": 2,
+          "inclusive_ms": 470.153209,
+          "exclusive_ms": 1.0865830000000187
+        },
+        "checkpoint.directories": {
+          "calls": 1,
+          "inclusive_ms": 17.224292,
+          "exclusive_ms": 0.03891399999999834
+        },
+        "checkpoint.read_pages": {
+          "calls": 2,
+          "inclusive_ms": 0.724334,
+          "exclusive_ms": 0.24512700000000137
+        },
+        "flexbuffers.decode": {
+          "calls": 339,
+          "inclusive_ms": 0.8228810000000002,
+          "exclusive_ms": 0.8228810000000002
+        },
+        "flexbuffers.encode": {
+          "calls": 306,
+          "inclusive_ms": 2.410719999999998,
+          "exclusive_ms": 2.410719999999998
+        },
+        "hmac": {
+          "calls": 297,
+          "inclusive_ms": 0.279872999999999,
+          "exclusive_ms": 0.279872999999999
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 488.104959,
+          "exclusive_ms": 0.0031240000000138934
+        },
+        "sha384": {
+          "calls": 300,
+          "inclusive_ms": 8.756711999999998,
+          "exclusive_ms": 8.756711999999998
+        },
+        "sl2.combine": {
+          "calls": 316,
+          "inclusive_ms": 1.463508999999997,
+          "exclusive_ms": 1.463508999999997
+        },
+        "sl2.hash": {
+          "calls": 294,
+          "inclusive_ms": 323.47286399999996,
+          "exclusive_ms": 323.47286399999996
+        },
+        "storage.body_read": {
+          "calls": 1,
+          "inclusive_ms": 0.022,
+          "exclusive_ms": 0.021958
+        },
+        "storage.body_write": {
+          "calls": 7,
+          "inclusive_ms": 64.816835,
+          "exclusive_ms": 2.317251999999998
+        },
+        "storage.get": {
+          "calls": 1,
+          "inclusive_ms": 0.050665999999999996,
+          "exclusive_ms": 0.025707999999999998
+        },
+        "storage.put": {
+          "calls": 297,
+          "inclusive_ms": 135.48140500000002,
+          "exclusive_ms": 9.871269999999999
+        },
+        "storage.sync": {
+          "calls": 28,
+          "inclusive_ms": 122.456624,
+          "exclusive_ms": 122.456624
+        },
+        "storage.wait": {
+          "calls": 8,
+          "inclusive_ms": 0.000251,
+          "exclusive_ms": 0.000251
+        },
+        "trie.build": {
+          "calls": 4,
+          "inclusive_ms": 431.820708,
+          "exclusive_ms": 10.521172000002373
+        },
+        "vfs.source": {
+          "calls": 288,
+          "inclusive_ms": 0.4792069999999985,
+          "exclusive_ms": 0.4792069999999985
+        }
+      }
+    }
+  },
+  {
+    "mode": "eager",
+    "round": 0,
+    "rows": 256,
+    "inline_pages": 1,
+    "latency_ms": 0,
+    "mib_per_sec": 0,
+    "database_bytes": 4554752,
+    "kernel_bytes": 262144,
+    "initial_backup_bytes": 4599072,
+    "load_primary": {
+      "ms": 80.591667,
+      "io": {
+        "gets": 264,
+        "get_bytes": 4540944,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "basin.load": {
+          "calls": 836,
+          "inclusive_ms": 38.494329999999955,
+          "exclusive_ms": 2.899251999999993
+        },
+        "basin.node_reader": {
+          "calls": 27555,
+          "inclusive_ms": 12.383524999998784,
+          "exclusive_ms": 8.15160000000016
+        },
+        "flexbuffers.decode": {
+          "calls": 37582,
+          "inclusive_ms": 13.1256860000044,
+          "exclusive_ms": 13.1256860000044
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 80.591292,
+          "exclusive_ms": 0.0007920000000041227
+        },
+        "sha384": {
+          "calls": 264,
+          "inclusive_ms": 12.890248000000014,
+          "exclusive_ms": 12.890248000000014
+        },
+        "storage.body_read": {
+          "calls": 264,
+          "inclusive_ms": 10.170007000000005,
+          "exclusive_ms": 10.156462000000005
+        },
+        "storage.get": {
+          "calls": 264,
+          "inclusive_ms": 22.22620399999999,
+          "exclusive_ms": 10.826094999999999
+        },
+        "storage.wait": {
+          "calls": 264,
+          "inclusive_ms": 0.01354500000000001,
+          "exclusive_ms": 0.01354500000000001
+        },
+        "turso.connect": {
+          "calls": 1,
+          "inclusive_ms": 0.8198329999999999,
+          "exclusive_ms": 0.801669
+        },
+        "vfs.source": {
+          "calls": 284,
+          "inclusive_ms": 77.76208099999992,
+          "exclusive_ms": 3.93488
+        },
+        "volume.file_lookup": {
+          "calls": 1,
+          "inclusive_ms": 1.1238750000000002,
+          "exclusive_ms": 0.046376000000000195
+        },
+        "volume.open": {
+          "calls": 1,
+          "inclusive_ms": 80.59049999999999,
+          "exclusive_ms": 0.8672499999999985
+        },
+        "volume.page": {
+          "calls": 278,
+          "inclusive_ms": 73.82720099999996,
+          "exclusive_ms": 16.841812000000026
+        },
+        "volume.prefetch": {
+          "calls": 1,
+          "inclusive_ms": 77.77954199999999,
+          "exclusive_ms": 0.035625000000052864
+        }
+      }
+    },
+    "first_query": {
+      "ms": 0.051625000000000004,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 0.051458000000000004,
+          "exclusive_ms": 0.045957000000000005
+        },
+        "vfs.source": {
+          "calls": 2,
+          "inclusive_ms": 0.005501,
+          "exclusive_ms": 0.005501
+        }
+      }
+    },
+    "load_kernel": {
+      "ms": 2.212125,
+      "io": {
+        "gets": 6,
+        "get_bytes": 91776,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "basin.load": {
+          "calls": 50,
+          "inclusive_ms": 0.5705009999999997,
+          "exclusive_ms": 0.09608200000000006
+        },
+        "basin.node_reader": {
+          "calls": 785,
+          "inclusive_ms": 0.20577899999999996,
+          "exclusive_ms": 0.13397299999999998
+        },
+        "flexbuffers.decode": {
+          "calls": 1119,
+          "inclusive_ms": 0.25968499999999806,
+          "exclusive_ms": 0.25968499999999806
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 2.211959,
+          "exclusive_ms": 0.00029199999999951487
+        },
+        "sha384": {
+          "calls": 6,
+          "inclusive_ms": 0.16345900000000002,
+          "exclusive_ms": 0.16345900000000002
+        },
+        "storage.body_read": {
+          "calls": 6,
+          "inclusive_ms": 0.136082,
+          "exclusive_ms": 0.135666
+        },
+        "storage.get": {
+          "calls": 6,
+          "inclusive_ms": 0.29520900000000005,
+          "exclusive_ms": 0.141628
+        },
+        "storage.wait": {
+          "calls": 6,
+          "inclusive_ms": 0.00041600000000000003,
+          "exclusive_ms": 0.00041600000000000003
+        },
+        "turso.connect": {
+          "calls": 1,
+          "inclusive_ms": 0.583209,
+          "exclusive_ms": 0.572291
+        },
+        "vfs.source": {
+          "calls": 22,
+          "inclusive_ms": 1.2205009999999998,
+          "exclusive_ms": 0.13054400000000002
+        },
+        "volume.file_lookup": {
+          "calls": 1,
+          "inclusive_ms": 0.09095800000000001,
+          "exclusive_ms": 0.00958500000000001
+        },
+        "volume.open": {
+          "calls": 1,
+          "inclusive_ms": 2.2116670000000003,
+          "exclusive_ms": 0.32624999999999993
+        },
+        "volume.page": {
+          "calls": 16,
+          "inclusive_ms": 1.089957,
+          "exclusive_ms": 0.24042099999999983
+        },
+        "volume.prefetch": {
+          "calls": 1,
+          "inclusive_ms": 1.2112500000000002,
+          "exclusive_ms": 0.0016670000000003071
+        }
+      }
+    },
+    "hydrate_all": {
+      "ms": 9.180667,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "cow.copy": {
+          "calls": 2,
+          "inclusive_ms": 8.940999,
+          "exclusive_ms": 0.5426999999999991
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 9.180584,
+          "exclusive_ms": 0.16237699999999933
+        },
+        "sha384": {
+          "calls": 74,
+          "inclusive_ms": 7.937379999999999,
+          "exclusive_ms": 7.937379999999999
+        },
+        "turso.checkpoint": {
+          "calls": 2,
+          "inclusive_ms": 0.077208,
+          "exclusive_ms": 0.077208
+        },
+        "vfs.source": {
+          "calls": 294,
+          "inclusive_ms": 0.4609189999999993,
+          "exclusive_ms": 0.4609189999999993
+        }
+      }
+    },
+    "warm_queries": {
+      "ms": 0.98825,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 0.988166,
+          "exclusive_ms": 0.816503
+        },
+        "vfs.source": {
+          "calls": 64,
+          "inclusive_ms": 0.171663,
+          "exclusive_ms": 0.171663
+        }
+      }
+    },
+    "local_commit": {
+      "ms": 2.941167,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 2.941,
+          "exclusive_ms": 0.5315399999999997
+        },
+        "turso.checkpoint": {
+          "calls": 2,
+          "inclusive_ms": 2.403584,
+          "exclusive_ms": 2.38546
+        },
+        "vfs.source": {
+          "calls": 11,
+          "inclusive_ms": 0.024000000000000004,
+          "exclusive_ms": 0.024000000000000004
+        }
+      }
+    },
+    "backup": {
+      "ms": 510.5282920000001,
+      "io": {
+        "gets": 1,
+        "get_bytes": 1448,
+        "puts": 7,
+        "put_bytes": 208008,
+        "reused": 290
+      },
+      "profile": {
+        "basin.load": {
+          "calls": 1,
+          "inclusive_ms": 0.07437500000000001,
+          "exclusive_ms": 0.005624000000000004
+        },
+        "basin.node_reader": {
+          "calls": 25,
+          "inclusive_ms": 0.009330999999999999,
+          "exclusive_ms": 0.006164
+        },
+        "basin.query": {
+          "calls": 618,
+          "inclusive_ms": 2.392945999999993,
+          "exclusive_ms": 2.392945999999993
+        },
+        "basin.seal": {
+          "calls": 297,
+          "inclusive_ms": 176.5742549999999,
+          "exclusive_ms": 1.4194829999999994
+        },
+        "checkpoint.blocks": {
+          "calls": 2,
+          "inclusive_ms": 488.619167,
+          "exclusive_ms": 1.1354979999999557
+        },
+        "checkpoint.directories": {
+          "calls": 1,
+          "inclusive_ms": 21.204292,
+          "exclusive_ms": 0.04467099999999746
+        },
+        "checkpoint.read_pages": {
+          "calls": 2,
+          "inclusive_ms": 0.701167,
+          "exclusive_ms": 0.2441690000000012
+        },
+        "flexbuffers.decode": {
+          "calls": 339,
+          "inclusive_ms": 0.8364249999999999,
+          "exclusive_ms": 0.8364249999999999
+        },
+        "flexbuffers.encode": {
+          "calls": 306,
+          "inclusive_ms": 2.465874999999997,
+          "exclusive_ms": 2.465874999999997
+        },
+        "hmac": {
+          "calls": 297,
+          "inclusive_ms": 0.2856819999999992,
+          "exclusive_ms": 0.2856819999999992
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 510.528083,
+          "exclusive_ms": 0.003456999999968957
+        },
+        "sha384": {
+          "calls": 300,
+          "inclusive_ms": 8.866386999999994,
+          "exclusive_ms": 8.866386999999994
+        },
+        "sl2.combine": {
+          "calls": 316,
+          "inclusive_ms": 1.3883759999999963,
+          "exclusive_ms": 1.3883759999999963
+        },
+        "sl2.hash": {
+          "calls": 294,
+          "inclusive_ms": 318.07574999999997,
+          "exclusive_ms": 318.07574999999997
+        },
+        "storage.body_read": {
+          "calls": 1,
+          "inclusive_ms": 0.028125,
+          "exclusive_ms": 0.028084
+        },
+        "storage.body_write": {
+          "calls": 7,
+          "inclusive_ms": 77.525669,
+          "exclusive_ms": 2.2643380000000004
+        },
+        "storage.get": {
+          "calls": 1,
+          "inclusive_ms": 0.063959,
+          "exclusive_ms": 0.032376
+        },
+        "storage.put": {
+          "calls": 297,
+          "inclusive_ms": 163.09045700000004,
+          "exclusive_ms": 9.827693000000004
+        },
+        "storage.sync": {
+          "calls": 28,
+          "inclusive_ms": 150.150625,
+          "exclusive_ms": 150.150625
+        },
+        "storage.wait": {
+          "calls": 8,
+          "inclusive_ms": 0.000206,
+          "exclusive_ms": 0.000206
+        },
+        "trie.build": {
+          "calls": 4,
+          "inclusive_ms": 442.51554200000004,
+          "exclusive_ms": 10.597256000002623
+        },
+        "vfs.source": {
+          "calls": 288,
+          "inclusive_ms": 0.4569979999999987,
+          "exclusive_ms": 0.4569979999999987
+        }
+      }
+    }
+  },
+  {
+    "mode": "eager",
+    "round": 1,
+    "rows": 256,
+    "inline_pages": 1,
+    "latency_ms": 0,
+    "mib_per_sec": 0,
+    "database_bytes": 4554752,
+    "kernel_bytes": 262144,
+    "initial_backup_bytes": 4599072,
+    "load_primary": {
+      "ms": 78.339125,
+      "io": {
+        "gets": 264,
+        "get_bytes": 4540944,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "basin.load": {
+          "calls": 836,
+          "inclusive_ms": 40.57183000000001,
+          "exclusive_ms": 2.585810000000001
+        },
+        "basin.node_reader": {
+          "calls": 27555,
+          "inclusive_ms": 11.22805699999892,
+          "exclusive_ms": 7.271212999999955
+        },
+        "flexbuffers.decode": {
+          "calls": 37582,
+          "inclusive_ms": 12.054720000001673,
+          "exclusive_ms": 12.054720000001673
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 78.338625,
+          "exclusive_ms": 0.0008329999999858728
+        },
+        "sha384": {
+          "calls": 264,
+          "inclusive_ms": 11.997960000000012,
+          "exclusive_ms": 11.997960000000012
+        },
+        "storage.body_read": {
+          "calls": 264,
+          "inclusive_ms": 12.100993000000015,
+          "exclusive_ms": 12.090240000000009
+        },
+        "storage.get": {
+          "calls": 264,
+          "inclusive_ms": 25.55537200000002,
+          "exclusive_ms": 12.334572999999994
+        },
+        "storage.wait": {
+          "calls": 264,
+          "inclusive_ms": 0.01075300000000003,
+          "exclusive_ms": 0.01075300000000003
+        },
+        "turso.connect": {
+          "calls": 1,
+          "inclusive_ms": 0.772709,
+          "exclusive_ms": 0.7600009999999999
+        },
+        "vfs.source": {
+          "calls": 284,
+          "inclusive_ms": 75.91009600000007,
+          "exclusive_ms": 3.1957229999999983
+        },
+        "volume.file_lookup": {
+          "calls": 1,
+          "inclusive_ms": 0.861459,
+          "exclusive_ms": 0.04116699999999984
+        },
+        "volume.open": {
+          "calls": 1,
+          "inclusive_ms": 78.33779200000001,
+          "exclusive_ms": 0.7800820000000073
+        },
+        "volume.page": {
+          "calls": 278,
+          "inclusive_ms": 72.71437300000001,
+          "exclusive_ms": 15.18939600000001
+        },
+        "volume.prefetch": {
+          "calls": 1,
+          "inclusive_ms": 75.923542,
+          "exclusive_ms": 0.026153999999934285
+        }
+      }
+    },
+    "first_query": {
+      "ms": 0.04825,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 0.048084,
+          "exclusive_ms": 0.043375000000000004
+        },
+        "vfs.source": {
+          "calls": 2,
+          "inclusive_ms": 0.004709,
+          "exclusive_ms": 0.004709
+        }
+      }
+    },
+    "load_kernel": {
+      "ms": 2.05375,
+      "io": {
+        "gets": 6,
+        "get_bytes": 91776,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "basin.load": {
+          "calls": 50,
+          "inclusive_ms": 0.5244119999999999,
+          "exclusive_ms": 0.09124200000000005
+        },
+        "basin.node_reader": {
+          "calls": 785,
+          "inclusive_ms": 0.19770500000000024,
+          "exclusive_ms": 0.12806600000000004
+        },
+        "flexbuffers.decode": {
+          "calls": 1119,
+          "inclusive_ms": 0.25188199999999894,
+          "exclusive_ms": 0.25188199999999894
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 2.0535829999999997,
+          "exclusive_ms": 0.00024999999999986144
+        },
+        "sha384": {
+          "calls": 6,
+          "inclusive_ms": 0.157501,
+          "exclusive_ms": 0.157501
+        },
+        "storage.body_read": {
+          "calls": 6,
+          "inclusive_ms": 0.11566699999999999,
+          "exclusive_ms": 0.11550099999999999
+        },
+        "storage.get": {
+          "calls": 6,
+          "inclusive_ms": 0.260793,
+          "exclusive_ms": 0.128709
+        },
+        "storage.wait": {
+          "calls": 6,
+          "inclusive_ms": 0.000166,
+          "exclusive_ms": 0.000166
+        },
+        "turso.connect": {
+          "calls": 1,
+          "inclusive_ms": 0.520375,
+          "exclusive_ms": 0.510085
+        },
+        "vfs.source": {
+          "calls": 22,
+          "inclusive_ms": 1.14704,
+          "exclusive_ms": 0.11870899999999995
+        },
+        "volume.file_lookup": {
+          "calls": 1,
+          "inclusive_ms": 0.08566700000000001,
+          "exclusive_ms": 0.009542000000000009
+        },
+        "volume.open": {
+          "calls": 1,
+          "inclusive_ms": 2.053333,
+          "exclusive_ms": 0.30908199999999986
+        },
+        "volume.page": {
+          "calls": 16,
+          "inclusive_ms": 1.0283309999999999,
+          "exclusive_ms": 0.23138899999999987
+        },
+        "volume.prefetch": {
+          "calls": 1,
+          "inclusive_ms": 1.138209,
+          "exclusive_ms": 0.001459000000000099
+        }
+      }
+    },
+    "hydrate_all": {
+      "ms": 8.950042,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "cow.copy": {
+          "calls": 2,
+          "inclusive_ms": 8.717334000000001,
+          "exclusive_ms": 0.5334189999999908
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 8.949959,
+          "exclusive_ms": 0.16062399999999855
+        },
+        "sha384": {
+          "calls": 74,
+          "inclusive_ms": 7.737170000000001,
+          "exclusive_ms": 7.737170000000001
+        },
+        "turso.checkpoint": {
+          "calls": 2,
+          "inclusive_ms": 0.072001,
+          "exclusive_ms": 0.072001
+        },
+        "vfs.source": {
+          "calls": 294,
+          "inclusive_ms": 0.44674499999999895,
+          "exclusive_ms": 0.44674499999999895
+        }
+      }
+    },
+    "warm_queries": {
+      "ms": 0.9786249999999999,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 0.9785,
+          "exclusive_ms": 0.8050790000000001
+        },
+        "vfs.source": {
+          "calls": 64,
+          "inclusive_ms": 0.173421,
+          "exclusive_ms": 0.173421
+        }
+      }
+    },
+    "local_commit": {
+      "ms": 2.725375,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 2.7251670000000003,
+          "exclusive_ms": 0.5039180000000005
+        },
+        "turso.checkpoint": {
+          "calls": 2,
+          "inclusive_ms": 2.215708,
+          "exclusive_ms": 2.1997099999999996
+        },
+        "vfs.source": {
+          "calls": 11,
+          "inclusive_ms": 0.021539000000000003,
+          "exclusive_ms": 0.021539000000000003
+        }
+      }
+    },
+    "backup": {
+      "ms": 486.727833,
+      "io": {
+        "gets": 1,
+        "get_bytes": 1448,
+        "puts": 7,
+        "put_bytes": 208008,
+        "reused": 290
+      },
+      "profile": {
+        "basin.load": {
+          "calls": 1,
+          "inclusive_ms": 0.063333,
+          "exclusive_ms": 0.005165999999999997
+        },
+        "basin.node_reader": {
+          "calls": 25,
+          "inclusive_ms": 0.008830000000000001,
+          "exclusive_ms": 0.005746999999999999
+        },
+        "basin.query": {
+          "calls": 618,
+          "inclusive_ms": 2.3750739999999912,
+          "exclusive_ms": 2.3750739999999912
+        },
+        "basin.seal": {
+          "calls": 297,
+          "inclusive_ms": 152.63078699999994,
+          "exclusive_ms": 1.3898230000000047
+        },
+        "checkpoint.blocks": {
+          "calls": 2,
+          "inclusive_ms": 468.0105,
+          "exclusive_ms": 1.0770009999999388
+        },
+        "checkpoint.directories": {
+          "calls": 1,
+          "inclusive_ms": 17.998791999999998,
+          "exclusive_ms": 0.04092399999999685
+        },
+        "checkpoint.read_pages": {
+          "calls": 2,
+          "inclusive_ms": 0.7147499999999999,
+          "exclusive_ms": 0.25345600000000096
+        },
+        "flexbuffers.decode": {
+          "calls": 339,
+          "inclusive_ms": 0.8157080000000004,
+          "exclusive_ms": 0.8157080000000004
+        },
+        "flexbuffers.encode": {
+          "calls": 306,
+          "inclusive_ms": 2.397414999999999,
+          "exclusive_ms": 2.397414999999999
+        },
+        "hmac": {
+          "calls": 297,
+          "inclusive_ms": 0.27845599999999937,
+          "exclusive_ms": 0.27845599999999937
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 486.727708,
+          "exclusive_ms": 0.003666000000009717
+        },
+        "sha384": {
+          "calls": 300,
+          "inclusive_ms": 8.655916999999988,
+          "exclusive_ms": 8.655916999999988
+        },
+        "sl2.combine": {
+          "calls": 316,
+          "inclusive_ms": 1.372332999999999,
+          "exclusive_ms": 1.372332999999999
+        },
+        "sl2.hash": {
+          "calls": 294,
+          "inclusive_ms": 318.5875799999998,
+          "exclusive_ms": 318.5875799999998
+        },
+        "storage.body_read": {
+          "calls": 1,
+          "inclusive_ms": 0.024,
+          "exclusive_ms": 0.023959
+        },
+        "storage.body_write": {
+          "calls": 7,
+          "inclusive_ms": 68.015249,
+          "exclusive_ms": 2.3024549999999984
+        },
+        "storage.get": {
+          "calls": 1,
+          "inclusive_ms": 0.053834,
+          "exclusive_ms": 0.026751
+        },
+        "storage.put": {
+          "calls": 297,
+          "inclusive_ms": 139.46346199999996,
+          "exclusive_ms": 9.711460000000002
+        },
+        "storage.sync": {
+          "calls": 28,
+          "inclusive_ms": 126.61996199999999,
+          "exclusive_ms": 126.61996199999999
+        },
+        "storage.wait": {
+          "calls": 8,
+          "inclusive_ms": 0.000249,
+          "exclusive_ms": 0.000249
+        },
+        "trie.build": {
+          "calls": 4,
+          "inclusive_ms": 426.34345700000006,
+          "exclusive_ms": 10.323312000004174
+        },
+        "vfs.source": {
+          "calls": 288,
+          "inclusive_ms": 0.4612939999999988,
+          "exclusive_ms": 0.4612939999999988
+        }
+      }
+    }
+  },
+  {
+    "mode": "lazy",
+    "round": 1,
+    "rows": 256,
+    "inline_pages": 1,
+    "latency_ms": 0,
+    "mib_per_sec": 0,
+    "database_bytes": 4554752,
+    "kernel_bytes": 262144,
+    "initial_backup_bytes": 4599072,
+    "load_primary": {
+      "ms": 6.052791,
+      "io": {
+        "gets": 4,
+        "get_bytes": 166704,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "basin.load": {
+          "calls": 8,
+          "inclusive_ms": 1.4751659999999998,
+          "exclusive_ms": 0.0814999999999999
+        },
+        "basin.node_reader": {
+          "calls": 182,
+          "inclusive_ms": 0.14558799999999994,
+          "exclusive_ms": 0.09659300000000008
+        },
+        "flexbuffers.decode": {
+          "calls": 256,
+          "inclusive_ms": 0.21132999999999988,
+          "exclusive_ms": 0.21132999999999988
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 6.052417,
+          "exclusive_ms": 0.002667000000000641
+        },
+        "sha384": {
+          "calls": 4,
+          "inclusive_ms": 0.605959,
+          "exclusive_ms": 0.605959
+        },
+        "storage.body_read": {
+          "calls": 4,
+          "inclusive_ms": 0.411625,
+          "exclusive_ms": 0.41054100000000004
+        },
+        "storage.get": {
+          "calls": 4,
+          "inclusive_ms": 0.773832,
+          "exclusive_ms": 0.322623
+        },
+        "storage.wait": {
+          "calls": 4,
+          "inclusive_ms": 0.001084,
+          "exclusive_ms": 0.001084
+        },
+        "turso.connect": {
+          "calls": 1,
+          "inclusive_ms": 3.9880000000000004,
+          "exclusive_ms": 2.859708000000001
+        },
+        "vfs.source": {
+          "calls": 6,
+          "inclusive_ms": 1.1282919999999996,
+          "exclusive_ms": 0.16749999999999982
+        },
+        "volume.file_lookup": {
+          "calls": 1,
+          "inclusive_ms": 1.008583,
+          "exclusive_ms": 0.04487600000000003
+        },
+        "volume.open": {
+          "calls": 1,
+          "inclusive_ms": 6.0497499999999995,
+          "exclusive_ms": 1.0531669999999993
+        },
+        "volume.page": {
+          "calls": 2,
+          "inclusive_ms": 0.9607920000000001,
+          "exclusive_ms": 0.1948690000000003
+        }
+      }
+    },
+    "first_query": {
+      "ms": 1.6159169999999998,
+      "io": {
+        "gets": 2,
+        "get_bytes": 33648,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "basin.load": {
+          "calls": 6,
+          "inclusive_ms": 0.6347510000000001,
+          "exclusive_ms": 0.06387800000000007
+        },
+        "basin.node_reader": {
+          "calls": 204,
+          "inclusive_ms": 0.1933779999999996,
+          "exclusive_ms": 0.12887800000000008
+        },
+        "flexbuffers.decode": {
+          "calls": 278,
+          "inclusive_ms": 0.22300399999999976,
+          "exclusive_ms": 0.22300399999999976
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 1.6152499999999999,
+          "exclusive_ms": 0.2793749999999997
+        },
+        "sha384": {
+          "calls": 2,
+          "inclusive_ms": 0.207874,
+          "exclusive_ms": 0.207874
+        },
+        "storage.body_read": {
+          "calls": 2,
+          "inclusive_ms": 0.14841700000000002,
+          "exclusive_ms": 0.14825100000000002
+        },
+        "storage.get": {
+          "calls": 2,
+          "inclusive_ms": 0.351708,
+          "exclusive_ms": 0.181083
+        },
+        "storage.wait": {
+          "calls": 2,
+          "inclusive_ms": 0.000166,
+          "exclusive_ms": 0.000166
+        },
+        "vfs.source": {
+          "calls": 2,
+          "inclusive_ms": 1.3358750000000001,
+          "exclusive_ms": 0.0764990000000001
+        },
+        "volume.page": {
+          "calls": 2,
+          "inclusive_ms": 1.259376,
+          "exclusive_ms": 0.3062420000000002
+        }
+      }
+    },
+    "load_kernel": {
+      "ms": 4.30375,
+      "io": {
+        "gets": 3,
+        "get_bytes": 41304,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "basin.load": {
+          "calls": 8,
+          "inclusive_ms": 0.757667,
+          "exclusive_ms": 0.06016500000000007
+        },
+        "basin.node_reader": {
+          "calls": 138,
+          "inclusive_ms": 0.11687600000000009,
+          "exclusive_ms": 0.07683800000000006
+        },
+        "flexbuffers.decode": {
+          "calls": 199,
+          "inclusive_ms": 0.17591400000000001,
+          "exclusive_ms": 0.17591400000000001
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 4.303375,
+          "exclusive_ms": 0.001458999999999655
+        },
+        "sha384": {
+          "calls": 3,
+          "inclusive_ms": 0.23291699999999999,
+          "exclusive_ms": 0.23291699999999999
+        },
+        "storage.body_read": {
+          "calls": 3,
+          "inclusive_ms": 0.19766699999999998,
+          "exclusive_ms": 0.19675
+        },
+        "storage.get": {
+          "calls": 3,
+          "inclusive_ms": 0.453626,
+          "exclusive_ms": 0.227209
+        },
+        "storage.wait": {
+          "calls": 3,
+          "inclusive_ms": 0.0009169999999999998,
+          "exclusive_ms": 0.0009169999999999998
+        },
+        "turso.connect": {
+          "calls": 1,
+          "inclusive_ms": 2.939084,
+          "exclusive_ms": 1.9857519999999997
+        },
+        "vfs.source": {
+          "calls": 6,
+          "inclusive_ms": 0.9533320000000001,
+          "exclusive_ms": 0.09266499999999994
+        },
+        "volume.file_lookup": {
+          "calls": 1,
+          "inclusive_ms": 0.28237500000000004,
+          "exclusive_ms": 0.03141500000000008
+        },
+        "volume.open": {
+          "calls": 1,
+          "inclusive_ms": 4.301916,
+          "exclusive_ms": 1.0804570000000004
+        },
+        "volume.page": {
+          "calls": 2,
+          "inclusive_ms": 0.8606670000000001,
+          "exclusive_ms": 0.14091700000000013
+        }
+      }
+    },
+    "hydrate_all": {
+      "ms": 78.078416,
+      "io": {
+        "gets": 261,
+        "get_bytes": 4391064,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "basin.load": {
+          "calls": 864,
+          "inclusive_ms": 31.15259899999992,
+          "exclusive_ms": 2.4230619999999976
+        },
+        "basin.node_reader": {
+          "calls": 27816,
+          "inclusive_ms": 10.5314279999981,
+          "exclusive_ms": 6.894316999999973
+        },
+        "cow.copy": {
+          "calls": 2,
+          "inclusive_ms": 77.73275000000001,
+          "exclusive_ms": 1.1799889999999276
+        },
+        "flexbuffers.decode": {
+          "calls": 37968,
+          "inclusive_ms": 10.853105999998231,
+          "exclusive_ms": 10.853105999998231
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 78.07799999999999,
+          "exclusive_ms": 0.18983299999997882
+        },
+        "sha384": {
+          "calls": 335,
+          "inclusive_ms": 22.873995999999984,
+          "exclusive_ms": 22.873995999999984
+        },
+        "storage.body_read": {
+          "calls": 261,
+          "inclusive_ms": 8.06055199999999,
+          "exclusive_ms": 8.052932999999994
+        },
+        "storage.get": {
+          "calls": 261,
+          "inclusive_ms": 17.569461,
+          "exclusive_ms": 8.517953000000004
+        },
+        "storage.wait": {
+          "calls": 261,
+          "inclusive_ms": 0.007619000000000023,
+          "exclusive_ms": 0.007619000000000023
+        },
+        "turso.checkpoint": {
+          "calls": 2,
+          "inclusive_ms": 0.155417,
+          "exclusive_ms": 0.155417
+        },
+        "vfs.source": {
+          "calls": 294,
+          "inclusive_ms": 64.42571599999997,
+          "exclusive_ms": 2.964595000000004
+        },
+        "volume.page": {
+          "calls": 288,
+          "inclusive_ms": 61.46112099999999,
+          "exclusive_ms": 13.965180000000004
+        }
+      }
+    },
+    "warm_queries": {
+      "ms": 1.0846250000000002,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 1.084459,
+          "exclusive_ms": 0.8798760000000001
+        },
+        "vfs.source": {
+          "calls": 64,
+          "inclusive_ms": 0.20458299999999996,
+          "exclusive_ms": 0.20458299999999996
+        }
+      }
+    },
+    "local_commit": {
+      "ms": 2.760917,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 2.760708,
+          "exclusive_ms": 0.47116800000000003
+        },
+        "turso.checkpoint": {
+          "calls": 2,
+          "inclusive_ms": 2.283249,
+          "exclusive_ms": 2.263957
+        },
+        "vfs.source": {
+          "calls": 11,
+          "inclusive_ms": 0.025583000000000005,
+          "exclusive_ms": 0.025583000000000005
+        }
+      }
+    },
+    "backup": {
+      "ms": 517.042833,
+      "io": {
+        "gets": 1,
+        "get_bytes": 1448,
+        "puts": 7,
+        "put_bytes": 208008,
+        "reused": 290
+      },
+      "profile": {
+        "basin.load": {
+          "calls": 1,
+          "inclusive_ms": 0.06658299999999999,
+          "exclusive_ms": 0.00616499999999999
+        },
+        "basin.node_reader": {
+          "calls": 25,
+          "inclusive_ms": 0.008919,
+          "exclusive_ms": 0.006003999999999999
+        },
+        "basin.query": {
+          "calls": 618,
+          "inclusive_ms": 2.4255179999999954,
+          "exclusive_ms": 2.4255179999999954
+        },
+        "basin.seal": {
+          "calls": 297,
+          "inclusive_ms": 159.30958699999996,
+          "exclusive_ms": 1.451162999999992
+        },
+        "checkpoint.blocks": {
+          "calls": 2,
+          "inclusive_ms": 495.747334,
+          "exclusive_ms": 1.175876000000045
+        },
+        "checkpoint.directories": {
+          "calls": 1,
+          "inclusive_ms": 19.016208,
+          "exclusive_ms": 0.04191300000000098
+        },
+        "checkpoint.read_pages": {
+          "calls": 2,
+          "inclusive_ms": 2.274792,
+          "exclusive_ms": 0.4150090000000016
+        },
+        "flexbuffers.decode": {
+          "calls": 339,
+          "inclusive_ms": 0.8629489999999996,
+          "exclusive_ms": 0.8629489999999996
+        },
+        "flexbuffers.encode": {
+          "calls": 306,
+          "inclusive_ms": 2.473292999999998,
+          "exclusive_ms": 2.473292999999998
+        },
+        "hmac": {
+          "calls": 297,
+          "inclusive_ms": 0.2931329999999996,
+          "exclusive_ms": 0.2931329999999996
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 517.042542,
+          "exclusive_ms": 0.004207999999948697
+        },
+        "sha384": {
+          "calls": 300,
+          "inclusive_ms": 9.119376999999991,
+          "exclusive_ms": 9.119376999999991
+        },
+        "sl2.combine": {
+          "calls": 316,
+          "inclusive_ms": 1.4118829999999958,
+          "exclusive_ms": 1.4118829999999958
+        },
+        "sl2.hash": {
+          "calls": 294,
+          "inclusive_ms": 339.8668629999998,
+          "exclusive_ms": 339.8668629999998
+        },
+        "storage.body_read": {
+          "calls": 1,
+          "inclusive_ms": 0.023791999999999997,
+          "exclusive_ms": 0.023750999999999998
+        },
+        "storage.body_write": {
+          "calls": 7,
+          "inclusive_ms": 72.39575,
+          "exclusive_ms": 4.144335000000005
+        },
+        "storage.get": {
+          "calls": 1,
+          "inclusive_ms": 0.055958999999999995,
+          "exclusive_ms": 0.028916999999999998
+        },
+        "storage.put": {
+          "calls": 297,
+          "inclusive_ms": 145.52707500000005,
+          "exclusive_ms": 10.847375
+        },
+        "storage.sync": {
+          "calls": 28,
+          "inclusive_ms": 129.651791,
+          "exclusive_ms": 129.651791
+        },
+        "storage.wait": {
+          "calls": 8,
+          "inclusive_ms": 0.000206,
+          "exclusive_ms": 0.000206
+        },
+        "trie.build": {
+          "calls": 4,
+          "inclusive_ms": 456.91795899999994,
+          "exclusive_ms": 10.933030000000889
+        },
+        "vfs.source": {
+          "calls": 288,
+          "inclusive_ms": 1.8597829999999984,
+          "exclusive_ms": 1.8597829999999984
+        }
+      }
+    }
+  },
+  {
+    "mode": "flat",
+    "round": 1,
+    "rows": 256,
+    "inline_pages": 1,
+    "latency_ms": 0,
+    "mib_per_sec": 0,
+    "database_bytes": 4554752,
+    "kernel_bytes": 262144,
+    "initial_backup_bytes": 4816896,
+    "load_primary": {
+      "ms": 2.099708,
+      "io": {
+        "gets": 1,
+        "get_bytes": 4554752,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 2.099583,
+          "exclusive_ms": 0.7951250000000001
+        },
+        "storage.body_read": {
+          "calls": 1,
+          "inclusive_ms": 0.59575,
+          "exclusive_ms": 0.59575
+        },
+        "storage.wait": {
+          "calls": 1,
+          "inclusive_ms": 0.0,
+          "exclusive_ms": 0.0
+        },
+        "turso.connect": {
+          "calls": 1,
+          "inclusive_ms": 0.708708,
+          "exclusive_ms": 0.708708
+        }
+      }
+    },
+    "first_query": {
+      "ms": 0.156959,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 0.156917,
+          "exclusive_ms": 0.156917
+        }
+      }
+    },
+    "load_kernel": {
+      "ms": 0.920542,
+      "io": {
+        "gets": 1,
+        "get_bytes": 262144,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 0.9203749999999999,
+          "exclusive_ms": 0.29716699999999996
+        },
+        "storage.body_read": {
+          "calls": 1,
+          "inclusive_ms": 0.07025,
+          "exclusive_ms": 0.07025
+        },
+        "storage.wait": {
+          "calls": 1,
+          "inclusive_ms": 0.0,
+          "exclusive_ms": 0.0
+        },
+        "turso.connect": {
+          "calls": 1,
+          "inclusive_ms": 0.552958,
+          "exclusive_ms": 0.552958
+        }
+      }
+    },
+    "hydrate_all": {
+      "ms": 9.368125,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "cow.copy": {
+          "calls": 2,
+          "inclusive_ms": 9.156584,
+          "exclusive_ms": 0.6209150000000014
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 9.367916000000001,
+          "exclusive_ms": 0.15799800000000097
+        },
+        "sha384": {
+          "calls": 74,
+          "inclusive_ms": 8.535668999999999,
+          "exclusive_ms": 8.535668999999999
+        },
+        "turso.checkpoint": {
+          "calls": 2,
+          "inclusive_ms": 0.053334,
+          "exclusive_ms": 0.053334
+        }
+      }
+    },
+    "warm_queries": {
+      "ms": 0.97175,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 0.9715830000000001,
+          "exclusive_ms": 0.9715830000000001
+        }
+      }
+    },
+    "local_commit": {
+      "ms": 1.0889579999999999,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 1.088875,
+          "exclusive_ms": 0.368209
+        },
+        "turso.checkpoint": {
+          "calls": 2,
+          "inclusive_ms": 0.720666,
+          "exclusive_ms": 0.720666
+        }
+      }
+    },
+    "backup": {
+      "ms": 33.88125,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 2,
+        "put_bytes": 4816896,
+        "reused": 0
+      },
+      "profile": {
+        "cow.copy": {
+          "calls": 2,
+          "inclusive_ms": 9.237749999999998,
+          "exclusive_ms": 1.3439550000000011
+        },
+        "flat.export": {
+          "calls": 2,
+          "inclusive_ms": 9.397125,
+          "exclusive_ms": 0.1593750000000025
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 33.881042,
+          "exclusive_ms": 1.9504999999999981
+        },
+        "sha384": {
+          "calls": 74,
+          "inclusive_ms": 7.893794999999998,
+          "exclusive_ms": 7.893794999999998
+        },
+        "storage.body_write": {
+          "calls": 2,
+          "inclusive_ms": 22.533417,
+          "exclusive_ms": 0.9694160000000007
+        },
+        "storage.sync": {
+          "calls": 4,
+          "inclusive_ms": 21.563876,
+          "exclusive_ms": 21.563876
+        },
+        "storage.wait": {
+          "calls": 2,
+          "inclusive_ms": 0.000125,
+          "exclusive_ms": 0.000125
+        }
+      }
+    }
+  },
+  {
+    "mode": "flat",
+    "round": 2,
+    "rows": 256,
+    "inline_pages": 1,
+    "latency_ms": 0,
+    "mib_per_sec": 0,
+    "database_bytes": 4554752,
+    "kernel_bytes": 262144,
+    "initial_backup_bytes": 4816896,
+    "load_primary": {
+      "ms": 2.1181669999999997,
+      "io": {
+        "gets": 1,
+        "get_bytes": 4554752,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 2.118042,
+          "exclusive_ms": 0.8429579999999999
+        },
+        "storage.body_read": {
+          "calls": 1,
+          "inclusive_ms": 0.574084,
+          "exclusive_ms": 0.574042
+        },
+        "storage.wait": {
+          "calls": 1,
+          "inclusive_ms": 0.000042,
+          "exclusive_ms": 0.000042
+        },
+        "turso.connect": {
+          "calls": 1,
+          "inclusive_ms": 0.7010000000000001,
+          "exclusive_ms": 0.7010000000000001
+        }
+      }
+    },
+    "first_query": {
+      "ms": 0.146709,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 0.146583,
+          "exclusive_ms": 0.146583
+        }
+      }
+    },
+    "load_kernel": {
+      "ms": 0.859375,
+      "io": {
+        "gets": 1,
+        "get_bytes": 262144,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 0.859208,
+          "exclusive_ms": 0.2715829999999999
+        },
+        "storage.body_read": {
+          "calls": 1,
+          "inclusive_ms": 0.062625,
+          "exclusive_ms": 0.062583
+        },
+        "storage.wait": {
+          "calls": 1,
+          "inclusive_ms": 0.000042,
+          "exclusive_ms": 0.000042
+        },
+        "turso.connect": {
+          "calls": 1,
+          "inclusive_ms": 0.525,
+          "exclusive_ms": 0.525
+        }
+      }
+    },
+    "hydrate_all": {
+      "ms": 8.776875,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "cow.copy": {
+          "calls": 2,
+          "inclusive_ms": 8.574084000000001,
+          "exclusive_ms": 0.6029580000000034
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 8.776791000000001,
+          "exclusive_ms": 0.1401229999999991
+        },
+        "sha384": {
+          "calls": 74,
+          "inclusive_ms": 7.971125999999997,
+          "exclusive_ms": 7.971125999999997
+        },
+        "turso.checkpoint": {
+          "calls": 2,
+          "inclusive_ms": 0.062584,
+          "exclusive_ms": 0.062584
+        }
+      }
+    },
+    "warm_queries": {
+      "ms": 0.949584,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 0.9495,
+          "exclusive_ms": 0.9495
+        }
+      }
+    },
+    "local_commit": {
+      "ms": 1.08325,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 1.0831250000000001,
+          "exclusive_ms": 0.35662499999999997
+        },
+        "turso.checkpoint": {
+          "calls": 2,
+          "inclusive_ms": 0.7265000000000001,
+          "exclusive_ms": 0.7265000000000001
+        }
+      }
+    },
+    "backup": {
+      "ms": 32.238459,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 2,
+        "put_bytes": 4816896,
+        "reused": 0
+      },
+      "profile": {
+        "cow.copy": {
+          "calls": 2,
+          "inclusive_ms": 9.070291999999998,
+          "exclusive_ms": 1.3008350000000006
+        },
+        "flat.export": {
+          "calls": 2,
+          "inclusive_ms": 9.238666,
+          "exclusive_ms": 0.1683740000000018
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 32.238209,
+          "exclusive_ms": 1.935334999999995
+        },
+        "sha384": {
+          "calls": 74,
+          "inclusive_ms": 7.769456999999997,
+          "exclusive_ms": 7.769456999999997
+        },
+        "storage.body_write": {
+          "calls": 2,
+          "inclusive_ms": 21.064208,
+          "exclusive_ms": 0.832416000000002
+        },
+        "storage.sync": {
+          "calls": 4,
+          "inclusive_ms": 20.231709,
+          "exclusive_ms": 20.231709
+        },
+        "storage.wait": {
+          "calls": 2,
+          "inclusive_ms": 0.000083,
+          "exclusive_ms": 0.000083
+        }
+      }
+    }
+  },
+  {
+    "mode": "lazy",
+    "round": 2,
+    "rows": 256,
+    "inline_pages": 1,
+    "latency_ms": 0,
+    "mib_per_sec": 0,
+    "database_bytes": 4554752,
+    "kernel_bytes": 262144,
+    "initial_backup_bytes": 4599072,
+    "load_primary": {
+      "ms": 6.987542,
+      "io": {
+        "gets": 4,
+        "get_bytes": 166704,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "basin.load": {
+          "calls": 8,
+          "inclusive_ms": 1.466833,
+          "exclusive_ms": 0.08049800000000015
+        },
+        "basin.node_reader": {
+          "calls": 182,
+          "inclusive_ms": 0.13054700000000002,
+          "exclusive_ms": 0.08774900000000006
+        },
+        "flexbuffers.decode": {
+          "calls": 256,
+          "inclusive_ms": 0.18587800000000013,
+          "exclusive_ms": 0.18587800000000013
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 6.987083,
+          "exclusive_ms": 0.002208000000000432
+        },
+        "sha384": {
+          "calls": 4,
+          "inclusive_ms": 0.505083,
+          "exclusive_ms": 0.505083
+        },
+        "storage.body_read": {
+          "calls": 4,
+          "inclusive_ms": 0.39070900000000003,
+          "exclusive_ms": 0.38962399999999997
+        },
+        "storage.get": {
+          "calls": 4,
+          "inclusive_ms": 0.8601240000000001,
+          "exclusive_ms": 0.43145500000000003
+        },
+        "storage.wait": {
+          "calls": 4,
+          "inclusive_ms": 0.001085,
+          "exclusive_ms": 0.001085
+        },
+        "turso.connect": {
+          "calls": 1,
+          "inclusive_ms": 5.258292,
+          "exclusive_ms": 4.048334
+        },
+        "vfs.source": {
+          "calls": 6,
+          "inclusive_ms": 1.209958,
+          "exclusive_ms": 0.16329199999999988
+        },
+        "volume.file_lookup": {
+          "calls": 1,
+          "inclusive_ms": 0.840917,
+          "exclusive_ms": 0.03587600000000024
+        },
+        "volume.open": {
+          "calls": 1,
+          "inclusive_ms": 6.984875,
+          "exclusive_ms": 0.8856659999999996
+        },
+        "volume.page": {
+          "calls": 2,
+          "inclusive_ms": 1.046666,
+          "exclusive_ms": 0.17033500000000018
+        }
+      }
+    },
+    "first_query": {
+      "ms": 1.668917,
+      "io": {
+        "gets": 2,
+        "get_bytes": 33648,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "basin.load": {
+          "calls": 6,
+          "inclusive_ms": 0.7234579999999999,
+          "exclusive_ms": 0.06312400000000001
+        },
+        "basin.node_reader": {
+          "calls": 204,
+          "inclusive_ms": 0.1934949999999995,
+          "exclusive_ms": 0.12798900000000005
+        },
+        "flexbuffers.decode": {
+          "calls": 278,
+          "inclusive_ms": 0.22025899999999962,
+          "exclusive_ms": 0.22025899999999962
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 1.6684160000000001,
+          "exclusive_ms": 0.24645800000000007
+        },
+        "sha384": {
+          "calls": 2,
+          "inclusive_ms": 0.209125,
+          "exclusive_ms": 0.209125
+        },
+        "storage.body_read": {
+          "calls": 2,
+          "inclusive_ms": 0.194959,
+          "exclusive_ms": 0.194709
+        },
+        "storage.get": {
+          "calls": 2,
+          "inclusive_ms": 0.44054200000000004,
+          "exclusive_ms": 0.22320800000000005
+        },
+        "storage.wait": {
+          "calls": 2,
+          "inclusive_ms": 0.00025,
+          "exclusive_ms": 0.00025
+        },
+        "vfs.source": {
+          "calls": 2,
+          "inclusive_ms": 1.421958,
+          "exclusive_ms": 0.07679100000000005
+        },
+        "volume.page": {
+          "calls": 2,
+          "inclusive_ms": 1.345167,
+          "exclusive_ms": 0.30650300000000036
+        }
+      }
+    },
+    "load_kernel": {
+      "ms": 4.148874999999999,
+      "io": {
+        "gets": 3,
+        "get_bytes": 41304,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "basin.load": {
+          "calls": 8,
+          "inclusive_ms": 0.7568339999999999,
+          "exclusive_ms": 0.06454099999999999
+        },
+        "basin.node_reader": {
+          "calls": 138,
+          "inclusive_ms": 0.11883300000000009,
+          "exclusive_ms": 0.07737400000000005
+        },
+        "flexbuffers.decode": {
+          "calls": 199,
+          "inclusive_ms": 0.176418,
+          "exclusive_ms": 0.176418
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 4.148708,
+          "exclusive_ms": 0.001292000000000293
+        },
+        "sha384": {
+          "calls": 3,
+          "inclusive_ms": 0.23354200000000003,
+          "exclusive_ms": 0.23354200000000003
+        },
+        "storage.body_read": {
+          "calls": 3,
+          "inclusive_ms": 0.19821,
+          "exclusive_ms": 0.197251
+        },
+        "storage.get": {
+          "calls": 3,
+          "inclusive_ms": 0.44825,
+          "exclusive_ms": 0.221123
+        },
+        "storage.wait": {
+          "calls": 3,
+          "inclusive_ms": 0.0009590000000000001,
+          "exclusive_ms": 0.0009590000000000001
+        },
+        "turso.connect": {
+          "calls": 1,
+          "inclusive_ms": 2.809833,
+          "exclusive_ms": 1.8678329999999999
+        },
+        "vfs.source": {
+          "calls": 6,
+          "inclusive_ms": 0.942,
+          "exclusive_ms": 0.08966700000000001
+        },
+        "volume.file_lookup": {
+          "calls": 1,
+          "inclusive_ms": 0.282583,
+          "exclusive_ms": 0.030667
+        },
+        "volume.open": {
+          "calls": 1,
+          "inclusive_ms": 4.147416,
+          "exclusive_ms": 1.0550000000000002
+        },
+        "volume.page": {
+          "calls": 2,
+          "inclusive_ms": 0.852333,
+          "exclusive_ms": 0.13304100000000013
+        }
+      }
+    },
+    "hydrate_all": {
+      "ms": 90.625834,
+      "io": {
+        "gets": 261,
+        "get_bytes": 4391064,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "basin.load": {
+          "calls": 864,
+          "inclusive_ms": 42.233133000000045,
+          "exclusive_ms": 2.396177999999995
+        },
+        "basin.node_reader": {
+          "calls": 27816,
+          "inclusive_ms": 10.35829899999803,
+          "exclusive_ms": 6.799639999999849
+        },
+        "cow.copy": {
+          "calls": 2,
+          "inclusive_ms": 90.157041,
+          "exclusive_ms": 1.2146730000000168
+        },
+        "flexbuffers.decode": {
+          "calls": 37968,
+          "inclusive_ms": 10.565058999997715,
+          "exclusive_ms": 10.565058999997715
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 90.6255,
+          "exclusive_ms": 0.30633399999999256
+        },
+        "sha384": {
+          "calls": 335,
+          "inclusive_ms": 22.446241999999966,
+          "exclusive_ms": 22.446241999999966
+        },
+        "storage.body_read": {
+          "calls": 261,
+          "inclusive_ms": 15.021043000000002,
+          "exclusive_ms": 15.013637000000005
+        },
+        "storage.get": {
+          "calls": 261,
+          "inclusive_ms": 28.90021000000001,
+          "exclusive_ms": 12.91458600000001
+        },
+        "storage.wait": {
+          "calls": 261,
+          "inclusive_ms": 0.007406000000000023,
+          "exclusive_ms": 0.007406000000000023
+        },
+        "turso.checkpoint": {
+          "calls": 2,
+          "inclusive_ms": 0.16212500000000002,
+          "exclusive_ms": 0.16212500000000002
+        },
+        "vfs.source": {
+          "calls": 294,
+          "inclusive_ms": 77.03662400000003,
+          "exclusive_ms": 5.106120000000005
+        },
+        "volume.page": {
+          "calls": 288,
+          "inclusive_ms": 71.93050400000007,
+          "exclusive_ms": 13.693500000000006
+        }
+      }
+    },
+    "warm_queries": {
+      "ms": 1.034875,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 1.0347920000000002,
+          "exclusive_ms": 0.8197090000000002
+        },
+        "vfs.source": {
+          "calls": 64,
+          "inclusive_ms": 0.21508299999999997,
+          "exclusive_ms": 0.21508299999999997
+        }
+      }
+    },
+    "local_commit": {
+      "ms": 2.542542,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 2.542375,
+          "exclusive_ms": 0.44908400000000004
+        },
+        "turso.checkpoint": {
+          "calls": 2,
+          "inclusive_ms": 2.087083,
+          "exclusive_ms": 2.068165
+        },
+        "vfs.source": {
+          "calls": 11,
+          "inclusive_ms": 0.025126,
+          "exclusive_ms": 0.025126
+        }
+      }
+    },
+    "backup": {
+      "ms": 500.60395800000003,
+      "io": {
+        "gets": 1,
+        "get_bytes": 1448,
+        "puts": 7,
+        "put_bytes": 208008,
+        "reused": 290
+      },
+      "profile": {
+        "basin.load": {
+          "calls": 1,
+          "inclusive_ms": 0.091666,
+          "exclusive_ms": 0.005415000000000003
+        },
+        "basin.node_reader": {
+          "calls": 25,
+          "inclusive_ms": 0.008711,
+          "exclusive_ms": 0.005876000000000001
+        },
+        "basin.query": {
+          "calls": 618,
+          "inclusive_ms": 2.5521839999999942,
+          "exclusive_ms": 2.5521839999999942
+        },
+        "basin.seal": {
+          "calls": 297,
+          "inclusive_ms": 155.419712,
+          "exclusive_ms": 1.458047000000008
+        },
+        "checkpoint.blocks": {
+          "calls": 2,
+          "inclusive_ms": 479.87633300000005,
+          "exclusive_ms": 1.1427510000000325
+        },
+        "checkpoint.directories": {
+          "calls": 1,
+          "inclusive_ms": 19.883167,
+          "exclusive_ms": 0.04150200000000126
+        },
+        "checkpoint.read_pages": {
+          "calls": 2,
+          "inclusive_ms": 0.8405830000000001,
+          "exclusive_ms": 0.24909800000000143
+        },
+        "flexbuffers.decode": {
+          "calls": 339,
+          "inclusive_ms": 0.8333789999999995,
+          "exclusive_ms": 0.8333789999999995
+        },
+        "flexbuffers.encode": {
+          "calls": 306,
+          "inclusive_ms": 2.5118309999999986,
+          "exclusive_ms": 2.5118309999999986
+        },
+        "hmac": {
+          "calls": 297,
+          "inclusive_ms": 0.28761399999999954,
+          "exclusive_ms": 0.28761399999999954
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 500.60379099999994,
+          "exclusive_ms": 0.0037079999999605207
+        },
+        "sha384": {
+          "calls": 300,
+          "inclusive_ms": 8.90775299999999,
+          "exclusive_ms": 8.90775299999999
+        },
+        "sl2.combine": {
+          "calls": 316,
+          "inclusive_ms": 1.348246999999998,
+          "exclusive_ms": 1.348246999999998
+        },
+        "sl2.hash": {
+          "calls": 294,
+          "inclusive_ms": 328.32032599999997,
+          "exclusive_ms": 328.32032599999997
+        },
+        "storage.body_read": {
+          "calls": 1,
+          "inclusive_ms": 0.037,
+          "exclusive_ms": 0.036958
+        },
+        "storage.body_write": {
+          "calls": 7,
+          "inclusive_ms": 68.951792,
+          "exclusive_ms": 2.4643750000000004
+        },
+        "storage.get": {
+          "calls": 1,
+          "inclusive_ms": 0.08191699999999999,
+          "exclusive_ms": 0.041832999999999995
+        },
+        "storage.put": {
+          "calls": 297,
+          "inclusive_ms": 141.777004,
+          "exclusive_ms": 13.26237900000001
+        },
+        "storage.sync": {
+          "calls": 28,
+          "inclusive_ms": 125.198746,
+          "exclusive_ms": 125.198746
+        },
+        "storage.wait": {
+          "calls": 8,
+          "inclusive_ms": 0.0006270000000000002,
+          "exclusive_ms": 0.0006270000000000002
+        },
+        "trie.build": {
+          "calls": 4,
+          "inclusive_ms": 440.320582,
+          "exclusive_ms": 11.339657000003326
+        },
+        "vfs.source": {
+          "calls": 288,
+          "inclusive_ms": 0.5914849999999985,
+          "exclusive_ms": 0.5914849999999985
+        }
+      }
+    }
+  },
+  {
+    "mode": "eager",
+    "round": 2,
+    "rows": 256,
+    "inline_pages": 1,
+    "latency_ms": 0,
+    "mib_per_sec": 0,
+    "database_bytes": 4554752,
+    "kernel_bytes": 262144,
+    "initial_backup_bytes": 4599072,
+    "load_primary": {
+      "ms": 83.199458,
+      "io": {
+        "gets": 264,
+        "get_bytes": 4540944,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "basin.load": {
+          "calls": 836,
+          "inclusive_ms": 43.89662000000002,
+          "exclusive_ms": 2.6658530000000003
+        },
+        "basin.node_reader": {
+          "calls": 27555,
+          "inclusive_ms": 11.555725999998591,
+          "exclusive_ms": 7.498604000000329
+        },
+        "flexbuffers.decode": {
+          "calls": 37582,
+          "inclusive_ms": 12.311622000002522,
+          "exclusive_ms": 12.311622000002522
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 83.198916,
+          "exclusive_ms": 0.001040999999986525
+        },
+        "sha384": {
+          "calls": 264,
+          "inclusive_ms": 12.15667600000002,
+          "exclusive_ms": 12.15667600000002
+        },
+        "storage.body_read": {
+          "calls": 264,
+          "inclusive_ms": 13.592432000000008,
+          "exclusive_ms": 13.580103999999997
+        },
+        "storage.get": {
+          "calls": 264,
+          "inclusive_ms": 28.627797,
+          "exclusive_ms": 13.873321999999991
+        },
+        "storage.wait": {
+          "calls": 264,
+          "inclusive_ms": 0.012328000000000016,
+          "exclusive_ms": 0.012328000000000016
+        },
+        "turso.connect": {
+          "calls": 1,
+          "inclusive_ms": 0.880625,
+          "exclusive_ms": 0.867125
+        },
+        "vfs.source": {
+          "calls": 284,
+          "inclusive_ms": 80.6578059999999,
+          "exclusive_ms": 3.792185999999998
+        },
+        "volume.file_lookup": {
+          "calls": 1,
+          "inclusive_ms": 0.855209,
+          "exclusive_ms": 0.039707999999999966
+        },
+        "volume.open": {
+          "calls": 1,
+          "inclusive_ms": 83.19787500000001,
+          "exclusive_ms": 0.7886240000000129
+        },
+        "volume.page": {
+          "calls": 278,
+          "inclusive_ms": 76.86562,
+          "exclusive_ms": 15.582612000000013
+        },
+        "volume.prefetch": {
+          "calls": 1,
+          "inclusive_ms": 80.673417,
+          "exclusive_ms": 0.029111000000099807
+        }
+      }
+    },
+    "first_query": {
+      "ms": 0.054416,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 0.054209,
+          "exclusive_ms": 0.049042
+        },
+        "vfs.source": {
+          "calls": 2,
+          "inclusive_ms": 0.005167000000000001,
+          "exclusive_ms": 0.005167000000000001
+        }
+      }
+    },
+    "load_kernel": {
+      "ms": 2.375209,
+      "io": {
+        "gets": 6,
+        "get_bytes": 91776,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "basin.load": {
+          "calls": 50,
+          "inclusive_ms": 0.6006639999999998,
+          "exclusive_ms": 0.11128700000000004
+        },
+        "basin.node_reader": {
+          "calls": 785,
+          "inclusive_ms": 0.20754799999999982,
+          "exclusive_ms": 0.13463500000000012
+        },
+        "flexbuffers.decode": {
+          "calls": 1119,
+          "inclusive_ms": 0.27081799999999756,
+          "exclusive_ms": 0.27081799999999756
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 2.375042,
+          "exclusive_ms": 0.0004170000000001117
+        },
+        "sha384": {
+          "calls": 6,
+          "inclusive_ms": 0.158917,
+          "exclusive_ms": 0.158917
+        },
+        "storage.body_read": {
+          "calls": 6,
+          "inclusive_ms": 0.137876,
+          "exclusive_ms": 0.137541
+        },
+        "storage.get": {
+          "calls": 6,
+          "inclusive_ms": 0.313876,
+          "exclusive_ms": 0.15829100000000002
+        },
+        "storage.wait": {
+          "calls": 6,
+          "inclusive_ms": 0.000335,
+          "exclusive_ms": 0.000335
+        },
+        "turso.connect": {
+          "calls": 1,
+          "inclusive_ms": 0.652792,
+          "exclusive_ms": 0.6405420000000001
+        },
+        "vfs.source": {
+          "calls": 22,
+          "inclusive_ms": 1.2853329999999998,
+          "exclusive_ms": 0.14454099999999992
+        },
+        "volume.file_lookup": {
+          "calls": 1,
+          "inclusive_ms": 0.094666,
+          "exclusive_ms": 0.009456999999999993
+        },
+        "volume.open": {
+          "calls": 1,
+          "inclusive_ms": 2.374625,
+          "exclusive_ms": 0.352001
+        },
+        "volume.page": {
+          "calls": 16,
+          "inclusive_ms": 1.1407920000000003,
+          "exclusive_ms": 0.25417699999999993
+        },
+        "volume.prefetch": {
+          "calls": 1,
+          "inclusive_ms": 1.275166,
+          "exclusive_ms": 0.002083000000000057
+        }
+      }
+    },
+    "hydrate_all": {
+      "ms": 10.567834,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "cow.copy": {
+          "calls": 2,
+          "inclusive_ms": 10.265791,
+          "exclusive_ms": 0.6717440000000012
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 10.567708,
+          "exclusive_ms": 0.20895900000000012
+        },
+        "sha384": {
+          "calls": 74,
+          "inclusive_ms": 8.855250999999999,
+          "exclusive_ms": 8.855250999999999
+        },
+        "turso.checkpoint": {
+          "calls": 2,
+          "inclusive_ms": 0.092958,
+          "exclusive_ms": 0.092958
+        },
+        "vfs.source": {
+          "calls": 294,
+          "inclusive_ms": 0.7387959999999995,
+          "exclusive_ms": 0.7387959999999995
+        }
+      }
+    },
+    "warm_queries": {
+      "ms": 1.126625,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 1.1264999999999998,
+          "exclusive_ms": 0.8980019999999999
+        },
+        "vfs.source": {
+          "calls": 64,
+          "inclusive_ms": 0.22849799999999995,
+          "exclusive_ms": 0.22849799999999995
+        }
+      }
+    },
+    "local_commit": {
+      "ms": 2.348709,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      },
+      "profile": {
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 2.3485419999999997,
+          "exclusive_ms": 0.4066239999999999
+        },
+        "turso.checkpoint": {
+          "calls": 2,
+          "inclusive_ms": 1.935334,
+          "exclusive_ms": 1.917043
+        },
+        "vfs.source": {
+          "calls": 11,
+          "inclusive_ms": 0.024875000000000005,
+          "exclusive_ms": 0.024875000000000005
+        }
+      }
+    },
+    "backup": {
+      "ms": 542.340416,
+      "io": {
+        "gets": 1,
+        "get_bytes": 1448,
+        "puts": 7,
+        "put_bytes": 208008,
+        "reused": 290
+      },
+      "profile": {
+        "basin.load": {
+          "calls": 1,
+          "inclusive_ms": 0.096834,
+          "exclusive_ms": 0.007834999999999995
+        },
+        "basin.node_reader": {
+          "calls": 25,
+          "inclusive_ms": 0.007961,
+          "exclusive_ms": 0.005458999999999997
+        },
+        "basin.query": {
+          "calls": 618,
+          "inclusive_ms": 2.6061999999999945,
+          "exclusive_ms": 2.6061999999999945
+        },
+        "basin.seal": {
+          "calls": 297,
+          "inclusive_ms": 163.46449700000002,
+          "exclusive_ms": 1.606523000000005
+        },
+        "checkpoint.blocks": {
+          "calls": 2,
+          "inclusive_ms": 522.714124,
+          "exclusive_ms": 1.260581999999971
+        },
+        "checkpoint.directories": {
+          "calls": 1,
+          "inclusive_ms": 18.891291000000002,
+          "exclusive_ms": 0.04111900000000546
+        },
+        "checkpoint.read_pages": {
+          "calls": 2,
+          "inclusive_ms": 0.729916,
+          "exclusive_ms": 0.26365200000000133
+        },
+        "flexbuffers.decode": {
+          "calls": 339,
+          "inclusive_ms": 0.911909999999999,
+          "exclusive_ms": 0.911909999999999
+        },
+        "flexbuffers.encode": {
+          "calls": 306,
+          "inclusive_ms": 2.689888000000001,
+          "exclusive_ms": 2.689888000000001
+        },
+        "hmac": {
+          "calls": 297,
+          "inclusive_ms": 0.3004949999999991,
+          "exclusive_ms": 0.3004949999999991
+        },
+        "phase": {
+          "calls": 1,
+          "inclusive_ms": 542.340291,
+          "exclusive_ms": 0.004959999999982756
+        },
+        "sha384": {
+          "calls": 300,
+          "inclusive_ms": 9.389695999999992,
+          "exclusive_ms": 9.389695999999992
+        },
+        "sl2.combine": {
+          "calls": 316,
+          "inclusive_ms": 1.4224129999999962,
+          "exclusive_ms": 1.4224129999999962
+        },
+        "sl2.hash": {
+          "calls": 294,
+          "inclusive_ms": 361.90946099999996,
+          "exclusive_ms": 361.90946099999996
+        },
+        "storage.body_read": {
+          "calls": 1,
+          "inclusive_ms": 0.038708,
+          "exclusive_ms": 0.038624
+        },
+        "storage.body_write": {
+          "calls": 7,
+          "inclusive_ms": 69.363834,
+          "exclusive_ms": 2.9198760000000057
+        },
+        "storage.get": {
+          "calls": 1,
+          "inclusive_ms": 0.084416,
+          "exclusive_ms": 0.042583
+        },
+        "storage.put": {
+          "calls": 297,
+          "inclusive_ms": 149.01915499999998,
+          "exclusive_ms": 15.85350099999998
+        },
+        "storage.sync": {
+          "calls": 28,
+          "inclusive_ms": 129.27545699999996,
+          "exclusive_ms": 129.27545699999996
+        },
+        "storage.wait": {
+          "calls": 8,
+          "inclusive_ms": 0.000667,
+          "exclusive_ms": 0.000667
+        },
+        "trie.build": {
+          "calls": 4,
+          "inclusive_ms": 481.269791,
+          "exclusive_ms": 11.323126000001368
+        },
+        "vfs.source": {
+          "calls": 288,
+          "inclusive_ms": 0.4662639999999986,
+          "exclusive_ms": 0.4662639999999986
+        }
+      }
+    }
+  }
+]

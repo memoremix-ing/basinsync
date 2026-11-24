@@ -2,6 +2,7 @@
 [cpu-1]: <cpu-1.json>
 [cpu-16]: <cpu-16.json>
 [kernelspace]: <../../../../glossary/kernelspace.md>
+[profile]: <profile.md>
 [revision]: <../../../../glossary/revision.md>
 [slow-16]: <slow-16.json>
 [timeline]: <../../../../glossary/timeline.md>
@@ -17,6 +18,8 @@
 release build, vendored *Turso*[~][turso] 0.9.0-pre.1. Three trials per case,
 alternating variant order; medians below. Builds/tests did not run alongside timings.
 Explore the *comparison*[~][comparison].
+The *timing breakdown*[~][profile] separates summaries, storage, codecs and traversal,
+including the previously untimed full-file hydration phase.
 Raw runs: *one-page local*[~][cpu-1], *sixteen-page local*[~][cpu-16],
 *one-page transport*[~][wan-1], *sixteen-page transport*[~][wan-16],
 and *bandwidth-limited transport*[~][slow-16].

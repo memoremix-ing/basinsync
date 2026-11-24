@@ -51,9 +51,11 @@ pub fn key(s: &str) -> Result<Vec<u8>> {
         .collect()
 }
 pub fn sha384(bytes: &[u8]) -> Vec<u8> {
+    let _profile = crate::profile::span("sha384");
     Sha384::digest(bytes).to_vec()
 }
 pub fn hmac(secret: &[u8], bytes: &[u8]) -> Vec<u8> {
+    let _profile = crate::profile::span("hmac");
     let mut h = Hmac::<Sha384>::new_from_slice(secret).expect("HMAC accepts arbitrary key lengths");
     h.update(bytes);
     h.finalize().into_bytes().to_vec()
@@ -87,6 +89,7 @@ pub fn unframe(b: &[u8]) -> Result<&[u8]> {
     Ok(&b[8..8 + n])
 }
 pub fn node_reader(bytes: &[u8]) -> Result<flexbuffers::Reader<&[u8]>> {
+    let _profile = crate::profile::span("basin.node_reader");
     let r = flexbuffers::Reader::get_root(unframe(bytes)?)?;
     validate_node(r.clone(), None)?;
     Ok(r)
@@ -212,6 +215,7 @@ pub fn empty_query() -> Value {
     ])
 }
 pub fn query(edges: &[Edge], max_degree: usize, max_height: u32) -> Result<Value> {
+    let _profile = crate::profile::span("basin.query");
     let edges = distinct(edges)?;
     ensure!(edges.len() <= max_degree, "basin degree limit");
     if edges.is_empty() {
@@ -377,6 +381,7 @@ impl<S: Storage> Basin<S> {
         })
     }
     pub fn seal(&mut self, mut node: Value, edges: &[Edge]) -> Result<Edge> {
+        let _profile = crate::profile::span("basin.seal");
         let refs = distinct(edges)?;
         node.set("3", query(&refs, self.max_degree, self.max_height)?)?;
         let bytes = frame(&value::encode(&node)?)?;
@@ -413,6 +418,7 @@ impl<S: Storage> Basin<S> {
         pending.allocated(&revision)
     }
     pub fn load(&mut self, e: &Edge) -> Result<Arc<Vec<u8>>> {
+        let _profile = crate::profile::span("basin.load");
         validate_edge(e)?;
         let k = format!(
             "{}/{}",

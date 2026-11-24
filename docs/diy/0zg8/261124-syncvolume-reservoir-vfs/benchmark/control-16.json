@@ -1,0 +1,245 @@
+[
+  {
+    "mode": "eager",
+    "round": 0,
+    "rows": 256,
+    "inline_pages": 16,
+    "latency_ms": 0,
+    "mib_per_sec": 0,
+    "database_bytes": 4554752,
+    "kernel_bytes": 262144,
+    "initial_backup_bytes": 4843208,
+    "load_primary": {
+      "ms": 45.073417,
+      "io": {
+        "gets": 19,
+        "get_bytes": 4580104,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      }
+    },
+    "first_query": {
+      "ms": 0.071125,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      }
+    },
+    "load_kernel": {
+      "ms": 2.582042,
+      "io": {
+        "gets": 1,
+        "get_bytes": 263104,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      }
+    },
+    "hydrate_all": {
+      "ms": 11.9085,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      }
+    },
+    "warm_queries": {
+      "ms": 1.1520409999999999,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      }
+    },
+    "local_commit": {
+      "ms": 2.9656249999999997,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      }
+    },
+    "backup": {
+      "ms": 425.296375,
+      "io": {
+        "gets": 1,
+        "get_bytes": 1456,
+        "puts": 4,
+        "put_bytes": 800496,
+        "reused": 16
+      }
+    }
+  },
+  {
+    "mode": "eager",
+    "round": 1,
+    "rows": 256,
+    "inline_pages": 16,
+    "latency_ms": 0,
+    "mib_per_sec": 0,
+    "database_bytes": 4554752,
+    "kernel_bytes": 262144,
+    "initial_backup_bytes": 4843208,
+    "load_primary": {
+      "ms": 46.709708,
+      "io": {
+        "gets": 19,
+        "get_bytes": 4580104,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      }
+    },
+    "first_query": {
+      "ms": 0.07354100000000001,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      }
+    },
+    "load_kernel": {
+      "ms": 2.884834,
+      "io": {
+        "gets": 1,
+        "get_bytes": 263104,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      }
+    },
+    "hydrate_all": {
+      "ms": 12.122957999999999,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      }
+    },
+    "warm_queries": {
+      "ms": 1.241292,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      }
+    },
+    "local_commit": {
+      "ms": 2.912291,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      }
+    },
+    "backup": {
+      "ms": 482.159125,
+      "io": {
+        "gets": 1,
+        "get_bytes": 1456,
+        "puts": 4,
+        "put_bytes": 800496,
+        "reused": 16
+      }
+    }
+  },
+  {
+    "mode": "eager",
+    "round": 2,
+    "rows": 256,
+    "inline_pages": 16,
+    "latency_ms": 0,
+    "mib_per_sec": 0,
+    "database_bytes": 4554752,
+    "kernel_bytes": 262144,
+    "initial_backup_bytes": 4843208,
+    "load_primary": {
+      "ms": 36.741125,
+      "io": {
+        "gets": 19,
+        "get_bytes": 4580104,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      }
+    },
+    "first_query": {
+      "ms": 0.050334000000000004,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      }
+    },
+    "load_kernel": {
+      "ms": 2.183417,
+      "io": {
+        "gets": 1,
+        "get_bytes": 263104,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      }
+    },
+    "hydrate_all": {
+      "ms": 10.23375,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      }
+    },
+    "warm_queries": {
+      "ms": 1.078959,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      }
+    },
+    "local_commit": {
+      "ms": 2.7352499999999997,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0
+      }
+    },
+    "backup": {
+      "ms": 428.13745800000004,
+      "io": {
+        "gets": 1,
+        "get_bytes": 1456,
+        "puts": 4,
+        "put_bytes": 800496,
+        "reused": 16
+      }
+    }
+  }
+]

@@ -375,6 +375,7 @@ pub fn build_node<S: Storage, C: Consumer>(
     input: Vec<(Vec<u8>, Value)>,
     c: &C,
 ) -> Result<Built> {
+    let _profile = crate::profile::span("trie.build");
     let mut rows = input
         .into_iter()
         .map(|(key, value)| {

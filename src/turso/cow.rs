@@ -335,6 +335,7 @@ impl View {
     }
 
     fn copy_to(self: &Arc<Self>, out: &mut impl Write) -> Result<String> {
+        let _profile = crate::structures::profile::span("cow.copy");
         let mut digest = Sha384::new();
         let file = ViewFile(self.clone());
         let mut at = 0;
@@ -343,7 +344,10 @@ impl View {
             let buffer = Arc::new(Buffer::new_temporary(count));
             drop(file.pread(at, Completion::new_read(buffer.clone(), |_| None))?);
             out.write_all(buffer.as_slice())?;
-            digest.update(buffer.as_slice());
+            {
+                let _profile = crate::structures::profile::span("sha384");
+                digest.update(buffer.as_slice());
+            }
             at += count as u64;
         }
         Ok(format!("{:x}", digest.finalize()))

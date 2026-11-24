@@ -39,6 +39,7 @@ pub fn multiply(a: Matrix, b: Matrix) -> Matrix {
     ]
 }
 pub fn hash(input: &[u8]) -> Vec<u8> {
+    let _profile = crate::profile::span("sl2.hash");
     let [mut a, mut b, mut c, mut d] = IDENTITY;
     for byte in input {
         for bit in (0..8).rev() {
@@ -54,6 +55,7 @@ pub fn hash(input: &[u8]) -> Vec<u8> {
     bytes([a, b, c, d])
 }
 pub fn combine(parts: &[Vec<u8>]) -> Result<Vec<u8>> {
+    let _profile = crate::profile::span("sl2.combine");
     let mut out = IDENTITY;
     for p in parts {
         out = multiply(out, matrix(p)?);

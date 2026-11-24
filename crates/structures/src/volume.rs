@@ -783,6 +783,7 @@ pub fn page<S: Storage>(
     index: &num_bigint::BigInt,
     shortcuts: bool,
 ) -> Result<Option<Vec<u8>>> {
+    let _profile = crate::profile::span("volume.page");
     let (footer, _) = open_block(basin, root, name, shortcuts)?;
     let full = lex(index)?.into_bytes();
     let value = page_value(basin, &footer, full, shortcuts)?;
@@ -1024,6 +1025,7 @@ pub fn update<S: Storage>(
 
 /// Read only file/sector descriptors; no page-trie descendants need to be fetched.
 pub fn dense_page_count<S: Storage>(b: &mut Basin<S>, root: &Edge, name: &str) -> Result<u64> {
+    let _profile = crate::profile::span("volume.file_lookup");
     let (footer, _) = open_block(b, root, name, false)?;
     let pages = footer.item(2);
     let header = if pages.reader()?.flexbuffer_type() == flexbuffers::FlexBufferType::Map {

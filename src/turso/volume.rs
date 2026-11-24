@@ -2,7 +2,7 @@
 use super::{Native, PAGE_SIZE, State, cow};
 use crate::structures::{
     basin::{Basin, Edge, Storage},
-    volume,
+    profile, volume,
 };
 use anyhow::{Context, Result, ensure};
 use std::{
@@ -45,6 +45,7 @@ impl DatabaseFile {
         Self::from_image(&State::genesis_schema(schema)?.image)
     }
     fn on_store(store: Arc<cow::Store>) -> Result<Self> {
+        let _profile = profile::span("turso.connect");
         let native = Native::connect_at(store.io(), store.path().into(), None, true)?;
         native.conn.set_portable_logical_changes_enabled(true);
         ensure!(
@@ -65,6 +66,7 @@ impl DatabaseFile {
         &self.native.conn
     }
     pub fn snapshot(&mut self) -> Result<Arc<cow::View>> {
+        let _profile = profile::span("turso.checkpoint");
         self.native.checkpoint()?;
         self.native.storage.frames.lock().unwrap().clear();
         self.store.seal();
@@ -94,6 +96,7 @@ impl<S: Storage + Send + 'static> SyncVolume<S> {
         }
     }
     pub fn open(&self, path: &str) -> Result<DatabaseFile> {
+        let _profile = profile::span("volume.open");
         let pages = {
             let mut files = self.files.lock().unwrap();
             if let Some(cached) = files.get(path) {
@@ -122,6 +125,7 @@ impl<S: Storage + Send + 'static> SyncVolume<S> {
             }
         };
         if self.mode == LoadMode::EagerFile {
+            let _profile = profile::span("volume.prefetch");
             let mut page = vec![0; PAGE_SIZE];
             for p in 0..pages.size / PAGE_SIZE as u64 {
                 pages.read_at(p * PAGE_SIZE as u64, &mut page)?;
@@ -146,6 +150,7 @@ impl<S: Storage + Send> cow::PageSource for Pages<S> {
         self.size
     }
     fn read_at(&self, offset: u64, bytes: &mut [u8]) -> io::Result<()> {
+        let _profile = profile::span("vfs.source");
         if bytes.is_empty() {
             return Ok(());
         }
@@ -197,15 +202,21 @@ pub fn checkpoint<S: Storage>(
             view.size() > 0 && view.size().is_multiple_of(PAGE_SIZE as u64),
             "invalid Turso file size"
         );
-        let mut pages = vec![];
-        for page in 0..view.size() / PAGE_SIZE as u64 {
-            pages.push((page.into(), view.page(page)?));
-        }
-        blocks.push((
-            name,
-            volume::build_block_with_inline_pages(basin, pages, inline_pages)?,
-        ));
+        let pages = {
+            let _profile = profile::span("checkpoint.read_pages");
+            let mut pages = vec![];
+            for page in 0..view.size() / PAGE_SIZE as u64 {
+                pages.push((page.into(), view.page(page)?));
+            }
+            pages
+        };
+        let block = {
+            let _profile = profile::span("checkpoint.blocks");
+            volume::build_block_with_inline_pages(basin, pages, inline_pages)?
+        };
+        blocks.push((name, block));
     }
+    let _profile = profile::span("checkpoint.directories");
     match previous {
         Some(root) => volume::replace_blocks(basin, root, blocks),
         None => volume::from_blocks(basin, blocks, vec![]),
