@@ -18,7 +18,14 @@ import {
   query,
 } from "./core";
 import { TrieView } from "./trie-view";
-import { Trie, Consumer, plain, Header, TRIE } from "./trie";
+import {
+  Trie,
+  Consumer,
+  plain,
+  Header,
+  TRIE,
+  composableConsumer,
+} from "./trie";
 import { pack } from "./packed";
 import { Vector, vectorBoundaryLinks } from "./vector";
 import { encode, Reference } from "../flexbuffer";
@@ -30,25 +37,34 @@ export const VOLUME = ".sync-volume/",
 export type Directory = [true, Uint8Array, Record<string, Directory | File>];
 export type File = [false, Uint8Array, Link];
 export type SectorSummary = { brombergSL2: Uint8Array };
-export const sectors: Consumer<[Uint8Array], SectorSummary> = {
-  migration: 0,
-  empty: { brombergSL2: sl2.bytes(sl2.identity()) },
-  entry: (_k, v) => {
-    check(
-      Array.isArray(v) && v.length === 1 && v[0] instanceof Uint8Array,
-      "invalid page",
-    );
-    return { brombergSL2: sl2.hash(v[0]) };
+export const sectors: Consumer<[Uint8Array], SectorSummary> =
+  composableConsumer<[Uint8Array], SectorSummary>(
+    {
+      migration: 0,
+      empty: { brombergSL2: sl2.bytes(sl2.identity()) },
+      entry: (_k, v) => {
+        check(
+          Array.isArray(v) && v.length === 1 && v[0] instanceof Uint8Array,
+          "invalid page",
+        );
+        return { brombergSL2: sl2.hash(v[0]) };
+      },
+      combine: (s) => ({
+        brombergSL2: sl2.combine(s.map((v) => v.brombergSL2)),
+      }),
+    },
+    { keyIndependent: true },
+  );
+export const devices: Consumer<[Edge], null> = composableConsumer<[Edge], null>(
+  {
+    ...plain,
+    edges: (v) => {
+      check(Array.isArray(v) && v.length === 1, "invalid device value");
+      return [v[0]];
+    },
   },
-  combine: (s) => ({ brombergSL2: sl2.combine(s.map((v) => v.brombergSL2)) }),
-};
-export const devices: Consumer<[Edge], null> = {
-  ...plain,
-  edges: (v) => {
-    check(Array.isArray(v) && v.length === 1, "invalid device value");
-    return [v[0]];
-  },
-};
+  { keyIndependent: true },
+);
 function path(value: string): string[] {
   check(
     value.isWellFormed() && value.startsWith("/") && !value.includes("\0"),
@@ -637,13 +653,7 @@ export class Volume {
     root: Directory,
     device: TrieView<[Edge], null>,
   ): Promise<Volume> {
-    const rows: [Uint8Array, [Edge]][] = [];
-    for await (const row of device.entries()) rows.push(row);
-    return sealVolume(
-      this.basin,
-      await Trie.buildNode(this.basin, rows, devices),
-      root,
-    );
+    return sealVolume(this.basin, await device.buildNode(), root);
   }
   async update(
     changes: Iterable<[string, Uint8Array | null]>,

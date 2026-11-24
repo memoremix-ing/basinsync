@@ -1,3 +1,6 @@
+import { TrieView } from "./trie-view";
+import { composableConsumer, summaryReuse } from "./summary";
+import { sourcePieces, type Block } from "./trie-export";
 import {
   type GraftMode,
   type TrieMutationMetrics,
@@ -36,12 +39,16 @@ export interface Consumer<V, M> {
   combine(summaries: readonly M[]): M | Promise<M>;
   edges?(value: V): Edge[];
 }
-export const plain: Consumer<unknown, null> = {
-  migration: 0,
-  empty: null,
-  entry: () => null,
-  combine: () => null,
-};
+export { composableConsumer } from "./summary";
+export const plain: Consumer<unknown, null> = composableConsumer<unknown, null>(
+  {
+    migration: 0,
+    empty: null,
+    entry: () => null,
+    combine: () => null,
+  },
+  { keyIndependent: true },
+);
 type Row<V, M> = { key: Uint8Array; full: Uint8Array; value: V; summary: M };
 type Local<V, M> = TrieNode<V, M> | Edge;
 export const starts = (k: Uint8Array, p: Uint8Array) =>
@@ -135,11 +142,20 @@ function findValue(
 
 /** Sorted key groups and two indexed nibble levels. Writes never depend on insertion history. */
 export class Trie<V = unknown, M = null> {
+  private packing: string;
+  private policy() {
+    return JSON.stringify([
+      this.basin.options.maxDegree ?? 320,
+      this.basin.options.maxHeight ?? 128,
+      this.basin.options.maxBytes ?? 64 * 1024 * 1024,
+    ]);
+  }
   constructor(
     readonly basin: Basin,
     private source: Edge | Reference,
     readonly consumer: Consumer<V, M>,
   ) {
+    this.packing = this.policy();
     if (Array.isArray(source))
       check(
         source[1] === DOMAIN &&
@@ -158,6 +174,19 @@ export class Trie<V = unknown, M = null> {
   get root(): Edge {
     check(Array.isArray(this.source), "inline trie has no standalone root");
     return this.source;
+  }
+  /** Export opaque canonical subtrees, expanding only intersected boundaries. */
+  async *pieces(
+    wanted: Uint8Array,
+    blocked: readonly Block[] = [],
+  ): AsyncGenerator<import("./trie-export").Piece<V, M>> {
+    if (this.policy() === this.packing) {
+      yield* sourcePieces<V, M>(this.basin, this.source, wanted, blocked);
+      return;
+    }
+    for await (const [k, v] of this.entries(wanted))
+      if (!blocked.some((x) => (x.prefix ? starts(k, x.key) : equal(k, x.key))))
+        yield { kind: "row", key: k, value: v };
   }
   private readRoot(): Promise<Reference> {
     return Array.isArray(this.source)
@@ -603,11 +632,8 @@ export class Trie<V = unknown, M = null> {
   }
   /** Load once for synchronous path-copied edits; store explicitly after a batch. */
   async edit(): Promise<TrieEditor<V, M>> {
-    const rows: [Uint8Array, V][] = [];
-    for await (const row of this.entries()) rows.push(row);
-    return TrieEditor.from(this.basin, rows, this.consumer);
+    return TrieEditor.load(this);
   }
-  /** Full canonical rebuild, reusing immutable objects through the storage adapter. */
   async update(
     changes: Iterable<[Uint8Array | string, { set: V } | { delete: true }]>,
   ): Promise<Trie<V, M>> {
@@ -654,6 +680,7 @@ export class TrieEditor<V, M = null> {
     readonly basin: Basin,
     private readonly values: TrieMap<V>,
     readonly consumer: Consumer<V, M>,
+    private exportView?: TrieView<V, M>,
   ) {}
   static from<V, M>(
     basin: Basin,
@@ -662,14 +689,27 @@ export class TrieEditor<V, M = null> {
   ): TrieEditor<V, M> {
     return new TrieEditor(basin, TrieMap.from(input), consumer);
   }
+  static async load<V, M>(
+    source: Trie<V, M> | TrieView<V, M>,
+  ): Promise<TrieEditor<V, M>> {
+    const rows: [Uint8Array, V][] = [];
+    for await (const row of source.entries()) rows.push(row);
+    return new TrieEditor(
+      source.basin,
+      TrieMap.from(rows),
+      source.consumer,
+      source instanceof Trie ? TrieView.from(source) : source,
+    );
+  }
   mutate(metrics?: TrieMutationMetrics): TrieEditorMutation<V, M> {
     const draft = this.values.mutate(metrics);
+    let view = this.exportView;
     let map = this.values,
       editor: TrieEditor<V, M> = this;
     const wrap = (next: TrieMap<V>) => {
       if (next !== map) {
         map = next;
-        editor = new TrieEditor(this.basin, next, this.consumer);
+        editor = new TrieEditor(this.basin, next, this.consumer, view);
       }
       return editor;
     };
@@ -679,9 +719,18 @@ export class TrieEditor<V, M = null> {
       },
       get: (k) => draft.get(k),
       has: (k) => draft.has(k),
-      set: (k, v) => draft.set(k, v),
-      delete: (k) => draft.delete(k),
-      deletePrefix: (k) => draft.deletePrefix(k),
+      set: (k, v) => {
+        draft.set(k, v);
+        view = view?.set(k, v);
+      },
+      delete: (k) => {
+        draft.delete(k);
+        view = view?.delete(k);
+      },
+      deletePrefix: (k) => {
+        draft.deletePrefix(k);
+        view = view?.deletePrefix(k);
+      },
       graftPrefix: (k, subtree, mode) => {
         try {
           check(
@@ -689,6 +738,7 @@ export class TrieEditor<V, M = null> {
             "graft requires matching basin/consumer",
           );
           draft.graftPrefix(k, subtree.values, mode);
+          view = view?.replacePrefix(k, subtree.asView());
         } catch (error) {
           draft.abort();
           throw error;
@@ -713,13 +763,23 @@ export class TrieEditor<V, M = null> {
     const next = this.values.set(k, v);
     return next === this.values
       ? this
-      : new TrieEditor(this.basin, next, this.consumer);
+      : new TrieEditor(
+          this.basin,
+          next,
+          this.consumer,
+          this.exportView?.set(k, v),
+        );
   }
   delete(k: Uint8Array | string): TrieEditor<V, M> {
     const next = this.values.delete(k);
     return next === this.values
       ? this
-      : new TrieEditor(this.basin, next, this.consumer);
+      : new TrieEditor(
+          this.basin,
+          next,
+          this.consumer,
+          this.exportView?.delete(k),
+        );
   }
   entries() {
     return this.values.entries();
@@ -730,11 +790,21 @@ export class TrieEditor<V, M = null> {
   } {
     const { subtree, rest } = this.values.splitPrefix(prefix);
     return {
-      subtree: new TrieEditor(this.basin, subtree, this.consumer),
+      subtree: new TrieEditor(
+        this.basin,
+        subtree,
+        this.consumer,
+        this.exportView?.subtree(prefix),
+      ),
       rest:
         rest === this.values
           ? this
-          : new TrieEditor(this.basin, rest, this.consumer),
+          : new TrieEditor(
+              this.basin,
+              rest,
+              this.consumer,
+              this.exportView?.deletePrefix(prefix),
+            ),
     };
   }
   subtree(prefix: Uint8Array | string) {
@@ -752,6 +822,7 @@ export class TrieEditor<V, M = null> {
       this.basin,
       this.values.graftPrefix(prefix, subtree.values, mode),
       this.consumer,
+      this.exportView?.replacePrefix(prefix, subtree.asView()),
     );
   }
   copyPrefix(
@@ -779,7 +850,16 @@ export class TrieEditor<V, M = null> {
     check(subtree.size > 0, "missing source prefix");
     return rest.graftPrefix(b, subtree, mode);
   }
-  store(): Promise<Trie<V, M>> {
-    return Trie.build(this.basin, this.entries(), this.consumer);
+  private asView() {
+    return (
+      this.exportView ??
+      TrieView.fromEntries(this.basin, this.entries(), this.consumer)
+    );
+  }
+  async store(): Promise<Trie<V, M>> {
+    if (this.exportView) return this.exportView.store();
+    const stored = await Trie.build(this.basin, this.entries(), this.consumer);
+    this.exportView = TrieView.from(stored);
+    return stored;
   }
 }

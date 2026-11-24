@@ -1,0 +1,86 @@
+{
+  "runtime": "1.4.5",
+  "scope": "cold 100,000-entry trie, one replacement; identical canonical outputs; in-memory storage",
+  "samples": [
+    {
+      "trial": 0,
+      "selective": false,
+      "ms": 247.38083400000002,
+      "gets": 394,
+      "puts": 394,
+      "newObjects": 3
+    },
+    {
+      "trial": 0,
+      "selective": true,
+      "ms": 15.783166999999992,
+      "gets": 4,
+      "puts": 3,
+      "newObjects": 3
+    },
+    {
+      "trial": 1,
+      "selective": true,
+      "ms": 22.258916999999997,
+      "gets": 4,
+      "puts": 3,
+      "newObjects": 3
+    },
+    {
+      "trial": 1,
+      "selective": false,
+      "ms": 235.02408300000002,
+      "gets": 394,
+      "puts": 394,
+      "newObjects": 3
+    },
+    {
+      "trial": 2,
+      "selective": false,
+      "ms": 223.3371659999999,
+      "gets": 394,
+      "puts": 394,
+      "newObjects": 3
+    },
+    {
+      "trial": 2,
+      "selective": true,
+      "ms": 10.68283299999996,
+      "gets": 4,
+      "puts": 3,
+      "newObjects": 3
+    },
+    {
+      "trial": 3,
+      "selective": true,
+      "ms": 9.909208000000035,
+      "gets": 4,
+      "puts": 3,
+      "newObjects": 3
+    },
+    {
+      "trial": 3,
+      "selective": false,
+      "ms": 217.85062499999992,
+      "gets": 394,
+      "puts": 394,
+      "newObjects": 3
+    },
+    {
+      "trial": 4,
+      "selective": false,
+      "ms": 218.35283299999992,
+      "gets": 394,
+      "puts": 394,
+      "newObjects": 3
+    },
+    {
+      "trial": 4,
+      "selective": true,
+      "ms": 10.470458000000008,
+      "gets": 4,
+      "puts": 3,
+      "newObjects": 3
+    }
+  ]
+}

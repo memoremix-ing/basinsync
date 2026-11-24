@@ -23,6 +23,7 @@ prerequisites:
 [owner-mutation]: <benchmark/owner-mutation.md>
 [promoted-costs]: <benchmark/promoted-costs.md>
 [revision]: <../../../../../glossary/revision.md>
+[selective-export]: <benchmark/selective-export.md>
 [shortcut-reads]: <benchmark/shortcut-reads.md>
 [strong-edge]: <../../../../../glossary/strong-edge.md>
 [subtree-cow]: <benchmark/subtree-cow.md>
@@ -357,12 +358,12 @@ logical editing instead uses path-copied snapshots:
 let edit = await trie.edit(); // materializes existing contents once
 const prior = edit;
 edit = edit.set("abcd", value).delete("cdef");
-const stored = await edit.store(); // full canonical export
+const stored = await edit.store(); // canonical export; reuses compatible stored subtrees
 ```
 
 `TrieEditor.from(basin, entries, consumer)` starts without stored data. Values
 remain borrowed and must be immutable; keys are owned. Edits do no storage or
-aggregation; export recomputes summaries and packs canonically. See the
+aggregation; export packs canonically and can reuse compatible stored subtrees. See the
 *incremental-edit measurements*[~][incremental-edits].
 
 Stored bytes are immutable; builders use mutable assembly objects. In TypeScript,
@@ -405,9 +406,9 @@ const moved = await rest.graftPrefix(utf8("/new/"), subtree, "replace");
 const stored = await moved.store();
 ```
 
-Handles are local plans, not a stored format. Export still materializes retained
-entries and rebuilds canonically, refreshing consumer summaries. Full-key-dependent
-summaries remain a consumer obligation for future selective export. Views share a
+Handles are local plans, not a stored format. *Selective export*[~][selective-export]
+reuses unchanged subtrees for explicitly composable consumer summaries. Other
+consumers keep the full pass. Relocation regenerates key-dependent summaries. Views share a
 storage/consumer context and bound nesting to 256. Treat view/editor payloads as
 borrowed and immutable. Eager logical `size` rejects
 unsafe integers. Stored counts remain bigint.

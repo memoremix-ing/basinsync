@@ -1,3 +1,5 @@
+import { summaryReuse } from "./summary";
+import { type Piece, type Block, mapPiece, buildPieces } from "./trie-export";
 /** Lazy prefix splices: source snapshots are shared, canonical export is explicit. */
 import { check, key, concat, compare, object, type Basin } from "./core";
 import { Trie, TrieEditor, starts, type Consumer } from "./trie";
@@ -18,6 +20,21 @@ export class TrieView<V, M = null> {
   ) {}
   static from<V, M>(trie: Trie<V, M>) {
     return new TrieView(trie.basin, trie.consumer, { trie, prefix: blank() });
+  }
+  static fromEntries<V, M>(
+    basin: Basin,
+    input: Iterable<readonly [Uint8Array | string, V]>,
+    c: Consumer<V, M>,
+  ) {
+    return new TrieView(
+      basin,
+      c,
+      null,
+      TrieMap.from<TrieView<V, M> | null>([]),
+      TrieMap.from(
+        [...input].map(([k, v]) => [k, { value: v } as Point<V>] as const),
+      ),
+    );
   }
   private static empty<V, M>(basin: Basin, c: Consumer<V, M>) {
     return new TrieView<V, M>(basin, c, null);
@@ -113,6 +130,15 @@ export class TrieView<V, M = null> {
         await it.return(undefined);
       }
     }
+    return this.replacePrefix(p, subtree);
+  }
+  /** Explicitly replace the destination range; no asynchronous collision probe. */
+  replacePrefix(raw: Uint8Array | string, subtree: TrieView<V, M>) {
+    check(
+      this.basin === subtree.basin && this.consumer === subtree.consumer,
+      "graft storage/consumer mismatch",
+    );
+    const p = key(raw);
     return new TrieView(
       this.basin,
       this.consumer,
@@ -273,15 +299,88 @@ export class TrieView<V, M = null> {
   ): AsyncGenerator<[Uint8Array, V]> {
     return this.scan(key(prefix), []);
   }
-  /** Full canonical export; no promise of selective writes or associative summaries. */
+  private async *pieces(
+    p: Uint8Array,
+    excluded: readonly Block[] = [],
+    depth = 0,
+  ): AsyncGenerator<Piece<V, M>> {
+    check(depth < 256, "splice nesting limit");
+    if (excluded.some((x) => x.prefix && starts(p, x.key))) return;
+    const routes = [...this.routes.entries()],
+      points = [...this.points.entries()];
+    const ownBlocks: Block[] = [
+      ...excluded,
+      ...routes.map(([k]) => ({ key: k, prefix: true })),
+      ...points.map(([k]) => ({ key: k, prefix: false })),
+    ];
+    if (this.base) {
+      const base = this.base,
+        blocks = ownBlocks.map((x) => ({
+          ...x,
+          key: concat([base.prefix, x.key]),
+        }));
+      const source =
+        "trie" in base
+          ? base.trie.pieces(concat([base.prefix, p]), blocks)
+          : base.view.pieces(concat([base.prefix, p]), blocks, depth + 1);
+      for await (const piece of source)
+        yield mapPiece(piece, base.prefix, blank());
+    }
+    for (const [prefix, view] of routes) {
+      if (
+        !view ||
+        excluded.some((x) => x.prefix && starts(prefix, x.key)) ||
+        (!starts(prefix, p) && !starts(p, prefix))
+      )
+        continue;
+      const below = [
+        ...excluded,
+        ...routes
+          .filter(([k]) => k.length > prefix.length && starts(k, prefix))
+          .map(([k]) => ({ key: k, prefix: true })),
+        ...points.map(([k]) => ({ key: k, prefix: false })),
+      ]
+        .filter((x) => starts(x.key, prefix))
+        .map((x) => ({ ...x, key: x.key.slice(prefix.length) }));
+      const suffix = starts(p, prefix) ? p.slice(prefix.length) : blank();
+      for await (const piece of view.pieces(suffix, below, depth + 1))
+        yield mapPiece(piece, blank(), prefix);
+    }
+    for (const [k, value] of points)
+      if (
+        starts(k, p) &&
+        !excluded.some((x) =>
+          x.prefix ? starts(k, x.key) : compare(k, x.key) === 0,
+        ) &&
+        "value" in value
+      )
+        yield { kind: "row", key: k, value: value.value };
+  }
+  async buildNode() {
+    if (summaryReuse(this.consumer)) {
+      const pieces: Piece<V, M>[] = [];
+      for await (const p of this.pieces(blank())) pieces.push(p);
+      return (
+        await buildPieces(this.basin, pieces, this.consumer)
+      ).materialize();
+    }
+    const rows: [Uint8Array, V][] = [];
+    for await (const row of this.entries()) rows.push(row);
+    return Trie.buildNode(this.basin, rows, this.consumer);
+  }
+  /** Compatible consumers reuse unchanged stored subtrees; others retain flat semantics. */
   async store(): Promise<Trie<V, M>> {
+    if (summaryReuse(this.consumer)) {
+      const pieces: Piece<V, M>[] = [];
+      for await (const p of this.pieces(blank())) pieces.push(p);
+      const built = await buildPieces(this.basin, pieces, this.consumer);
+      return new Trie(this.basin, await built.seal(), this.consumer);
+    }
     const rows: [Uint8Array, V][] = [];
     for await (const row of this.entries()) rows.push(row);
     return Trie.build(this.basin, rows, this.consumer);
   }
   async edit(): Promise<TrieEditor<V, M>> {
-    const rows: [Uint8Array, V][] = [];
-    for await (const row of this.entries()) rows.push(row);
-    return TrieEditor.from(this.basin, rows, this.consumer);
+    return TrieEditor.load(this);
   }
 }
