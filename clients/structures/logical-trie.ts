@@ -3,12 +3,14 @@ import { check, compare, concat, key } from "./core";
 type Row<V> = readonly [Uint8Array, V];
 type Leaf<V> = {
   kind: 0;
+  owner?: symbol;
   rows: readonly Row<V>[];
   count: number;
   levels: number;
 };
 type Branch<V> = {
   kind: 1;
+  owner?: symbol;
   prefix: Uint8Array;
   own?: readonly [V];
   children: readonly (readonly [number, Tree<V>])[];
@@ -63,7 +65,7 @@ function build<V>(rs: readonly Row<V>[], depth = 0): Tree<V> {
   const p = common(rs[0][0], rs[rs.length - 1][0]),
     own = rs[0][0].length === p ? ([rs[0][1]] as const) : undefined,
     children: [number, Tree<V>][] = [];
-  for (let lo = own ? 1 : 0; lo < rs.length;) {
+  for (let lo = own ? 1 : 0; lo < rs.length; ) {
     let hi = lo + 1;
     const byte = rs[lo][0][p];
     while (hi < rs.length && rs[hi][0][p] === byte) hi++;
@@ -190,6 +192,119 @@ function edit<V>(
   else children.splice(at, exists ? 1 : 0, [byte, child]);
   return branch(n.prefix, n.own, children);
 }
+/** Instrument separately from timings; counts structural claims/reuses, not payload copies. */
+export type TrieMutationMetrics = {
+  copies: number;
+  reuses: number;
+  rebuildEntries: number;
+  snapshots: number;
+};
+export function trieMutationMetrics(): TrieMutationMetrics {
+  return { copies: 0, reuses: 0, rebuildEntries: 0, snapshots: 0 };
+}
+type Owner = { token: symbol; writes: number; metrics?: TrieMutationMetrics };
+function claim<V, T extends Tree<V>>(n: T, owner: Owner): T {
+  if (n.owner === owner.token) {
+    if (owner.metrics) owner.metrics.reuses++;
+    return n;
+  }
+  if (owner.metrics) owner.metrics.copies++;
+  return (
+    n.kind === 0
+      ? { ...n, owner: owner.token, rows: n.rows.slice() }
+      : { ...n, owner: owner.token, children: n.children.slice() }
+  ) as T;
+}
+function normalizedOwned<V>(n: Branch<V>, owner: Owner): Tree<V> {
+  n.count =
+    (n.own ? 1 : 0) + n.children.reduce((sum, [, c]) => sum + c.count, 0);
+  n.levels = 1 + Math.max(0, ...n.children.map(([, c]) => c.levels));
+  check(
+    Number.isSafeInteger(n.count),
+    "logical trie size exceeds safe integer limit",
+  );
+  if (n.count <= CAP) {
+    if (owner.metrics) owner.metrics.rebuildEntries += n.count;
+    return { ...leaf([...rows(n)]), owner: owner.token };
+  }
+  if (!n.own && n.children.length === 1)
+    return prepend(
+      concat([n.prefix, new Uint8Array([n.children[0][0]])]),
+      n.children[0][1],
+    );
+  check(n.levels <= 256, "trie nesting limit");
+  return n;
+}
+function editOwned<V>(
+  n: Tree<V>,
+  k: Uint8Array,
+  value: V | undefined,
+  remove: boolean,
+  owner: Owner,
+  offset = 0,
+): Tree<V> {
+  if (n.kind === 0) {
+    const at = lower(n.rows, (r) => suffixCompare(r[0], k, offset));
+    const exists =
+      at < n.rows.length && suffixCompare(n.rows[at][0], k, offset) === 0;
+    if (
+      (remove && !exists) ||
+      (exists && !remove && Object.is(n.rows[at][1], value))
+    )
+      return n;
+    const next = claim(n, owner),
+      rs = next.rows as Row<V>[];
+    if (remove) rs.splice(at, 1);
+    else rs.splice(at, exists ? 1 : 0, [k.slice(offset), value as V]);
+    owner.writes++;
+    next.count = rs.length;
+    if (rs.length <= CAP) return next;
+    if (owner.metrics) owner.metrics.rebuildEntries += rs.length;
+    return { ...build(rs), owner: owner.token };
+  }
+  const p = common(n.prefix, k, offset);
+  if (p < n.prefix.length) {
+    if (remove) return n;
+    const own = offset + p === k.length ? ([value as V] as const) : undefined;
+    const children: [number, Tree<V>][] = [
+      [n.prefix[p], { ...n, prefix: n.prefix.slice(p + 1) }],
+    ];
+    if (!own)
+      children.push([
+        k[offset + p],
+        leaf([[k.slice(offset + p + 1), value as V]]),
+      ]);
+    children.sort((a, b) => a[0] - b[0]);
+    owner.writes++;
+    return {
+      ...branch(n.prefix.slice(0, p), own, children),
+      owner: owner.token,
+    };
+  }
+  offset += p;
+  if (offset === k.length) {
+    if ((remove && !n.own) || (n.own && !remove && Object.is(n.own[0], value)))
+      return n;
+    const next = claim(n, owner);
+    next.own = remove ? undefined : [value as V];
+    owner.writes++;
+    return normalizedOwned(next, owner);
+  }
+  const byte = k[offset++],
+    at = lower(n.children, ([b]) => b - byte),
+    exists = at < n.children.length && n.children[at][0] === byte;
+  if (!exists && remove) return n;
+  const writes = owner.writes,
+    prior = exists ? n.children[at][1] : leaf<V>([]),
+    child = editOwned(prior, k, value, remove, owner, offset);
+  if (owner.writes === writes) return n;
+  const next = claim(n, owner),
+    children = next.children as (readonly [number, Tree<V>])[];
+  if (!child.count) children.splice(at, 1);
+  else children.splice(at, exists ? 1 : 0, [byte, child]);
+  return normalizedOwned(next, owner);
+}
+
 /** Return a relative selected subtree and the original-coordinate remainder. */
 function split<V>(n: Tree<V>, p: Uint8Array, offset = 0): [Tree<V>, Tree<V>] {
   if (offset === p.length) return [n, leaf([])];
@@ -276,6 +391,16 @@ export class TrieMap<V> {
       check(compare(rs[i - 1][0], rs[i][0]) !== 0, "duplicate trie key");
     return new TrieMap(build(rs));
   }
+  /** Mutable structure with borrowed immutable payloads; snapshot rotates ownership. */
+  mutate(metrics?: TrieMutationMetrics): TrieMutation<V> {
+    return new Mutation(
+      this,
+      this.tree,
+      (n) => new TrieMap(n),
+      (m) => m.tree,
+      metrics,
+    );
+  }
   get size() {
     return this.tree.count;
   }
@@ -354,5 +479,128 @@ export class TrieMap<V> {
   }
   *entries(): Generator<[Uint8Array, V]> {
     for (const [k, v] of rows(this.tree)) yield [k, v];
+  }
+}
+
+export interface TrieMutation<V> {
+  readonly size: number;
+  get(key: Uint8Array | string): V | undefined;
+  has(key: Uint8Array | string): boolean;
+  set(key: Uint8Array | string, value: V): void;
+  delete(key: Uint8Array | string): void;
+  deletePrefix(prefix: Uint8Array | string): void;
+  graftPrefix(
+    prefix: Uint8Array | string,
+    subtree: TrieMap<V>,
+    mode?: GraftMode,
+  ): void;
+  entries(): Generator<[Uint8Array, V]>;
+  snapshot(): TrieMap<V>;
+  finish(): TrieMap<V>;
+  abort(): void;
+}
+/** Writable nodes never leave this scope under its current ownership token. */
+class Mutation<V> implements TrieMutation<V> {
+  #tree: Tree<V> | undefined;
+  #map: TrieMap<V> | undefined;
+  #owner: Owner | undefined;
+  #dirty = false;
+  constructor(
+    base: TrieMap<V>,
+    tree: Tree<V>,
+    private readonly wrap: (n: Tree<V>) => TrieMap<V>,
+    private readonly unwrap: (m: TrieMap<V>) => Tree<V>,
+    private readonly metrics?: TrieMutationMetrics,
+  ) {
+    this.#tree = tree;
+    this.#map = base;
+    this.#owner = { token: Symbol(), writes: 0, metrics };
+  }
+  private check() {
+    check(this.#owner, "trie mutation scope is closed");
+  }
+  get size() {
+    this.check();
+    return this.#tree!.count;
+  }
+  get(raw: Uint8Array | string) {
+    this.check();
+    return find(this.#tree!, key(raw))?.[0];
+  }
+  has(raw: Uint8Array | string) {
+    this.check();
+    return find(this.#tree!, key(raw)) !== undefined;
+  }
+  private write(
+    raw: Uint8Array | string,
+    value: V | undefined,
+    remove: boolean,
+  ) {
+    this.check();
+    try {
+      const owner = this.#owner!,
+        writes = owner.writes;
+      this.#tree = editOwned(this.#tree!, key(raw), value, remove, owner);
+      if (writes !== owner.writes) this.#dirty = true;
+    } catch (error) {
+      this.abort();
+      throw error;
+    }
+  }
+  set(raw: Uint8Array | string, value: V) {
+    this.write(raw, value, false);
+  }
+  delete(raw: Uint8Array | string) {
+    this.write(raw, undefined, true);
+  }
+  snapshot() {
+    this.check();
+    if (this.#dirty) {
+      this.#map = this.wrap(this.#tree!);
+      this.#dirty = false;
+    }
+    this.#owner = { token: Symbol(), writes: 0, metrics: this.metrics };
+    if (this.metrics) this.metrics.snapshots++;
+    return this.#map!;
+  }
+  entries() {
+    return this.snapshot().entries();
+  }
+  private replace(next: TrieMap<V>) {
+    this.#map = next;
+    this.#tree = this.unwrap(next);
+    this.#dirty = false;
+  }
+  deletePrefix(raw: Uint8Array | string) {
+    this.check();
+    try {
+      this.replace(this.snapshot().deletePrefix(raw));
+    } catch (error) {
+      this.abort();
+      throw error;
+    }
+  }
+  graftPrefix(
+    raw: Uint8Array | string,
+    subtree: TrieMap<V>,
+    mode: GraftMode = "error",
+  ) {
+    this.check();
+    try {
+      this.replace(this.snapshot().graftPrefix(raw, subtree, mode));
+    } catch (error) {
+      this.abort();
+      throw error;
+    }
+  }
+  finish() {
+    const result = this.snapshot();
+    this.abort();
+    return result;
+  }
+  abort() {
+    this.#owner = undefined;
+    this.#tree = undefined;
+    this.#map = undefined;
   }
 }

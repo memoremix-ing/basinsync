@@ -9,7 +9,12 @@ import {
   type Edge,
   type PendingEdge,
 } from "./structures/core";
-import { Trie, TrieEditor, plain } from "./structures/trie";
+import {
+  Trie,
+  TrieEditor,
+  plain,
+  trieMutationMetrics,
+} from "./structures/trie";
 import { TrieView } from "./structures/trie-view";
 import { produceTrie } from "./structures/cow";
 import { produceTrieProxy } from "./structures/cow-proxy";
@@ -185,17 +190,35 @@ if (mode === "subtree") {
     ),
     keys = rows.map(([k]) => k),
     ops = nested ? 4096 : 65536,
-    batch = 64;
+    batch = Number(Bun.env.COW_BATCH ?? 64);
   const snapshots: TrieEditor<any, null>[] = [];
   function apply(
     root: TrieEditor<any, null>,
     offset: number,
     metricsCounter?: ReturnType<typeof cowMetrics>,
   ) {
+    const structureCounter = metricsCounter ? trieMutationMetrics() : undefined;
+    if (structureCounter) metrics.one_batch_structure = structureCounter;
+    const mutation = (Bun.env.COW_MUTATION ?? "persistent") as
+      | "owned"
+      | "persistent";
     const indices = Array.from(
       { length: batch },
       (_, j) => (offset + j) % count,
     );
+    if (style === "raw-owned") {
+      const draft = root.mutate(structureCounter);
+      for (const i of indices) {
+        const old = nested ? draft.get(keys[i]) : undefined;
+        draft.set(
+          keys[i],
+          nested
+            ? { ...old, meta: { ...old.meta, n: old.meta.n + 1 } }
+            : offset + i,
+        );
+      }
+      return draft.finish();
+    }
     if (style === "persistent") {
       for (const i of indices) {
         const old = nested ? root.get(keys[i]) : undefined;
@@ -230,7 +253,11 @@ if (mode === "subtree") {
             else d[keys[i]] = offset + i;
           }
         },
-        { metrics: metricsCounter },
+        {
+          metrics: metricsCounter,
+          mutation,
+          structuralMetrics: structureCounter,
+        },
       ) as TrieEditor<any, null>;
     return produceTrie(
       root,
@@ -244,7 +271,11 @@ if (mode === "subtree") {
           }
         }
       },
-      { metrics: metricsCounter },
+      {
+        metrics: metricsCounter,
+        mutation,
+        structuralMetrics: structureCounter,
+      },
     ) as TrieEditor<any, null>;
   }
   let warm = initial;
@@ -264,13 +295,14 @@ if (mode === "subtree") {
     for (let i = 0; i < count; i++)
       assert.equal(final.get(keys[i]).meta.n, i + ops / count);
     assert.equal(initial.get(keys[0]).meta.n, 0);
-    assert.equal(snapshots[0].get(keys[0]).meta.n, 1);
+    assert.equal(snapshots[0].get(keys[0]).meta.n, Math.ceil(batch / count));
   } else {
     assert.equal(initial.get(keys[0]), 0);
     assert.equal(snapshots[0].get(keys[1]), 1);
   }
   const counters = cowMetrics();
-  if (style !== "native" && style !== "persistent") apply(initial, 0, counters);
+  if (style !== "native" && style !== "persistent")
+    apply(initial, batch, counters);
   metrics.one_batch = counters;
   (globalThis as any).__liveRoots = [initial, final, snapshots];
   Bun.gc(true);
@@ -280,7 +312,12 @@ if (mode === "subtree") {
   metrics.batch = batch;
   metrics.bytes_per_value = nested ? bytes : 0;
   // Compare read-only traversal/no-op identity under each full-value interface.
-  if (nested && style !== "persistent" && style !== "native") {
+  if (
+    nested &&
+    style !== "persistent" &&
+    style !== "raw-owned" &&
+    style !== "native"
+  ) {
     const noop = timed("read_only", () => {
       let out = initial;
       for (let i = 0; i < 16; i++)
@@ -300,4 +337,12 @@ if (mode === "subtree") {
     assert.equal(noop, initial);
   }
 }
-console.log(JSON.stringify({ mode, style, n, ...metrics }));
+console.log(
+  JSON.stringify({
+    mode,
+    style,
+    n,
+    mutation: Bun.env.COW_MUTATION ?? "persistent",
+    ...metrics,
+  }),
+);

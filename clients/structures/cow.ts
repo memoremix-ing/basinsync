@@ -1,6 +1,10 @@
 /** Scoped explicit COW. Byte and record payloads never leak committed writable aliases. */
 import { check, hex, isPromiseLike, key, utf8 } from "./core";
-import { TrieEditor } from "./trie";
+import {
+  TrieEditor,
+  type TrieEditorMutation,
+  type TrieMutationMetrics,
+} from "./trie";
 import {
   cloneValue,
   sameValue,
@@ -9,7 +13,12 @@ import {
   type CowMetrics,
 } from "./cow-values";
 export type CowKey = Uint8Array | string;
-export type CowOptions = { metrics?: CowMetrics; keyEncoding?: "hex" | "utf8" };
+export type CowOptions = {
+  metrics?: CowMetrics;
+  keyEncoding?: "hex" | "utf8";
+  mutation?: "owned" | "persistent";
+  structuralMetrics?: TrieMutationMetrics;
+};
 export type CowMutable<T> = T extends Uint8Array
   ? Uint8Array
   : T extends object
@@ -46,15 +55,34 @@ export class CowContext<V, M> implements TrieDraft<V, M> {
     for (const fn of this.closers) fn();
     this.closers = [];
     this.edits.clear();
+    this.owned?.abort();
+    this.owned = undefined;
     this.current = undefined;
     this.factory = undefined;
   }
   private edits = new Map<string, { key: Uint8Array; edit: ValueEdit<V> }>();
+  private owned?: TrieEditorMutation<V, M>;
   constructor(
     private current: TrieEditor<V, M> | undefined,
     readonly options: CowOptions = {},
     private factory?: (value: V, scope: CowContext<V, M>) => ValueEdit<V>,
-  ) {}
+  ) {
+    check(
+      options.mutation === undefined ||
+        options.mutation === "owned" ||
+        options.mutation === "persistent",
+      "invalid COW mutation mode",
+    );
+    if (options.mutation === "owned")
+      this.owned = current!.mutate(options.structuralMetrics);
+  }
+  private get structure() {
+    return this.owned ?? this.current!;
+  }
+  private writeSet(k: Uint8Array, v: V) {
+    if (this.owned) this.owned.set(k, v);
+    else this.current = this.current!.set(k, v);
+  }
   check() {
     check(this.active, "COW scope is closed");
   }
@@ -69,7 +97,7 @@ export class CowContext<V, M> implements TrieDraft<V, M> {
     this.check();
     return (
       this.edits.get(hex(this.bytes(k)))?.edit.finish() ??
-      this.current!.get(this.bytes(k))
+      this.structure.get(this.bytes(k))
     );
   }
   get(k: CowKey) {
@@ -82,8 +110,8 @@ export class CowContext<V, M> implements TrieDraft<V, M> {
       id = hex(bytes),
       prior = this.edits.get(id);
     if (prior) return prior.edit.draft as CowMutable<V>;
-    check(this.current!.has(bytes), "missing COW key");
-    const value = this.current!.get(bytes)!;
+    check(this.structure.has(bytes), "missing COW key");
+    const value = this.structure.get(bytes)!;
     const edit = this.factory
       ? this.factory(value, this)
       : (() => {
@@ -108,7 +136,7 @@ export class CowContext<V, M> implements TrieDraft<V, M> {
     const bytes = this.bytes(k),
       id = hex(bytes),
       pending = this.edits.get(id);
-    const value = pending ? pending.edit.finish() : this.current!.get(bytes);
+    const value = pending ? pending.edit.finish() : this.structure.get(bytes);
     check(value !== undefined, "missing COW key");
     validateValue(value);
     const replace = (v: any, depth: number): any => {
@@ -134,30 +162,32 @@ export class CowContext<V, M> implements TrieDraft<V, M> {
     };
     const next = replace(value, 0);
     this.edits.delete(id);
-    this.current = this.current!.set(bytes, next);
+    this.writeSet(bytes, next);
   }
   set(k: CowKey, v: V) {
     this.check();
     const bytes = this.bytes(k),
       owned = cloneValue(v, this.options.metrics);
     this.edits.delete(hex(bytes));
-    this.current = this.current!.set(bytes, owned);
+    this.writeSet(bytes, owned);
   }
   delete(k: CowKey) {
     this.check();
     const bytes = this.bytes(k);
     this.edits.delete(hex(bytes));
-    this.current = this.current!.delete(bytes);
+    if (this.owned) this.owned.delete(bytes);
+    else this.current = this.current!.delete(bytes);
   }
   private flush() {
     for (const { key, edit } of this.edits.values())
-      this.current = this.current!.set(key, edit.finish());
+      this.writeSet(key, edit.finish());
   }
   deletePrefix(k: CowKey) {
     this.check();
     this.flush();
     const prefix = this.bytes(k);
-    this.current = this.current!.deletePrefix(prefix);
+    if (this.owned) this.owned.deletePrefix(prefix);
+    else this.current = this.current!.deletePrefix(prefix);
     for (const [id, e] of this.edits)
       if (
         e.key.length >= prefix.length &&
@@ -173,7 +203,8 @@ export class CowContext<V, M> implements TrieDraft<V, M> {
     this.check();
     this.flush();
     const prefix = this.bytes(k);
-    this.current = this.current!.graftPrefix(prefix, subtree, mode);
+    if (this.owned) this.owned.graftPrefix(prefix, subtree, mode);
+    else this.current = this.current!.graftPrefix(prefix, subtree, mode);
     for (const [id, e] of this.edits)
       if (
         e.key.length >= prefix.length &&
@@ -183,7 +214,7 @@ export class CowContext<V, M> implements TrieDraft<V, M> {
   }
   keys() {
     this.check();
-    return [...this.current!.entries()].map(([k]) =>
+    return [...this.structure.entries()].map(([k]) =>
       this.options.keyEncoding === "utf8"
         ? new TextDecoder("utf-8", { fatal: true }).decode(k)
         : hex(k),
@@ -192,7 +223,7 @@ export class CowContext<V, M> implements TrieDraft<V, M> {
   finish() {
     this.check();
     this.flush();
-    return this.current!;
+    return this.owned ? this.owned.finish() : this.current!;
   }
 }
 export function runCow<V, M, D>(

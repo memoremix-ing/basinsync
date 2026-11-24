@@ -1,4 +1,8 @@
-import { type GraftMode, TrieMap } from "./logical-trie";
+import {
+  type GraftMode,
+  type TrieMutationMetrics,
+  TrieMap,
+} from "./logical-trie";
 import { type Operation, resolveOperation } from "./operation";
 import { Reference } from "../flexbuffer";
 import {
@@ -624,6 +628,26 @@ export class Trie<V = unknown, M = null> {
   }
 }
 
+export { trieMutationMetrics } from "./logical-trie";
+export type { TrieMutationMetrics } from "./logical-trie";
+/** Structure-only builder: payloads retain the editor's borrowed immutable contract. */
+export interface TrieEditorMutation<V, M> {
+  readonly size: number;
+  get(k: Uint8Array | string): V | undefined;
+  has(k: Uint8Array | string): boolean;
+  set(k: Uint8Array | string, v: V): void;
+  delete(k: Uint8Array | string): void;
+  deletePrefix(k: Uint8Array | string): void;
+  graftPrefix(
+    k: Uint8Array | string,
+    subtree: TrieEditor<V, M>,
+    mode?: GraftMode,
+  ): void;
+  entries(): Generator<[Uint8Array, V]>;
+  snapshot(): TrieEditor<V, M>;
+  finish(): TrieEditor<V, M>;
+  abort(): void;
+}
 /** Immutable logical snapshots. Canonical export is a separate, full packing pass. */
 export class TrieEditor<V, M = null> {
   private constructor(
@@ -637,6 +661,44 @@ export class TrieEditor<V, M = null> {
     consumer: Consumer<NoInfer<V>, M>,
   ): TrieEditor<V, M> {
     return new TrieEditor(basin, TrieMap.from(input), consumer);
+  }
+  mutate(metrics?: TrieMutationMetrics): TrieEditorMutation<V, M> {
+    const draft = this.values.mutate(metrics);
+    let map = this.values,
+      editor: TrieEditor<V, M> = this;
+    const wrap = (next: TrieMap<V>) => {
+      if (next !== map) {
+        map = next;
+        editor = new TrieEditor(this.basin, next, this.consumer);
+      }
+      return editor;
+    };
+    return {
+      get size() {
+        return draft.size;
+      },
+      get: (k) => draft.get(k),
+      has: (k) => draft.has(k),
+      set: (k, v) => draft.set(k, v),
+      delete: (k) => draft.delete(k),
+      deletePrefix: (k) => draft.deletePrefix(k),
+      graftPrefix: (k, subtree, mode) => {
+        try {
+          check(
+            subtree.basin === this.basin && subtree.consumer === this.consumer,
+            "graft requires matching basin/consumer",
+          );
+          draft.graftPrefix(k, subtree.values, mode);
+        } catch (error) {
+          draft.abort();
+          throw error;
+        }
+      },
+      entries: () => draft.entries(),
+      snapshot: () => wrap(draft.snapshot()),
+      finish: () => wrap(draft.finish()),
+      abort: () => draft.abort(),
+    };
   }
   get size() {
     return this.values.size;
