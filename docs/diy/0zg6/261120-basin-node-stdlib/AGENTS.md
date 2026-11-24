@@ -13,6 +13,7 @@ Apply these when implementing or benchmarking this tutorial family:
   need not run faster. Keep measured findings distinct from hypotheses.
 - Distinguish logical path-copying, selective loading, canonical export and uploaded
   object reuse. None alone establishes that an operation is incremental end to end.
+  Count storage-adapter calls separately from newly allocated objects.
 - State ownership separately for stored bytes, logical structure, payloads, descriptors
   and borrowed views. Structural sharing and TypeScript `readonly` do not establish
   deep immutability; preserve integrity checks around cached external descriptors.
@@ -25,5 +26,9 @@ Apply these when implementing or benchmarking this tutorial family:
   canonical output and cross-language reads. Record request/byte counts as well as CPU.
 - Carry measured techniques across structures as candidates, then measure again;
   performance in one structure, runtime or language is not evidence for another.
-- Compare explicit persistent methods with Proxy-based drafts under matching snapshot
-  and aliasing guarantees before making claims about their performance tradeoffs.
+- Compare explicit path updates, whole-value copies and Proxy drafts separately under
+  matching snapshot/ownership rules. Count copied bytes and retained versions; test
+  reflection, escaped drafts and scope lifetime before claiming ergonomic equivalence.
+
+Byte ownership must survive subclass behavior: `Buffer.slice()` is a view. Test
+Buffer-backed inputs and use copying constructors where ownership is promised.

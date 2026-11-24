@@ -1,4 +1,4 @@
-import { TrieMap } from "./logical-trie";
+import { type GraftMode, TrieMap } from "./logical-trie";
 import { type Operation, resolveOperation } from "./operation";
 import { Reference } from "../flexbuffer";
 import {
@@ -509,9 +509,31 @@ export class Trie<V = unknown, M = null> {
   async *entries(
     prefix: Uint8Array | string = new Uint8Array(),
     accept?: (header: Header, summary: M) => boolean,
+    excludedPrefixes: readonly (Uint8Array | string)[] = [],
   ): AsyncGenerator<[Uint8Array, V]> {
     const wanted = key(prefix),
       self = this;
+    const excluded: Uint8Array[] = [];
+    for (const p of excludedPrefixes.map(key).sort(compare))
+      if (!excluded.length || !starts(p, excluded[excluded.length - 1]))
+        excluded.push(p);
+    const exclusion = (k: Uint8Array) => {
+      let lo = 0,
+        hi = excluded.length;
+      while (lo < hi) {
+        const m = (lo + hi) >>> 1;
+        if (compare(excluded[m], k) <= 0) lo = m + 1;
+        else hi = m;
+      }
+      return lo ? excluded[lo - 1] : undefined;
+    };
+    const covered = (base: Uint8Array, h: Header) => {
+      if (!h.keys) return true;
+      const lo = concat([base, h.keys[0]]),
+        hi = concat([base, h.keys[1]]),
+        p = exclusion(lo);
+      return !!p && starts(lo, p) && starts(hi, p);
+    };
     async function* walk(
       r: Reference,
       base: Uint8Array,
@@ -521,6 +543,7 @@ export class Trie<V = unknown, M = null> {
       const p = self.parts(r);
       if (
         !intersects(base, p.header, wanted) ||
+        covered(base, p.header) ||
         (accept && !accept(p.header, object<M>(p.footer.get(1))))
       )
         return;
@@ -534,7 +557,8 @@ export class Trie<V = unknown, M = null> {
         );
         for (let i = 0; i < ks.length(); i++) {
           const k = concat([here, ks.get(i).blobValue()!]);
-          if (starts(k, wanted))
+          const blocked = exclusion(k);
+          if (starts(k, wanted) && (!blocked || !starts(k, blocked)))
             yield [k, object<V>(vs.get(i))] as [Uint8Array, V];
         }
       };
@@ -557,6 +581,7 @@ export class Trie<V = unknown, M = null> {
                 h = edge[5] as Header;
               if (
                 intersects(b, h, wanted) &&
+                !covered(b, h) &&
                 (!accept || accept(h, edge[6][1] as M))
               )
                 yield* walk(await self.basin.load(edge), b, depth + 1);
@@ -567,6 +592,7 @@ export class Trie<V = unknown, M = null> {
     const [header, summary] = this.rootInfo();
     if (
       intersects(new Uint8Array(), header, wanted) &&
+      !covered(new Uint8Array(), header) &&
       (!accept || accept(header, summary))
     )
       yield* walk(await this.readRoot(), new Uint8Array());
@@ -608,7 +634,7 @@ export class TrieEditor<V, M = null> {
   static from<V, M>(
     basin: Basin,
     input: Iterable<readonly [Uint8Array | string, V]>,
-    consumer: Consumer<V, M>,
+    consumer: Consumer<NoInfer<V>, M>,
   ): TrieEditor<V, M> {
     return new TrieEditor(basin, TrieMap.from(input), consumer);
   }
@@ -635,6 +661,61 @@ export class TrieEditor<V, M = null> {
   }
   entries() {
     return this.values.entries();
+  }
+  splitPrefix(prefix: Uint8Array | string): {
+    subtree: TrieEditor<V, M>;
+    rest: TrieEditor<V, M>;
+  } {
+    const { subtree, rest } = this.values.splitPrefix(prefix);
+    return {
+      subtree: new TrieEditor(this.basin, subtree, this.consumer),
+      rest:
+        rest === this.values
+          ? this
+          : new TrieEditor(this.basin, rest, this.consumer),
+    };
+  }
+  subtree(prefix: Uint8Array | string) {
+    return this.splitPrefix(prefix).subtree;
+  }
+  deletePrefix(prefix: Uint8Array | string) {
+    return this.splitPrefix(prefix).rest;
+  }
+  graftPrefix(
+    prefix: Uint8Array | string,
+    subtree: TrieEditor<V, M>,
+    mode: GraftMode = "error",
+  ) {
+    return new TrieEditor(
+      this.basin,
+      this.values.graftPrefix(prefix, subtree.values, mode),
+      this.consumer,
+    );
+  }
+  copyPrefix(
+    from: Uint8Array | string,
+    to: Uint8Array | string,
+    mode: GraftMode = "error",
+  ) {
+    const a = key(from),
+      b = key(to);
+    check(!starts(b, a), "destination is inside source");
+    const subtree = this.subtree(a);
+    check(subtree.size > 0, "missing source prefix");
+    return this.graftPrefix(b, subtree, mode);
+  }
+  movePrefix(
+    from: Uint8Array | string,
+    to: Uint8Array | string,
+    mode: GraftMode = "error",
+  ) {
+    const a = key(from),
+      b = key(to);
+    if (equal(a, b)) return this;
+    check(!starts(b, a), "destination is inside source");
+    const { subtree, rest } = this.splitPrefix(a);
+    check(subtree.size > 0, "missing source prefix");
+    return rest.graftPrefix(b, subtree, mode);
   }
   store(): Promise<Trie<V, M>> {
     return Trie.build(this.basin, this.entries(), this.consumer);

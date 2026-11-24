@@ -22,6 +22,7 @@ prerequisites:
 [promoted-costs]: <benchmark/promoted-costs.md>
 [revision]: <../../../../../glossary/revision.md>
 [strong-edge]: <../../../../../glossary/strong-edge.md>
+[subtree-cow]: <benchmark/subtree-cow.md>
 [trie-format]: <../../../../../trie-format.md>
 [trie-performance]: <benchmark/trie-performance.md>
 [weak-link]: <../../../../../glossary/weak-link.md>
@@ -351,15 +352,75 @@ that must remain read-only: mutation can affect cached reads until reload. Edito
 structure is path-copied, but payloads are borrowed across snapshots; `readonly` does
 not deep-freeze objects, typed arrays or descriptors.
 
-`entries(prefix, accept)` prunes unrelated targets before loading them, but there
-is no subtree detach/graft or prefix-edit API. `Volume.update()` reads all files and
-rebuilds; `Volume.fromBlocks()` can share existing block descriptors without rereading
-file bodies. The directory tree is currently inline in the volume root. Efficient
-`mv`, `cp` and recursive removal are not yet exposed. Built-in headers are relative
-and relocatable; consumer `entry(key, value)` currently receives the full input key,
-so prefix-independent summaries remain a consumer obligation. The volume device
-summary is null and sector checksums exclude page addresses. Splits inside a
-compressed prefix and canonical packing may still rewrite boundary nodes.
+## Prefix editing and COW
+
+TypeScript editors expose `subtree`, `splitPrefix`, `deletePrefix`, `graftPrefix`,
+`copyPrefix` and `movePrefix`. Handles strip the selected prefix and share relative
+branches; only boundary repair rebuilds small leaf groups.
+
+```js
+const { subtree, rest } = edit.splitPrefix(utf8("/old/"));
+const moved = rest.graftPrefix(utf8("/new/"), subtree);
+const copied = edit.copyPrefix(utf8("/old/"), utf8("/copy/"));
+const removed = edit.deletePrefix(utf8("/old/"));
+```
+
+Graft requires an empty destination unless `"replace"` explicitly removes its range.
+Copy/move reject missing sources and destinations inside them; moving onto itself
+is a no-op. These are byte prefixes: use `/dir/` to distinguish `/dir2/`.
+
+`TrieView.from(trie)` provides lazy equivalents, recording source snapshots,
+prefix mounts/tombstones and point overrides. Resolve the longest matching prefix;
+prune exclusions before fetching, then merge ordered source scans. Graft/copy/move
+are async because collision/source checks may load a boundary path. Explicit
+replace-grafts, splits and drops do no storage I/O.
+
+```js
+const view = TrieView.from(trie);
+const { subtree, rest } = view.splitPrefix(utf8("/old/"));
+const moved = await rest.graftPrefix(utf8("/new/"), subtree, "replace");
+const stored = await moved.store();
+```
+
+Handles are local plans, not a stored format. Export still materializes retained
+entries and rebuilds canonically, refreshing consumer summaries. Full-key-dependent
+summaries remain a consumer obligation for future selective export. Views share a
+storage/consumer context and bound nesting to 256. Treat view/editor payloads as
+borrowed and immutable. Eager logical `size` rejects
+unsafe integers. Stored counts remain bigint.
+
+For scoped COW, `produceTrie` offers owned `get`, mutable clone-on-first-`edit`,
+path-copy `updateIn` and prefix operations. Exceptions discard the recipe; sync
+recipes return an editor, async recipes a Promise. Inputs remain immutable;
+assigned values and escaped working copies cannot mutate the returned snapshot.
+Only draft mutations are used; recipe return values are ignored.
+
+```js
+const next = produceTrie(edit, draft => {
+  draft.updateIn("/file", ["meta", "mode"], () => 0o644);
+}, { keyEncoding: "utf8" });
+```
+
+The opt-in Proxy experiment supports nested property writes and explicit operations:
+
+```js
+const next = produceTrieProxy(edit, (draft, operations) => {
+  draft["/file"].meta.mode = 0o644;
+  operations.deletePrefix("/obsolete/");
+}, { keyEncoding: "utf8" });
+```
+
+Both default to whole-hex keys; UTF-8 mode rejects malformed text. COW supports
+acyclic plain records, dense arrays, primitives except undefined, and byte arrays. Proxy drafts are
+revoked on close; their bytes are atomic read-only views (`at`, `slice`, iteration).
+Replace byte fields and use array `splice` instead of deleting indices. Accessors,
+nonenumerable/symbol property keys and custom prototypes are unsupported.
+See the *subtree/COW experiments*[~][subtree-cow] for performance and code costs.
+
+`Volume.update()` still reads files and rebuilds; `fromBlocks()` shares existing
+block descriptors. Its directory tree remains inline. Dedicated filesystem commands
+are not added; these primitives supply their foundation. Server-side retention
+and collection govern eventual storage reclamation.
 
 Pruning
 and partial reads remain selective. Readers bound nesting to 256 trie levels;

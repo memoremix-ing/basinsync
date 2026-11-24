@@ -7,3 +7,6 @@ export * as bromberg from "./bromberg";
 export * from "./vector";
 export * from "./btree";
 export * from "./operation";
+export * from "./trie-view";
+export { produceTrie } from "./cow";
+export type { TrieDraft, CowOptions } from "./cow";

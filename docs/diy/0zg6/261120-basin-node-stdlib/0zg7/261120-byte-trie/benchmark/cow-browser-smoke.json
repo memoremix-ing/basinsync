@@ -1,0 +1,16 @@
+{
+  "runner": "T3 html_preview browser",
+  "checks": [
+    "frozen input records and arrays",
+    "typed-array replacement",
+    "reflection",
+    "old snapshots",
+    "revoked drafts",
+    "canonical storage framing and crypto",
+    "stored readback"
+  ],
+  "passed": true,
+  "stored": true,
+  "note": "Functional smoke only; CPU timings use Bun.",
+  "bundle_sha384": "1ed0e09b23963f7eda3cb319a712b318f39b2ae38684c1a81d9e461a019b349ccfcf6fa1780d6a9231036f4fb5be901a"
+}

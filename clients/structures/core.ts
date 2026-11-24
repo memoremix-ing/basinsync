@@ -63,7 +63,7 @@ export function hex(b: Uint8Array): string {
   return out;
 }
 export function key(value: Uint8Array | string): Uint8Array {
-  if (value instanceof Uint8Array) return value.slice();
+  if (value instanceof Uint8Array) return new Uint8Array(value);
   check(
     value.length % 2 === 0 && /^[0-9a-f]*$/i.test(value),
     "key must be bytes or even-length hexadecimal",

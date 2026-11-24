@@ -1,0 +1,12 @@
+mode,style,ms,us_per_op,export_ms,edit_gets,export_gets,put_calls,new_objects,heap_delta,rss,noop_ms,one_batch,source_get_us,view_get_us,source_cold_gets,view_cold_gets,prune_gets,prune_bytes
+subtree,enumerate,37.0505,1157.828125,179.69529200000002,0,0,133,1,0,0,0,,0.0,0.0,0,0,0,0
+subtree,handles,0.6066669999999874,18.958343749999607,176.74454100000003,0,0,133,1,0,0,0,,0.0,0.0,0,0,0,0
+subtree,lazy,0.7995410000000049,24.985656250000154,370.78574999999995,0,100,133,1,0,0,0,,1.7521259765625046,2.584091186523432,2,2,1,30984
+scalar,persistent,516.592792,7.882580444335938,0,0,0,0,0,22727184,170263368,0,"{'clonedObjects': 0, 'copiedBytes': 0, 'proxies': 0, 'traps': 0}",0.0,0.0,0,0,0,0
+scalar,path,495.141541,7.555260330200196,0,0,0,0,0,22783158,168837960,0,"{'clonedObjects': 0, 'copiedBytes': 0, 'proxies': 0, 'traps': 0}",0.0,0.0,0,0,0,0
+scalar,proxy,505.46845799999994,7.7128365783691395,0,0,0,0,0,22816250,173785928,0,"{'clonedObjects': 0, 'copiedBytes': 0, 'proxies': 1, 'traps': 64}",0.0,0.0,0,0,0,0
+nested,persistent,25.299917000000004,6.176737548828126,0,0,0,0,0,1565840,31474336,0,"{'clonedObjects': 0, 'copiedBytes': 0, 'proxies': 0, 'traps': 0}",0.0,0.0,0,0,0,0
+nested,clone,251.50783400000003,61.40327978515626,0,0,0,0,0,96251339,191202096,133.439208,"{'clonedObjects': 8704, 'copiedBytes': 2097152, 'proxies': 0, 'traps': 0}",0.0,0.0,0,0,0,0
+nested,native,389.579959,95.11229467773437,0,0,0,0,0,96727396,187548416,0,"{'clonedObjects': 0, 'copiedBytes': 0, 'proxies': 0, 'traps': 0}",0.0,0.0,0,0,0,0
+nested,path,28.860375000000005,7.045989990234376,0,0,0,0,0,1793260,34341536,1.2808750000000089,"{'clonedObjects': 128, 'copiedBytes': 0, 'proxies': 0, 'traps': 0}",0.0,0.0,0,0,0,0
+nested,proxy,38.899625,9.496978759765625,0,0,0,0,0,1813555,38126216,3.266915999999995,"{'clonedObjects': 128, 'copiedBytes': 0, 'proxies': 129, 'traps': 256}",0.0,0.0,0,0,0,0
