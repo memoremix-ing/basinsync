@@ -49,8 +49,8 @@ interface TrieNode_S0<
     degree: U32; // number of trie-handles (distinct from basin-degree)
     inlined: U32; // count of nested values up to edge boundaries
     prefix: null | Uint8Array; // (for trie-compression)
-    keys: Bounds<Uint8Array>;
-    lengths: Bounds<U32>; // min/max key-lengths
+    keys: Bounds<Uint8Array>; // suffix bounds after ancestor bytes, before this node's prefix
+    lengths: Bounds<U32>; // min/max lengths of those suffixes
   },
   {
     [IndexT in U32 & keyof MigrationsT]: [
@@ -343,7 +343,25 @@ const stored = await edit.store(); // full canonical export
 `TrieEditor.from(basin, entries, consumer)` starts without stored data. Values
 remain borrowed and must be immutable; keys are owned. Edits do no storage or
 aggregation; export recomputes summaries and packs canonically. See the
-*incremental-edit measurements*[~][incremental-edits]. Pruning
+*incremental-edit measurements*[~][incremental-edits].
+
+Stored bytes are immutable; builders use mutable assembly objects. In TypeScript,
+stored `get()` returns owned value copies, while `getView()` exposes borrowed views
+that must remain read-only: mutation can affect cached reads until reload. Editor
+structure is path-copied, but payloads are borrowed across snapshots; `readonly` does
+not deep-freeze objects, typed arrays or descriptors.
+
+`entries(prefix, accept)` prunes unrelated targets before loading them, but there
+is no subtree detach/graft or prefix-edit API. `Volume.update()` reads all files and
+rebuilds; `Volume.fromBlocks()` can share existing block descriptors without rereading
+file bodies. The directory tree is currently inline in the volume root. Efficient
+`mv`, `cp` and recursive removal are not yet exposed. Built-in headers are relative
+and relocatable; consumer `entry(key, value)` currently receives the full input key,
+so prefix-independent summaries remain a consumer obligation. The volume device
+summary is null and sector checksums exclude page addresses. Splits inside a
+compressed prefix and canonical packing may still rewrite boundary nodes.
+
+Pruning
 and partial reads remain selective. Readers bound nesting to 256 trie levels;
 default object/full-file limits are 64 MiB, with a 16 MiB/128-object read cache.
 

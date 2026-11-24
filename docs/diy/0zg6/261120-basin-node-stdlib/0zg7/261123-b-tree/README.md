@@ -61,3 +61,8 @@ const next = await tree.update([["abcd", { delete: true }]]);
 Check empty/threshold cases, independent snapshots, canonical rebuilds, sparse or
 separator lookups, range/aggregate pruning, corrupted descriptors, and all three
 languages reading one another's fixtures.
+
+TypeScript has not received the trie/vector optimization pass: lookups still parse
+node parts and child descriptors repeatedly, and builds await synchronous callbacks.
+There is no logical editor. Cached lookup plans, deferred reads and path-copied edits
+are candidates to measure before changing the branching factor or stored format.

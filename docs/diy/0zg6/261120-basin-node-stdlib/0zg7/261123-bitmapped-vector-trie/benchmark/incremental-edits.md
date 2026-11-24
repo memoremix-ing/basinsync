@@ -43,6 +43,11 @@ Each stage adds to the preceding one; effects are conditional, not additive.
 | Single-pass partitioning | 112.1 | 1.483 | 338.3 | 2.415 |
 | Synchronous callbacks | 112.7 | 1.521 | 308.7 | 2.303 |
 
+The continuation keeps traversal state, but no isolated restart-from-root control
+was measured. Hot-read phases perform no storage reads and do not exercise missing-node
+continuations. These results do not establish that resuming outperforms restarting.
+The synchronous-path stage also removes bigint remainder operations.
+
 Repeated decoding dominates the original read deficit. Callback scheduling has
 smaller, mixed effects; partitioning dominates the build improvement. The large-offset
 vector still retains about 41 logical levels; the byte trie compresses that prefix.

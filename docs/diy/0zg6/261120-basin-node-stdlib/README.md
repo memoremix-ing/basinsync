@@ -3,6 +3,7 @@ prerequisites:
   - 0zg5/261112-deep-heap-support
 ---
 
+[AGENTS]: <AGENTS.md>
 [diy/0zg6/261120-basin-node-stdlib/0zg7/261120-byte-trie]: <0zg7/261120-byte-trie/README.md>
 [diy/0zg6/261120-basin-node-stdlib/0zg7/261123-b-tree]: <0zg7/261123-b-tree/README.md>
 [diy/0zg6/261120-basin-node-stdlib/0zg7/261123-bitmapped-vector-trie]: <0zg7/261123-bitmapped-vector-trie/README.md>
@@ -119,6 +120,8 @@ The *format reference*[~][node-format] records shared capability derivation and 
 These codecs serialize plaintext; encryption needs a separate storage representation.
 
 ## Implementation considerations
+
+Follow the *implementation and benchmark guidance*[~][AGENTS] when changing this family.
 
 - Measure logical construction/traversal separately from packing, serialization,
   integrity hashing and storage. Compare matching capabilities, not just method names.

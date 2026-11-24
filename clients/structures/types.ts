@@ -89,8 +89,8 @@ export interface TrieNode_S0<
       degree: U32; // number of trie-handles (distinct from basin-degree)
       inlined: U32; // count of nested values up to edge boundaries
       prefix: null | Uint8Array; // (for trie-compression)
-      keys: Bounds<Uint8Array>;
-      lengths: Bounds<U32>; // min/max key-lengths
+      keys: Bounds<Uint8Array>; // suffix bounds after ancestor bytes, before this node's prefix
+      lengths: Bounds<U32>; // min/max lengths of those suffixes
     },
     {
       [IndexT in U32 & keyof MigrationsT]: [

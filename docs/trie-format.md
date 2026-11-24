@@ -10,7 +10,9 @@ Use the *shared node format*[~][node-format].
 
 Keys are byte strings; hexadecimal input must encode whole bytes. Sort uniquely
 by unsigned bytes. Headers carry the maximal common byte prefix and inclusive
-bounds on the remaining key space before consuming that prefix. Groups store
+bounds on the remaining key space before consuming that prefix. Header `keys` and
+`lengths` describe suffixes relative to the incoming node base, not absolute paths.
+An intact subtree retains these fields when its ancestor prefix changes. Groups store
 suffixes after consumed bytes. A high-nibble group retains its next byte; a
 low-nibble branch consumes that whole byte. Arrays use nibble indices and omit
 trailing null slots.
@@ -25,6 +27,8 @@ content-derived rules. Trie-header `degree` counts immediate groups/child nodes;
 `inlined` counts values before crossing *basin edges*[~][strong-edge].
 
 Consumer aggregation is ordered by full key, with a supplied empty identity.
+Relocatable consumer summaries must be independent of ancestor prefixes; structural
+counts and content-only checksums qualify, while hashes of absolute keys do not.
 Reversed-key bounds, when useful, belong in consumer-defined footer summaries.
 Replicate headers and summaries across *basin edges*[~][strong-edge] for pruning.
 Volume format 0 uses 4096-byte pages for its file convenience API. Raw page maps accept arbitrary-size blobs and sparse nonnegative
