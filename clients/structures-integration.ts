@@ -17,6 +17,7 @@ import {
 } from "./structures/core";
 import { Vector } from "./structures/vector";
 import { BTree } from "./structures/btree";
+import { BPlusTree } from "./structures/bplus";
 import { Trie } from "./structures/trie";
 import { count } from "./structure-fixture";
 import { Volume, BLOCK, type Directory, type File } from "./structures/volume";
@@ -103,6 +104,9 @@ try {
   );
   await storage.publish(indexed.root);
   viewpoint++;
+  const leavesOnly = await BPlusTree.build(basin, rows, count);
+  await storage.publish(leavesOnly.root);
+  viewpoint++;
   // Wait for old-generation copies, then open new readers using only the actions.
   await eventually(
     () =>
@@ -156,6 +160,12 @@ try {
     await new Vector(new Basin(direct), indexed.root, count).get(1999n),
     rows[1999][1],
   );
+  assert.deepEqual(
+    await new BPlusTree(new Basin(direct), leavesOnly.root, count).get(
+      rows[1999][0],
+    ),
+    rows[1999][1],
+  );
   const file = await volume.stat("/docs/a");
   assert.equal(file.kind, "file");
   const shortcut = (file as Extract<typeof file, { kind: "file" }>).link;
@@ -186,6 +196,12 @@ try {
   );
   assert.deepEqual(
     await new Vector(new Basin(storage), indexed.root, count).get(1000n),
+    rows[1000][1],
+  );
+  assert.deepEqual(
+    await new BPlusTree(new Basin(storage), leavesOnly.root, count).get(
+      rows[1000][0],
+    ),
     rows[1000][1],
   );
   // Earlier marker graphs survive staging sweeps and promotion while retained.

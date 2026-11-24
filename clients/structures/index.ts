@@ -13,3 +13,5 @@ export type { TrieDraft, CowOptions } from "./cow";
 
 export { produceTrieProxy } from "./cow-proxy";
 export type { CowValue, CowBytes, ProxyTrieDraft } from "./cow-proxy";
+
+export * from "./bplus";

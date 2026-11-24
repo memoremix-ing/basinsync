@@ -1,4 +1,5 @@
 [client-browser]: <client-browser.json>
+[wasm-cpu]: <wasm-cpu.md>
 
 # Browser logical editing
 
@@ -16,5 +17,5 @@ all trials; these are diagnostic single-process CPU measurements.
 
 Old roots are retained and checked after edits. Each structure uses its own input
 construction path; this is an API comparison, not an isolated branching-factor
-experiment. The Rust structures also compile for `wasm32-unknown-unknown`; Wasm CPU
-has not been measured, nor have native logical editors been added.
+experiment. Later *Rust/Wasm measurements*[~][wasm-cpu] cover stored readers; native logical
+editors have not been added.

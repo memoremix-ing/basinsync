@@ -16,8 +16,8 @@ index shortcuts. The *raw traces*[~][block-index] verify returned bytes.
 No round-trip benefit appears here, including boundary shortcuts. The stored
 350,000-page index costs about 102 KiB. Omitting it preserves GET counts and
 reduces storage; the prototype exposes `{ leafIndex: false }`, retaining the
-empty index shape. Production ready-only hints remain enabled by default for
-compatibility with the current layout, but these measurements favor opting out.
+empty index shape. Production ready-only hints remain enabled by default; these measurements favor
+opting out.
 Directory file links are separate: a ready link can bypass the device trie.
 
 For 4 KiB values, count-based inlining makes the block root roughly 4.6 MiB;

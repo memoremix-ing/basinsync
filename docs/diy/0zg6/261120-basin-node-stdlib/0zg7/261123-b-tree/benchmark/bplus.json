@@ -1,0 +1,3777 @@
+{
+  "runtime": "1.4.5",
+  "method": "3 alternating trials for compact values, one transfer trace for 4096-byte values; memory storage; build includes crypto; 100k warm owned-value reads over 64 keys, zero GETs verified; cold probes new cache; hint resolver has no network I/O",
+  "samples": [
+    {
+      "trial": 0,
+      "name": "btree",
+      "n": 20000,
+      "payload": 0,
+      "buildMs": 29.802791,
+      "randomGets": 2,
+      "randomBytes": 18944,
+      "hotMs": 157.27829200000002,
+      "objects": 21,
+      "storedBytes": 269928,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 18824,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 1,
+          "bytes": 5728,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 18944,
+          "resolves": 0
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "plus-31x32",
+      "n": 20000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 32,
+        "leafInline": 1280,
+        "branchInline": 1280
+      },
+      "buildMs": 21.331000000000017,
+      "randomGets": 2,
+      "randomBytes": 20693,
+      "hotMs": 182.06333299999997,
+      "objects": 22,
+      "storedBytes": 297800,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 20688,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 20688,
+          "resolves": 1
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 20816,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 20816,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 20168,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 20168,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "plus-31x32-routing8192",
+      "n": 20000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 32,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 18.650125000000003,
+      "randomGets": 2,
+      "randomBytes": 20693,
+      "hotMs": 168.22975000000002,
+      "objects": 22,
+      "storedBytes": 297800,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 20688,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 20688,
+          "resolves": 1
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 20816,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 20816,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 20168,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 20168,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "plus-31x128-routing1280",
+      "n": 20000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 1280
+      },
+      "buildMs": 55.361042,
+      "randomGets": 3,
+      "randomBytes": 35306.75,
+      "hotMs": 239.07333299999993,
+      "objects": 653,
+      "storedBytes": 622272,
+      "height": 2,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 3,
+          "bytes": 35392,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 3496,
+          "resolves": 1
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 3,
+          "bytes": 35424,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": true,
+          "gets": 3,
+          "bytes": 35424,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 3,
+          "bytes": 35128,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 3520,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "plus-31x128",
+      "n": 20000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 48.932292000000075,
+      "randomGets": 3,
+      "randomBytes": 35306.75,
+      "hotMs": 243.51437499999997,
+      "objects": 653,
+      "storedBytes": 622272,
+      "height": 2,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 3,
+          "bytes": 35392,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 3496,
+          "resolves": 1
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 3,
+          "bytes": 35424,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": true,
+          "gets": 3,
+          "bytes": 35424,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 3,
+          "bytes": 35128,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 3520,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "plus-127x128",
+      "n": 20000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 127,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 20.23849999999993,
+      "randomGets": 2,
+      "randomBytes": 48721.5,
+      "hotMs": 171.2500419999999,
+      "objects": 159,
+      "storedBytes": 308792,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 48600,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 48600,
+          "resolves": 1
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 48728,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 48728,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 48712,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 48712,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "plus-255x128",
+      "n": 20000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 255,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 14.157874999999876,
+      "randomGets": 2,
+      "randomBytes": 26673,
+      "hotMs": 163.6256249999999,
+      "objects": 80,
+      "storedBytes": 255784,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 26680,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 26680,
+          "resolves": 1
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 26672,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 26672,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 26672,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 26672,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "plus-1023x128",
+      "n": 20000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 1023,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 9.609666999999945,
+      "randomGets": 2,
+      "randomBytes": 16944,
+      "hotMs": 159.75775,
+      "objects": 21,
+      "storedBytes": 214544,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 16944,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 16944,
+          "resolves": 1
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 16944,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 16944,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 16944,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 16944,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "plus-31x128-inline4096",
+      "n": 20000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 128,
+        "leafInline": 4096,
+        "branchInline": 8192
+      },
+      "buildMs": 17.936208999999963,
+      "randomGets": 2,
+      "randomBytes": 51802.5,
+      "hotMs": 167.30774999999994,
+      "objects": 7,
+      "storedBytes": 297912,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 51944,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 51944,
+          "resolves": 1
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 52072,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 52072,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 51280,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 51280,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 1,
+      "name": "plus-31x128-inline4096",
+      "n": 20000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 128,
+        "leafInline": 4096,
+        "branchInline": 8192
+      },
+      "buildMs": 17.308209000000033,
+      "randomGets": 2,
+      "randomBytes": 51802.5,
+      "hotMs": 161.82604200000014,
+      "objects": 7,
+      "storedBytes": 297912,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 51944,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 51944,
+          "resolves": 1
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 52072,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 52072,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 51280,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 51280,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 1,
+      "name": "plus-1023x128",
+      "n": 20000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 1023,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 9.404207999999926,
+      "randomGets": 2,
+      "randomBytes": 16944,
+      "hotMs": 161.2830839999997,
+      "objects": 21,
+      "storedBytes": 214544,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 16944,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 16944,
+          "resolves": 1
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 16944,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 16944,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 16944,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 16944,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 1,
+      "name": "plus-255x128",
+      "n": 20000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 255,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 13.327999999999975,
+      "randomGets": 2,
+      "randomBytes": 26673,
+      "hotMs": 165.61695899999995,
+      "objects": 80,
+      "storedBytes": 255784,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 26680,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 26680,
+          "resolves": 1
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 26672,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 26672,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 26672,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 26672,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 1,
+      "name": "plus-127x128",
+      "n": 20000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 127,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 19.590250000000196,
+      "randomGets": 2,
+      "randomBytes": 48721.5,
+      "hotMs": 171.88720899999998,
+      "objects": 159,
+      "storedBytes": 308792,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 48600,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 48600,
+          "resolves": 1
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 48728,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 48728,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 48712,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 48712,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 1,
+      "name": "plus-31x128",
+      "n": 20000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 47.824208,
+      "randomGets": 3,
+      "randomBytes": 35306.75,
+      "hotMs": 243.7869999999998,
+      "objects": 653,
+      "storedBytes": 622272,
+      "height": 2,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 3,
+          "bytes": 35392,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 3496,
+          "resolves": 1
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 3,
+          "bytes": 35424,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": true,
+          "gets": 3,
+          "bytes": 35424,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 3,
+          "bytes": 35128,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 3520,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 1,
+      "name": "plus-31x128-routing1280",
+      "n": 20000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 1280
+      },
+      "buildMs": 49.216917000000194,
+      "randomGets": 3,
+      "randomBytes": 35306.75,
+      "hotMs": 255.5300830000001,
+      "objects": 653,
+      "storedBytes": 622272,
+      "height": 2,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 3,
+          "bytes": 35392,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 3496,
+          "resolves": 1
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 3,
+          "bytes": 35424,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": true,
+          "gets": 3,
+          "bytes": 35424,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 3,
+          "bytes": 35128,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 3520,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 1,
+      "name": "plus-31x32-routing8192",
+      "n": 20000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 32,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 26.643041999999696,
+      "randomGets": 2,
+      "randomBytes": 20693,
+      "hotMs": 172.66137499999968,
+      "objects": 22,
+      "storedBytes": 297800,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 20688,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 20688,
+          "resolves": 1
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 20816,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 20816,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 20168,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 20168,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 1,
+      "name": "plus-31x32",
+      "n": 20000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 32,
+        "leafInline": 1280,
+        "branchInline": 1280
+      },
+      "buildMs": 15.86366599999974,
+      "randomGets": 2,
+      "randomBytes": 20693,
+      "hotMs": 172.2127089999999,
+      "objects": 22,
+      "storedBytes": 297800,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 20688,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 20688,
+          "resolves": 1
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 20816,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 20816,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 20168,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 20168,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 1,
+      "name": "btree",
+      "n": 20000,
+      "payload": 0,
+      "buildMs": 15.955625000000055,
+      "randomGets": 2,
+      "randomBytes": 18944,
+      "hotMs": 144.71654200000012,
+      "objects": 21,
+      "storedBytes": 269928,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 18824,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 1,
+          "bytes": 5728,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 18944,
+          "resolves": 0
+        }
+      ]
+    },
+    {
+      "trial": 2,
+      "name": "btree",
+      "n": 20000,
+      "payload": 0,
+      "buildMs": 18.20212500000025,
+      "randomGets": 2,
+      "randomBytes": 18944,
+      "hotMs": 141.05516699999998,
+      "objects": 21,
+      "storedBytes": 269928,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 18824,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 1,
+          "bytes": 5728,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 18944,
+          "resolves": 0
+        }
+      ]
+    },
+    {
+      "trial": 2,
+      "name": "plus-31x32",
+      "n": 20000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 32,
+        "leafInline": 1280,
+        "branchInline": 1280
+      },
+      "buildMs": 19.114542000000256,
+      "randomGets": 2,
+      "randomBytes": 20693,
+      "hotMs": 169.6255000000001,
+      "objects": 22,
+      "storedBytes": 297800,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 20688,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 20688,
+          "resolves": 1
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 20816,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 20816,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 20168,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 20168,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 2,
+      "name": "plus-31x32-routing8192",
+      "n": 20000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 32,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 17.248209000000315,
+      "randomGets": 2,
+      "randomBytes": 20693,
+      "hotMs": 171.73091699999986,
+      "objects": 22,
+      "storedBytes": 297800,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 20688,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 20688,
+          "resolves": 1
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 20816,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 20816,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 20168,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 20168,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 2,
+      "name": "plus-31x128-routing1280",
+      "n": 20000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 1280
+      },
+      "buildMs": 46.498999999999796,
+      "randomGets": 3,
+      "randomBytes": 35306.75,
+      "hotMs": 242.93645899999956,
+      "objects": 653,
+      "storedBytes": 622272,
+      "height": 2,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 3,
+          "bytes": 35392,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 3496,
+          "resolves": 1
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 3,
+          "bytes": 35424,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": true,
+          "gets": 3,
+          "bytes": 35424,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 3,
+          "bytes": 35128,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 3520,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 2,
+      "name": "plus-31x128",
+      "n": 20000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 48.632791,
+      "randomGets": 3,
+      "randomBytes": 35306.75,
+      "hotMs": 244.4425000000001,
+      "objects": 653,
+      "storedBytes": 622272,
+      "height": 2,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 3,
+          "bytes": 35392,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 3496,
+          "resolves": 1
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 3,
+          "bytes": 35424,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": true,
+          "gets": 3,
+          "bytes": 35424,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 3,
+          "bytes": 35128,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 3520,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 2,
+      "name": "plus-127x128",
+      "n": 20000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 127,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 18.867083000000093,
+      "randomGets": 2,
+      "randomBytes": 48721.5,
+      "hotMs": 175.2932920000003,
+      "objects": 159,
+      "storedBytes": 308792,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 48600,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 48600,
+          "resolves": 1
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 48728,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 48728,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 48712,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 48712,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 2,
+      "name": "plus-255x128",
+      "n": 20000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 255,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 13.536416999999346,
+      "randomGets": 2,
+      "randomBytes": 26673,
+      "hotMs": 171.00954199999978,
+      "objects": 80,
+      "storedBytes": 255784,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 26680,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 26680,
+          "resolves": 1
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 26672,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 26672,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 26672,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 26672,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 2,
+      "name": "plus-1023x128",
+      "n": 20000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 1023,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 9.65583400000014,
+      "randomGets": 2,
+      "randomBytes": 16944,
+      "hotMs": 160.48199999999997,
+      "objects": 21,
+      "storedBytes": 214544,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 16944,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 16944,
+          "resolves": 1
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 16944,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 16944,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 16944,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 16944,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 2,
+      "name": "plus-31x128-inline4096",
+      "n": 20000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 128,
+        "leafInline": 4096,
+        "branchInline": 8192
+      },
+      "buildMs": 16.880458999999973,
+      "randomGets": 2,
+      "randomBytes": 51802.5,
+      "hotMs": 163.2549169999993,
+      "objects": 7,
+      "storedBytes": 297912,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 51944,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 51944,
+          "resolves": 1
+        },
+        {
+          "at": 10000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 52072,
+          "resolves": 0
+        },
+        {
+          "at": 10000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 52072,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 51280,
+          "resolves": 0
+        },
+        {
+          "at": 19999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 51280,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "btree",
+      "n": 100000,
+      "payload": 0,
+      "buildMs": 79.74637499999972,
+      "randomGets": 2,
+      "randomBytes": 42393,
+      "hotMs": 154.4848750000001,
+      "objects": 101,
+      "storedBytes": 1489816,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 40968,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 1,
+          "bytes": 27872,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 43176,
+          "resolves": 0
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "plus-31x32",
+      "n": 100000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 32,
+        "leafInline": 1280,
+        "branchInline": 1280
+      },
+      "buildMs": 76.40404200000012,
+      "randomGets": 2,
+      "randomBytes": 46357.5,
+      "hotMs": 179.0994579999997,
+      "objects": 102,
+      "storedBytes": 1622448,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 44976,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 44976,
+          "resolves": 1
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 47160,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 47160,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 46608,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 46608,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "plus-31x32-routing8192",
+      "n": 100000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 32,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 82.80345800000032,
+      "randomGets": 2,
+      "randomBytes": 46357.5,
+      "hotMs": 182.42162500000086,
+      "objects": 102,
+      "storedBytes": 1622448,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 44976,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 44976,
+          "resolves": 1
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 47160,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 47160,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 46608,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 46608,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "plus-31x128-routing1280",
+      "n": 100000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 1280
+      },
+      "buildMs": 244.54975000000013,
+      "randomGets": 3,
+      "randomBytes": 46834.5,
+      "hotMs": 254.14408399999957,
+      "objects": 3253,
+      "storedBytes": 3241160,
+      "height": 2,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 3,
+          "bytes": 47040,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 10192,
+          "resolves": 1
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 3,
+          "bytes": 46840,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": true,
+          "gets": 3,
+          "bytes": 46840,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 3,
+          "bytes": 46824,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 10272,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "plus-31x128",
+      "n": 100000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 235.84837499999958,
+      "randomGets": 3,
+      "randomBytes": 46834.5,
+      "hotMs": 261.6578329999993,
+      "objects": 3253,
+      "storedBytes": 3241160,
+      "height": 2,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 3,
+          "bytes": 47040,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 10192,
+          "resolves": 1
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 3,
+          "bytes": 46840,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": true,
+          "gets": 3,
+          "bytes": 46840,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 3,
+          "bytes": 46824,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 10272,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "plus-127x128",
+      "n": 100000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 127,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 106.8670830000001,
+      "randomGets": 3,
+      "randomBytes": 38420,
+      "hotMs": 250.29133300000012,
+      "objects": 796,
+      "storedBytes": 1681512,
+      "height": 2,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 3,
+          "bytes": 38232,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 4880,
+          "resolves": 1
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 3,
+          "bytes": 38616,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": true,
+          "gets": 3,
+          "bytes": 38616,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 3,
+          "bytes": 38312,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 5248,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "plus-255x128",
+      "n": 100000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 255,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 64.74120800000037,
+      "randomGets": 3,
+      "randomBytes": 34601,
+      "hotMs": 250.91008300000067,
+      "objects": 398,
+      "storedBytes": 1410896,
+      "height": 2,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 3,
+          "bytes": 34496,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 5216,
+          "resolves": 1
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 3,
+          "bytes": 34704,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": true,
+          "gets": 3,
+          "bytes": 34704,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 3,
+          "bytes": 34704,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 5712,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "plus-1023x128",
+      "n": 100000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 1023,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 44.39125000000058,
+      "randomGets": 2,
+      "randomBytes": 41150.75,
+      "hotMs": 214.91195899999911,
+      "objects": 99,
+      "storedBytes": 1203808,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 39880,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 39880,
+          "resolves": 1
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 41912,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 41912,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 41912,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 41912,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "plus-31x128-inline4096",
+      "n": 100000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 128,
+        "leafInline": 4096,
+        "branchInline": 8192
+      },
+      "buildMs": 114.41637499999888,
+      "randomGets": 2,
+      "randomBytes": 71292,
+      "hotMs": 177.48141699999906,
+      "objects": 27,
+      "storedBytes": 1641440,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 66408,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 66408,
+          "resolves": 1
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 74408,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 74408,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 74312,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 74312,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 1,
+      "name": "plus-31x128-inline4096",
+      "n": 100000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 128,
+        "leafInline": 4096,
+        "branchInline": 8192
+      },
+      "buildMs": 70.09908300000097,
+      "randomGets": 2,
+      "randomBytes": 71292,
+      "hotMs": 174.05004199999894,
+      "objects": 27,
+      "storedBytes": 1641440,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 66408,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 66408,
+          "resolves": 1
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 74408,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 74408,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 74312,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 74312,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 1,
+      "name": "plus-1023x128",
+      "n": 100000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 1023,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 42.667750000000524,
+      "randomGets": 2,
+      "randomBytes": 41150.75,
+      "hotMs": 171.13345899999877,
+      "objects": 99,
+      "storedBytes": 1203808,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 39880,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 39880,
+          "resolves": 1
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 41912,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 41912,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 41912,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 41912,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 1,
+      "name": "plus-255x128",
+      "n": 100000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 255,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 66.5302499999998,
+      "randomGets": 3,
+      "randomBytes": 34601,
+      "hotMs": 244.31024999999863,
+      "objects": 398,
+      "storedBytes": 1410896,
+      "height": 2,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 3,
+          "bytes": 34496,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 5216,
+          "resolves": 1
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 3,
+          "bytes": 34704,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": true,
+          "gets": 3,
+          "bytes": 34704,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 3,
+          "bytes": 34704,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 5712,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 1,
+      "name": "plus-127x128",
+      "n": 100000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 127,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 94.04691599999933,
+      "randomGets": 3,
+      "randomBytes": 38420,
+      "hotMs": 245.43637500000114,
+      "objects": 796,
+      "storedBytes": 1681512,
+      "height": 2,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 3,
+          "bytes": 38232,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 4880,
+          "resolves": 1
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 3,
+          "bytes": 38616,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": true,
+          "gets": 3,
+          "bytes": 38616,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 3,
+          "bytes": 38312,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 5248,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 1,
+      "name": "plus-31x128",
+      "n": 100000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 235.93983300000036,
+      "randomGets": 3,
+      "randomBytes": 46834.5,
+      "hotMs": 257.43141600000126,
+      "objects": 3253,
+      "storedBytes": 3241160,
+      "height": 2,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 3,
+          "bytes": 47040,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 10192,
+          "resolves": 1
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 3,
+          "bytes": 46840,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": true,
+          "gets": 3,
+          "bytes": 46840,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 3,
+          "bytes": 46824,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 10272,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 1,
+      "name": "plus-31x128-routing1280",
+      "n": 100000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 1280
+      },
+      "buildMs": 246.28137500000048,
+      "randomGets": 3,
+      "randomBytes": 46834.5,
+      "hotMs": 259.68083300000035,
+      "objects": 3253,
+      "storedBytes": 3241160,
+      "height": 2,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 3,
+          "bytes": 47040,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 10192,
+          "resolves": 1
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 3,
+          "bytes": 46840,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": true,
+          "gets": 3,
+          "bytes": 46840,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 3,
+          "bytes": 46824,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 10272,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 1,
+      "name": "plus-31x32-routing8192",
+      "n": 100000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 32,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 99.57124999999905,
+      "randomGets": 2,
+      "randomBytes": 46357.5,
+      "hotMs": 181.0591660000009,
+      "objects": 102,
+      "storedBytes": 1622448,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 44976,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 44976,
+          "resolves": 1
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 47160,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 47160,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 46608,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 46608,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 1,
+      "name": "plus-31x32",
+      "n": 100000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 32,
+        "leafInline": 1280,
+        "branchInline": 1280
+      },
+      "buildMs": 77.11529200000041,
+      "randomGets": 2,
+      "randomBytes": 46357.5,
+      "hotMs": 181.9654160000009,
+      "objects": 102,
+      "storedBytes": 1622448,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 44976,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 44976,
+          "resolves": 1
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 47160,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 47160,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 46608,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 46608,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 1,
+      "name": "btree",
+      "n": 100000,
+      "payload": 0,
+      "buildMs": 76.48579099999915,
+      "randomGets": 2,
+      "randomBytes": 42393,
+      "hotMs": 158.24254099999962,
+      "objects": 101,
+      "storedBytes": 1489816,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 40968,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 1,
+          "bytes": 27872,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 43176,
+          "resolves": 0
+        }
+      ]
+    },
+    {
+      "trial": 2,
+      "name": "btree",
+      "n": 100000,
+      "payload": 0,
+      "buildMs": 78.7940409999992,
+      "randomGets": 2,
+      "randomBytes": 42393,
+      "hotMs": 157.04908299999988,
+      "objects": 101,
+      "storedBytes": 1489816,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 40968,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 1,
+          "bytes": 27872,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 43176,
+          "resolves": 0
+        }
+      ]
+    },
+    {
+      "trial": 2,
+      "name": "plus-31x32",
+      "n": 100000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 32,
+        "leafInline": 1280,
+        "branchInline": 1280
+      },
+      "buildMs": 101.05095800000163,
+      "randomGets": 2,
+      "randomBytes": 46357.5,
+      "hotMs": 182.50262499999917,
+      "objects": 102,
+      "storedBytes": 1622448,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 44976,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 44976,
+          "resolves": 1
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 47160,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 47160,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 46608,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 46608,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 2,
+      "name": "plus-31x32-routing8192",
+      "n": 100000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 32,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 73.9366659999996,
+      "randomGets": 2,
+      "randomBytes": 46357.5,
+      "hotMs": 181.10958299999947,
+      "objects": 102,
+      "storedBytes": 1622448,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 44976,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 44976,
+          "resolves": 1
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 47160,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 47160,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 46608,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 46608,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 2,
+      "name": "plus-31x128-routing1280",
+      "n": 100000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 1280
+      },
+      "buildMs": 239.51116600000023,
+      "randomGets": 3,
+      "randomBytes": 46834.5,
+      "hotMs": 257.3780420000003,
+      "objects": 3253,
+      "storedBytes": 3241160,
+      "height": 2,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 3,
+          "bytes": 47040,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 10192,
+          "resolves": 1
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 3,
+          "bytes": 46840,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": true,
+          "gets": 3,
+          "bytes": 46840,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 3,
+          "bytes": 46824,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 10272,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 2,
+      "name": "plus-31x128",
+      "n": 100000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 248.64016699999956,
+      "randomGets": 3,
+      "randomBytes": 46834.5,
+      "hotMs": 268.5412499999984,
+      "objects": 3253,
+      "storedBytes": 3241160,
+      "height": 2,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 3,
+          "bytes": 47040,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 10192,
+          "resolves": 1
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 3,
+          "bytes": 46840,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": true,
+          "gets": 3,
+          "bytes": 46840,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 3,
+          "bytes": 46824,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 10272,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 2,
+      "name": "plus-127x128",
+      "n": 100000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 127,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 95.82137499999953,
+      "randomGets": 3,
+      "randomBytes": 38420,
+      "hotMs": 251.67079100000046,
+      "objects": 796,
+      "storedBytes": 1681512,
+      "height": 2,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 3,
+          "bytes": 38232,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 4880,
+          "resolves": 1
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 3,
+          "bytes": 38616,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": true,
+          "gets": 3,
+          "bytes": 38616,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 3,
+          "bytes": 38312,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 5248,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 2,
+      "name": "plus-255x128",
+      "n": 100000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 255,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 63.78416600000128,
+      "randomGets": 3,
+      "randomBytes": 34601,
+      "hotMs": 252.9894579999982,
+      "objects": 398,
+      "storedBytes": 1410896,
+      "height": 2,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 3,
+          "bytes": 34496,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 5216,
+          "resolves": 1
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 3,
+          "bytes": 34704,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": true,
+          "gets": 3,
+          "bytes": 34704,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 3,
+          "bytes": 34704,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 5712,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 2,
+      "name": "plus-1023x128",
+      "n": 100000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 1023,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 46.38337499999943,
+      "randomGets": 2,
+      "randomBytes": 41150.75,
+      "hotMs": 179.39087500000096,
+      "objects": 99,
+      "storedBytes": 1203808,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 39880,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 39880,
+          "resolves": 1
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 41912,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 41912,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 41912,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 41912,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 2,
+      "name": "plus-31x128-inline4096",
+      "n": 100000,
+      "payload": 0,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 128,
+        "leafInline": 4096,
+        "branchInline": 8192
+      },
+      "buildMs": 93.63129200000003,
+      "randomGets": 2,
+      "randomBytes": 71292,
+      "hotMs": 176.07787499999904,
+      "objects": 27,
+      "storedBytes": 1641440,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 66408,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 66408,
+          "resolves": 1
+        },
+        {
+          "at": 50000,
+          "hints": false,
+          "gets": 2,
+          "bytes": 74408,
+          "resolves": 0
+        },
+        {
+          "at": 50000,
+          "hints": true,
+          "gets": 2,
+          "bytes": 74408,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 74312,
+          "resolves": 0
+        },
+        {
+          "at": 99999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 74312,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "btree",
+      "n": 5000,
+      "payload": 4096,
+      "buildMs": 28.48450000000048,
+      "randomGets": 2,
+      "randomBytes": 4132058,
+      "objects": 6,
+      "storedBytes": 20586304,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 4135136,
+          "resolves": 0
+        },
+        {
+          "at": 2500,
+          "hints": false,
+          "gets": 2,
+          "bytes": 4131032,
+          "resolves": 0
+        },
+        {
+          "at": 4999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 4131032,
+          "resolves": 0
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "plus-31x32",
+      "n": 5000,
+      "payload": 4096,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 32,
+        "leafInline": 1280,
+        "branchInline": 1280
+      },
+      "buildMs": 24.602916999998342,
+      "randomGets": 2,
+      "randomBytes": 3436153,
+      "objects": 7,
+      "storedBytes": 20598064,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 3450288,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 3450288,
+          "resolves": 1
+        },
+        {
+          "at": 2500,
+          "hints": false,
+          "gets": 2,
+          "bytes": 3450288,
+          "resolves": 0
+        },
+        {
+          "at": 2500,
+          "hints": true,
+          "gets": 2,
+          "bytes": 3450288,
+          "resolves": 0
+        },
+        {
+          "at": 4999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 3359824,
+          "resolves": 0
+        },
+        {
+          "at": 4999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 3359824,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "plus-31x32-routing8192",
+      "n": 5000,
+      "payload": 4096,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 32,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 23.762042000000292,
+      "randomGets": 2,
+      "randomBytes": 3436153,
+      "objects": 7,
+      "storedBytes": 20598064,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 3450288,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 3450288,
+          "resolves": 1
+        },
+        {
+          "at": 2500,
+          "hints": false,
+          "gets": 2,
+          "bytes": 3450288,
+          "resolves": 0
+        },
+        {
+          "at": 2500,
+          "hints": true,
+          "gets": 2,
+          "bytes": 3450288,
+          "resolves": 0
+        },
+        {
+          "at": 4999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 3359824,
+          "resolves": 0
+        },
+        {
+          "at": 4999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 3359824,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "plus-31x128-routing1280",
+      "n": 5000,
+      "payload": 4096,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 1280
+      },
+      "buildMs": 32.81258400000115,
+      "randomGets": 2,
+      "randomBytes": 180230.5,
+      "objects": 163,
+      "storedBytes": 20674968,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 180616,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 180616,
+          "resolves": 1
+        },
+        {
+          "at": 2500,
+          "hints": false,
+          "gets": 2,
+          "bytes": 180616,
+          "resolves": 0
+        },
+        {
+          "at": 2500,
+          "hints": true,
+          "gets": 2,
+          "bytes": 180616,
+          "resolves": 0
+        },
+        {
+          "at": 4999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 176504,
+          "resolves": 0
+        },
+        {
+          "at": 4999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 176504,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "plus-31x128",
+      "n": 5000,
+      "payload": 4096,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 32.24516699999913,
+      "randomGets": 2,
+      "randomBytes": 180230.5,
+      "objects": 163,
+      "storedBytes": 20674968,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 180616,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 180616,
+          "resolves": 1
+        },
+        {
+          "at": 2500,
+          "hints": false,
+          "gets": 2,
+          "bytes": 180616,
+          "resolves": 0
+        },
+        {
+          "at": 2500,
+          "hints": true,
+          "gets": 2,
+          "bytes": 180616,
+          "resolves": 0
+        },
+        {
+          "at": 4999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 176504,
+          "resolves": 0
+        },
+        {
+          "at": 4999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 176504,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "plus-127x128",
+      "n": 5000,
+      "payload": 4096,
+      "options": {
+        "leafKeys": 127,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 26.231125000000247,
+      "randomGets": 2,
+      "randomBytes": 527792,
+      "objects": 41,
+      "storedBytes": 20586584,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 527792,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 527792,
+          "resolves": 1
+        },
+        {
+          "at": 2500,
+          "hints": false,
+          "gets": 2,
+          "bytes": 527792,
+          "resolves": 0
+        },
+        {
+          "at": 2500,
+          "hints": true,
+          "gets": 2,
+          "bytes": 527792,
+          "resolves": 0
+        },
+        {
+          "at": 4999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 527792,
+          "resolves": 0
+        },
+        {
+          "at": 4999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 527792,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "plus-255x128",
+      "n": 5000,
+      "payload": 4096,
+      "options": {
+        "leafKeys": 255,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 22.444625000000087,
+      "randomGets": 2,
+      "randomBytes": 1035312,
+      "objects": 21,
+      "storedBytes": 20571264,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 1035312,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 1035312,
+          "resolves": 1
+        },
+        {
+          "at": 2500,
+          "hints": false,
+          "gets": 2,
+          "bytes": 1035312,
+          "resolves": 0
+        },
+        {
+          "at": 2500,
+          "hints": true,
+          "gets": 2,
+          "bytes": 1035312,
+          "resolves": 0
+        },
+        {
+          "at": 4999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 1035312,
+          "resolves": 0
+        },
+        {
+          "at": 4999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 1035312,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "plus-1023x128",
+      "n": 5000,
+      "payload": 4096,
+      "options": {
+        "leafKeys": 1023,
+        "branchChildren": 128,
+        "leafInline": 1280,
+        "branchInline": 8192
+      },
+      "buildMs": 21.943457999999737,
+      "randomGets": 2,
+      "randomBytes": 4113784,
+      "objects": 6,
+      "storedBytes": 20559640,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 4113784,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 4113784,
+          "resolves": 1
+        },
+        {
+          "at": 2500,
+          "hints": false,
+          "gets": 2,
+          "bytes": 4113784,
+          "resolves": 0
+        },
+        {
+          "at": 2500,
+          "hints": true,
+          "gets": 2,
+          "bytes": 4113784,
+          "resolves": 0
+        },
+        {
+          "at": 4999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 4113784,
+          "resolves": 0
+        },
+        {
+          "at": 4999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 4113784,
+          "resolves": 1
+        }
+      ]
+    },
+    {
+      "trial": 0,
+      "name": "plus-31x128-inline4096",
+      "n": 5000,
+      "payload": 4096,
+      "options": {
+        "leafKeys": 31,
+        "branchChildren": 128,
+        "leafInline": 4096,
+        "branchInline": 8192
+      },
+      "buildMs": 29.564041999999972,
+      "randomGets": 2,
+      "randomBytes": 10295827.25,
+      "objects": 3,
+      "storedBytes": 20595952,
+      "height": 1,
+      "probes": [
+        {
+          "at": 0,
+          "hints": false,
+          "gets": 2,
+          "bytes": 10343984,
+          "resolves": 0
+        },
+        {
+          "at": 0,
+          "hints": true,
+          "gets": 2,
+          "bytes": 10343984,
+          "resolves": 1
+        },
+        {
+          "at": 2500,
+          "hints": false,
+          "gets": 2,
+          "bytes": 10343984,
+          "resolves": 0
+        },
+        {
+          "at": 2500,
+          "hints": true,
+          "gets": 2,
+          "bytes": 10343984,
+          "resolves": 1
+        },
+        {
+          "at": 4999,
+          "hints": false,
+          "gets": 2,
+          "bytes": 10253336,
+          "resolves": 0
+        },
+        {
+          "at": 4999,
+          "hints": true,
+          "gets": 2,
+          "bytes": 10253336,
+          "resolves": 1
+        }
+      ]
+    }
+  ]
+}

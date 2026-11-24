@@ -28,6 +28,8 @@ Apply these when implementing or benchmarking this tutorial family:
   canonical output and cross-language reads. Record request/byte counts as well as CPU.
 - Optional shortcut indexes should not add cold-path fetches merely to discover
   hints; measure ready-only navigation against direct authoritative traversal.
+- Distinguish logical fanout from stored packing. Count-based inline budgets can
+  over-fetch large values; measure bytes and GETs before favoring wider branches.
 - Carry measured techniques across structures as candidates, then measure again;
   performance in one structure, runtime or language is not evidence for another.
 - Compare explicit path updates, whole-value copies and Proxy drafts separately under

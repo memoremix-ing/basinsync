@@ -15,7 +15,9 @@ prerequisites:
 [node-degree]: <../../../glossary/node-degree.md>
 [node-format]: <../../../node-format.md>
 [revision]: <../../../glossary/revision.md>
+[selective-ordered]: <benchmark/selective-ordered.md>
 [strong-edge]: <../../../glossary/strong-edge.md>
+[wasm-cpu]: <benchmark/wasm-cpu.md>
 
 # Basin node standard library
 
@@ -144,17 +146,18 @@ Follow the *implementation and benchmark guidance*[~][AGENTS] when changing this
 
 ## Progress and remaining work
 
-TypeScript now selectively exports compatible unchanged trie subtrees; consumer
-summaries explicitly opt into composable reuse. Volume metadata is paged, updates
-retain unchanged file blocks, and point reads use ready-only hints. All three
-languages read the revised volume layout.
+TypeScript selectively exports compatible trie, B-tree and directory subtrees;
+consumer summaries explicitly opt into composable reuse. Directory ancestor
+hashes still scan immediate entries; canonical B-tree rank shifts can repack
+siblings. *Export measurements*[~][selective-ordered] count requests separately
+from new objects. Native readers interoperate with these snapshots.
 
-The *B-tree*[~][diy/0zg6/261120-basin-node-stdlib/0zg7/261123-b-tree]
-has cached/deferred reads and persistent logical editing. Its canonical export
-still rebuilds. *Browser CPU measurements*[~][client-browser] cover all three
-logical structures; *matching-miss measurements*[~][continuations] support keeping
-retained continuations for now.
+Trie and vector editors offer explicit owner-tagged scopes. *Browser CPU
+measurements*[~][client-browser] cover logical structures; *Rust/Wasm measurements*[~][wasm-cpu]
+cover stored readers. *Matching-miss measurements*[~][continuations] support
+retained continuations for now. The *B-tree tutorial*[~][diy/0zg6/261120-basin-node-stdlib/0zg7/261123-b-tree]
+compares an experimental B+tree with independent branch/leaf budgets.
 
-Native logical-editor parity, vector transients, selective B-tree/directory export
-and Wasm CPU remain candidates. Owner-tagged scopes and prefix editors remain
-TypeScript-only. These are deferred experiments, not additional format requirements.
+Rust/Go logical-editor parity, native B+ readers and byte-aware physical packing
+remain candidates. Owner-tagged scopes and prefix editors remain TypeScript-only.
+These are deferred experiments, not additional format requirements.

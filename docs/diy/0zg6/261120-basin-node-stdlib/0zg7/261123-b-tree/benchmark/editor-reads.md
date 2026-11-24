@@ -1,4 +1,5 @@
 [editor-reads]: <editor-reads.json>
+[selective-ordered]: <../../../benchmark/selective-ordered.md>
 
 # B-tree editing and warm reads
 
@@ -22,5 +23,6 @@ Stored bytes and branching factor are unchanged.
 20,000-entry Map each time took 1,229 ms. This comparison includes the Map's
 string-key conversion/initial construction; it is a coarse reference, not a
 controlled attribution. Neither edit loop aggregates, serializes, hashes or stores.
-Logical edits path-copy; loading an editor materializes the tree, and export still
-rebuilds its canonical representation. Do not treat cheap edits as selective export.
+Logical edits path-copy; loading an editor materializes the tree. This initial
+experiment used full export; later *selective export measurements*[~][selective-ordered]
+measure compatible stored-subtree reuse separately.
