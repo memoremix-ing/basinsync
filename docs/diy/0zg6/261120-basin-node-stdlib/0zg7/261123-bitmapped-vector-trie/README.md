@@ -9,6 +9,7 @@ prerequisites:
 [incremental-edits]: <benchmark/incremental-edits.md>
 [node]: <../../../../../glossary/node.md>
 [node-height]: <../../../../../glossary/node-height.md>
+[owned]: <benchmark/owned.md>
 [strong-edge]: <../../../../../glossary/strong-edge.md>
 
 # Bitmapped vector trie
@@ -104,3 +105,23 @@ languages reading one another's fixtures.
 
 Compare incrementing positions with the byte trie and historical collection in the
 *client performance and browser-size measurements*[~][comparison].
+
+## Owned mutation scopes
+
+`editor.mutate()` and `VectorMap.mutate()` copy each branch on its first write,
+then reuse private nodes. `snapshot()` and `entries()` rotate ownership before
+sharing structure; `finish()` returns a snapshot and closes the scope. `abort()`
+discards it. Invalid writes close the scope. Values retain the borrowed immutable
+contract; sparse holes remain distinct from stored undefined/null values.
+Growth can retain owned paths; shrinking uses the persistent trim path.
+
+```js
+const draft = editor.mutate();
+draft.set(42n, value);
+const snapshot = draft.snapshot();
+draft.push(otherValue);
+const next = draft.finish();
+```
+
+The *owned-scope measurements*[~][owned] favor batches sharing paths; single-write
+scopes remain more expensive than persistent updates.

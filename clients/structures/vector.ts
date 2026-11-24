@@ -9,7 +9,11 @@ import {
   readBitmap,
   bitmapCount,
 } from "./vector-bitmap";
-import { VectorMap } from "./logical-vector";
+import {
+  type VectorMutation,
+  type VectorMutationMetrics,
+  VectorMap,
+} from "./logical-vector";
 import { type Operation, resolveOperation } from "./operation";
 import {
   Basin,
@@ -371,8 +375,7 @@ export class Vector<V = unknown, M = null, R extends Edge | Reference = Edge> {
     const self = this;
     return function* () {
       return (yield self.findLast(acceptValue, acceptSummary)) as
-        | [bigint, V]
-        | undefined;
+        [bigint, V] | undefined;
     };
   }
   /** Last matching index; summaries prune entire stored branches before GETs. */
@@ -543,6 +546,33 @@ export class VectorEditor<V, M = null> {
   has(i: bigint) {
     return this.values.has(i);
   }
+  mutate(metrics?: VectorMutationMetrics): VectorEditorMutation<V, M> {
+    const scope = this.values.mutate(metrics),
+      wrap = (values: VectorMap<V>) =>
+        new VectorEditor(this.basin, values, this.consumer);
+    return {
+      get bits() {
+        return scope.bits;
+      },
+      get length() {
+        return scope.length;
+      },
+      get size() {
+        return scope.size;
+      },
+      get: (i) => scope.get(i),
+      has: (i) => scope.has(i),
+      set: (i, v) => scope.set(i, v),
+      delete: (i) => scope.delete(i),
+      resize: (n) => scope.resize(n),
+      push: (v) => scope.push(v),
+      pop: () => scope.pop(),
+      entries: () => scope.entries(),
+      snapshot: () => wrap(scope.snapshot()),
+      finish: () => wrap(scope.finish()),
+      abort: () => scope.abort(),
+    };
+  }
   private changed(values: VectorMap<V>): VectorEditor<V, M> {
     return values === this.values
       ? this
@@ -609,3 +639,9 @@ export async function vectorBoundaryLinks(
   ]);
   return { leading, lagging };
 }
+
+export type VectorEditorMutation<V, M> = Omit<
+  VectorMutation<V>,
+  "snapshot" | "finish"
+> & { snapshot(): VectorEditor<V, M>; finish(): VectorEditor<V, M> };
+export type { VectorMutation, VectorMutationMetrics } from "./logical-vector";

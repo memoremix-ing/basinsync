@@ -9,6 +9,7 @@ import {
   changeBit,
 } from "./vector-bitmap";
 type Tree<V> = {
+  owner?: symbol;
   shift: number;
   bitmap: Bitmap;
   slots: readonly (Tree<V> | V)[];
@@ -28,47 +29,72 @@ const empty = <V>(shift: number, bits: number): Tree<V> => ({
   slots: [],
   count: 0,
 });
+export type VectorMutationMetrics = {
+  copiedNodes: number;
+  slotsCopied: number;
+  writes: number;
+  snapshots: number;
+};
+type Owner = { token: symbol; writes: number; metrics?: VectorMutationMetrics };
+function writable<V>(n: Tree<V>, owner?: Owner): Tree<V> {
+  if (owner && n.owner === owner.token) return n;
+  if (owner?.metrics) {
+    owner.metrics.copiedNodes++;
+    owner.metrics.slotsCopied += n.slots.length;
+  }
+  return { ...n, slots: n.slots.slice(), owner: owner?.token };
+}
 function changed<V>(
   n: Tree<V>,
   i: bigint,
   value: V | undefined,
   remove: boolean,
   bits: number,
+  owner?: Owner,
 ): Tree<V> {
   const slot = Number((i >> BigInt(n.shift)) & BigInt((1 << bits) - 1)),
     at = rank(n.bitmap, slot),
     exists = has(n.bitmap, slot);
   if (!exists && remove) return n;
-  const slots = n.slots.slice();
-  let bitmap = n.bitmap,
-    count = n.count;
-  if (n.shift === 0) {
-    if (exists && !remove && Object.is(slots[at], value)) return n;
+  if (!n.shift && exists && !remove && Object.is(n.slots[at], value)) return n;
+  let child: Tree<V> | undefined,
+    priorCount = 0;
+  if (n.shift) {
+    const prior = exists
+        ? (n.slots[at] as Tree<V>)
+        : empty<V>(n.shift - bits, bits),
+      writes = owner?.writes;
+    priorCount = prior.count;
+    child = changed(prior, i, value, remove, bits, owner);
+    if (child === prior && owner?.writes === writes) return n;
+  }
+  const out = writable(n, owner),
+    slots = out.slots as (Tree<V> | V)[];
+  if (!n.shift) {
     if (remove) {
       slots.splice(at, 1);
-      bitmap = changeBit(bitmap, slot, false);
-      count--;
+      out.bitmap = changeBit(out.bitmap, slot, false);
+      out.count--;
     } else {
       slots.splice(at, exists ? 1 : 0, value as V);
-      bitmap = changeBit(bitmap, slot, true);
-      if (!exists) count++;
+      out.bitmap = changeBit(out.bitmap, slot, true);
+      if (!exists) out.count++;
     }
   } else {
-    const prior = exists
-        ? (slots[at] as Tree<V>)
-        : empty<V>(n.shift - bits, bits),
-      child = changed(prior, i, value, remove, bits);
-    if (prior === child) return n;
-    count += child.count - prior.count;
-    if (child.count) {
-      slots.splice(at, exists ? 1 : 0, child);
-      bitmap = changeBit(bitmap, slot, true);
+    out.count += child!.count - priorCount;
+    if (child!.count) {
+      slots.splice(at, exists ? 1 : 0, child!);
+      out.bitmap = changeBit(out.bitmap, slot, true);
     } else {
       slots.splice(at, 1);
-      bitmap = changeBit(bitmap, slot, false);
+      out.bitmap = changeBit(out.bitmap, slot, false);
     }
   }
-  return { shift: n.shift, bitmap, slots, count };
+  if (owner) {
+    owner.writes++;
+    if (owner.metrics) owner.metrics.writes++;
+  }
+  return out;
 }
 function trim<V>(
   n: Tree<V>,
@@ -127,7 +153,7 @@ export class VectorMap<V> {
     ): Tree<V> {
       const slots: (Tree<V> | V)[] = [];
       let bitmap = emptyBitmap(bits);
-      for (let at = lo; at < end; ) {
+      for (let at = lo; at < end;) {
         const slot = Number(
             (rows[at][0] >> BigInt(shift)) & BigInt((1 << bits) - 1),
           ),
@@ -156,6 +182,15 @@ export class VectorMap<V> {
     );
   }
 
+  mutate(metrics?: VectorMutationMetrics): VectorMutation<V> {
+    return new Mutation(
+      this,
+      this.tree,
+      (length, tree) => new VectorMap(length, this.bits, tree),
+      (m) => m.tree,
+      metrics,
+    );
+  }
   get size() {
     return this.tree.count;
   }
@@ -235,5 +270,149 @@ export class VectorMap<V> {
         }
     }
     yield* walk(this.tree, 0n);
+  }
+}
+
+export interface VectorMutation<V> {
+  readonly length: bigint;
+  readonly bits: number;
+  readonly size: number;
+  get(i: bigint): V | undefined;
+  has(i: bigint): boolean;
+  set(i: bigint, value: V): void;
+  delete(i: bigint): void;
+  resize(length: bigint): void;
+  push(value: V): void;
+  pop(): void;
+  entries(): Generator<[bigint, V]>;
+  snapshot(): VectorMap<V>;
+  finish(): VectorMap<V>;
+  abort(): void;
+}
+class Mutation<V> implements VectorMutation<V> {
+  #tree: Tree<V> | undefined;
+  #map: VectorMap<V> | undefined;
+  #owner: Owner | undefined;
+  #dirty = false;
+  #length: bigint;
+  constructor(
+    base: VectorMap<V>,
+    tree: Tree<V>,
+    private readonly wrap: (length: bigint, n: Tree<V>) => VectorMap<V>,
+    private readonly unwrap: (m: VectorMap<V>) => Tree<V>,
+    private readonly metrics?: VectorMutationMetrics,
+  ) {
+    this.#tree = tree;
+    this.#map = base;
+    this.#length = base.length;
+    this.#owner = { token: Symbol(), writes: 0, metrics };
+  }
+  private check() {
+    check(this.#owner, "vector mutation scope is closed");
+  }
+  get bits() {
+    this.check();
+    return this.#map!.bits;
+  }
+  get length() {
+    this.check();
+    return this.#length;
+  }
+  get size() {
+    this.check();
+    return this.#tree!.count;
+  }
+  get(i: bigint) {
+    this.check();
+    return this.wrap(this.#length, this.#tree!).get(i);
+  }
+  has(i: bigint) {
+    this.check();
+    return this.wrap(this.#length, this.#tree!).has(i);
+  }
+  private write(i: bigint, value: V | undefined, remove: boolean) {
+    this.check();
+    try {
+      valid(i);
+      check(i < this.#length, "vector index outside length");
+      const owner = this.#owner!,
+        writes = owner.writes;
+      this.#tree = changed(this.#tree!, i, value, remove, this.bits, owner);
+      if (writes !== owner.writes) this.#dirty = true;
+    } catch (e) {
+      this.abort();
+      throw e;
+    }
+  }
+  set(i: bigint, v: V) {
+    this.write(i, v, false);
+  }
+  delete(i: bigint) {
+    this.write(i, undefined, true);
+  }
+  snapshot() {
+    this.check();
+    if (this.#dirty) {
+      this.#map = this.wrap(this.#length, this.#tree!);
+      this.#dirty = false;
+    }
+    this.#owner = { token: Symbol(), writes: 0, metrics: this.metrics };
+    if (this.metrics) this.metrics.snapshots++;
+    return this.#map!;
+  }
+  entries() {
+    return this.snapshot().entries();
+  }
+  resize(length: bigint) {
+    this.check();
+    try {
+      valid(length);
+      if (length === this.#length) return;
+      if (length > this.#length) {
+        const bits = this.bits,
+          shift = shiftFor(length, bits);
+        while (this.#tree!.shift < shift) {
+          const child = this.#tree!;
+          this.#tree = child.count
+            ? {
+                owner: this.#owner!.token,
+                shift: child.shift + bits,
+                bitmap: changeBit(emptyBitmap(bits), 0, true),
+                slots: [child],
+                count: child.count,
+              }
+            : empty(shift, bits);
+        }
+        this.#length = length;
+        this.#dirty = true;
+        return;
+      }
+      const map = this.snapshot().resize(length);
+      this.#map = map;
+      this.#tree = this.unwrap(map);
+      this.#length = length;
+    } catch (e) {
+      this.abort();
+      throw e;
+    }
+  }
+  push(v: V) {
+    this.check();
+    this.resize(this.#length + 1n);
+    this.set(this.#length - 1n, v);
+  }
+  pop() {
+    this.check();
+    this.resize(this.#length ? this.#length - 1n : 0n);
+  }
+  finish() {
+    const result = this.snapshot();
+    this.abort();
+    return result;
+  }
+  abort() {
+    this.#owner = undefined;
+    this.#tree = undefined;
+    this.#map = undefined;
   }
 }
