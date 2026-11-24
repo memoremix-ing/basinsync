@@ -1,7 +1,11 @@
+[page-spines]: <page-spines.md>
 [shortcut-navigation]: <shortcut-navigation.json>
 [shortcut-reads]: <shortcut-reads.md>
 
 # Paged metadata and ready-only hints
+
+Historical measurements of the prior device/leaf-index layout; see the current
+*page-spine measurements*[~][page-spines].
 
 Bun 1.4.5, in-memory storage, cold cache for each point read; one-byte pages isolate
 routing. These are request/byte counts, not network timings. The *raw traces*[~][shortcut-navigation]

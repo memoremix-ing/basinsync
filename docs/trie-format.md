@@ -3,6 +3,7 @@
 [node-degree]: <glossary/node-degree.md>
 [node-format]: <node-format.md>
 [strong-edge]: <glossary/strong-edge.md>
+[weak-link]: <glossary/weak-link.md>
 
 # Trie format 0
 
@@ -44,8 +45,15 @@ SHA384(concat(u32le(name.length), name,
 kind: directory=1, file=0; name: UTF-8 bytes
 ```
 
-The device trie strongly retains blocks. Directory and up-to-64 leaf shortcuts
-provide direct reads, with strong-path fallback on cache misses. Full file reads
+Directories are descriptors with inline-or-edged basename contents tries; file
+entries carry strong block edges. Contents-trie inline counts include embedded
+child directories and reset at stored edges. Enforce the 1280 budget per physical
+node, splitting even small name groups when nested cost requires it.
+
+Blocks carry page tries and leading/lagging *weak spines*[~][weak-link], indexed
+by stored height. Hints include incoming key prefixes, target digests and links.
+They bypass intermediate reads where available, with strong-path fallback for
+unavailable or stale targets. Full file reads
 also check the composed checksum; partial reads check fetched object digests.
 A storage adapter supplies reads and optional shortcut resolution using these
 revisioned addresses; signed URLs stay out of the stored graph.

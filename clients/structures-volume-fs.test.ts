@@ -7,12 +7,7 @@ import {
   type Edge,
   edgeFrom,
 } from "./structures/core";
-import {
-  Volume,
-  buildBlock,
-  devices,
-  type Directory,
-} from "./structures/volume";
+import { Volume, buildBlock, type Directory } from "./structures/volume";
 import { Trie } from "./structures/trie";
 const trieSource = (r: import("./flexbuffer").Reference) =>
   r.isMap() ? r : edgeFrom(r);
@@ -36,13 +31,9 @@ async function fixture() {
   return { storage, b, blocks, one, two, v };
 }
 async function device(v: Volume, name: string): Promise<Edge> {
-  const node = await v.basin.load(v.root),
-    edge = await new Trie(
-      v.basin,
-      trieSource(node.get("6").get(2)),
-      devices,
-    ).get(utf8(name));
-  return edge![0];
+  const f = await v.stat(name);
+  if (f.kind !== "file") throw Error("not file");
+  return f.edge;
 }
 
 test("Volume mv/cp/rm coordinate hashes, empty directories and retained block identities", async () => {
@@ -86,12 +77,7 @@ test("Volume mv/cp/rm coordinate hashes, empty directories and retained block id
   );
   expect(removed.root[6].sha384).toEqual(canonical.root[6].sha384);
   expect(
-    fetched.every(
-      (p) =>
-        p === ".sync-volume/" ||
-        p === ".trie-node/" ||
-        p === ".sync-directory/",
-    ),
+    fetched.every((p) => p === ".sync-volume/" || p === ".trie-node/"),
   ).toBe(true);
   storage.get = get;
   const reload = new Volume(new Basin(storage, { seed }), removed.root);

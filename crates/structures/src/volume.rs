@@ -1,16 +1,15 @@
 use crate::{
     Value,
     basin::{self, Basin, DOMAIN, Edge, Storage},
-    bromberg, packed,
+    bromberg,
     trie::{self, Consumer, View},
-    value, vector,
+    value,
 };
 use Value::*;
 use anyhow::{Context, Result, ensure};
 use std::collections::{BTreeMap, BTreeSet};
 pub const PATH: &str = ".sync-volume/";
 pub const BLOCK: &str = ".sync-block/";
-pub const DIRECTORY: &str = ".sync-directory/";
 pub const PAGE_SIZE: usize = 4096;
 pub struct Sectors;
 impl Consumer for Sectors {
@@ -33,56 +32,6 @@ impl Consumer for Sectors {
             "brombergSL2",
             Blob(bromberg::combine(&parts)?),
         )]))
-    }
-}
-struct LeafShortcuts;
-impl Consumer for LeafShortcuts {
-    fn empty(&self) -> Value {
-        Value::map([("pages", Null)])
-    }
-    fn entry(&self, _: &[u8], v: &Value) -> Result<Value> {
-        let lo = v.at(0)?.big()?;
-        let hi = &lo + v.at(1)?.number()? - 1u32;
-        Ok(Value::map([("pages", Array(vec![Big(lo), Big(hi)]))]))
-    }
-    fn combine(&self, values: &[Value]) -> Result<Value> {
-        let mut lo: Option<num_bigint::BigInt> = None;
-        let mut hi: Option<num_bigint::BigInt> = None;
-        for v in values {
-            let p = v.field("pages")?;
-            if p.is_null() {
-                continue;
-            }
-            let a = p.at(0)?.big()?;
-            let z = p.at(1)?.big()?;
-            lo = Some(lo.map_or(a.clone(), |v| v.min(a)));
-            hi = Some(hi.map_or(z.clone(), |v| v.max(z)));
-        }
-        Ok(Value::map([(
-            "pages",
-            if let Some(lo) = lo {
-                Array(vec![Big(lo), Big(hi.unwrap())])
-            } else {
-                Null
-            },
-        )]))
-    }
-}
-pub struct Devices;
-impl Consumer for Devices {
-    fn empty(&self) -> Value {
-        Null
-    }
-    fn entry(&self, _: &[u8], _: &Value) -> Result<Value> {
-        Ok(Null)
-    }
-    fn combine(&self, _: &[Value]) -> Result<Value> {
-        Ok(Null)
-    }
-    fn edges(&self, v: &Value) -> Result<Vec<Edge>> {
-        ensure!(v.array()?.len() == 1, "invalid device value");
-        basin::validate_edge(v.at(0)?)?;
-        Ok(vec![v.at(0)?.clone()])
     }
 }
 pub fn lex(n: &num_bigint::BigInt) -> Result<String> {
@@ -218,7 +167,9 @@ fn directory_refs(source: &Value) -> Result<Vec<Edge>> {
             let mut out = vec![];
             for v in g.field("values")?.array()? {
                 if v.at(0)?.boolean()? {
-                    out.extend(directory_refs(v.at(2)?)?);
+                    out.extend(directory_refs(v.at(1)?.field("contents")?)?);
+                } else {
+                    out.push(v.at(2)?.clone());
                 }
             }
             Ok(out)
@@ -246,10 +197,39 @@ fn directory_refs(source: &Value) -> Result<Vec<Edge>> {
         }
         basin::distinct(&refs)
     }
-    scan(source.index(6)?.at(2)?)
+    scan(source)
 }
 struct DirectoryEntries;
 impl Consumer for DirectoryEntries {
+    fn trie_inline_cost(&self) -> Option<fn(&Value) -> Result<usize>> {
+        Some(|v| {
+            Ok(
+                1 + if v.at(0)?.boolean()? && matches!(v.at(1)?.field("contents")?, Map(_)) {
+                    v.at(1)?.field("inlined")?.number()? as usize
+                } else {
+                    0
+                },
+            )
+        })
+    }
+    fn trie_externalize<S: Storage>(&self, b: &mut Basin<S>, v: &Value) -> Result<Value> {
+        if v.at(0)?.boolean()? && matches!(v.at(1)?.field("contents")?, Map(_)) {
+            let d = v.at(1)?;
+            let contents = d.field("contents")?;
+            let edge = b.seal(contents.clone(), &directory_refs(contents)?)?;
+            Ok(Array(vec![
+                Bool(true),
+                Value::map([
+                    ("sha384", d.field("sha384")?.clone()),
+                    ("inlined", d.field("inlined")?.clone()),
+                    ("nesting", d.field("nesting")?.clone()),
+                    ("contents", edge),
+                ]),
+            ]))
+        } else {
+            Ok(v.clone())
+        }
+    }
     fn empty(&self) -> Value {
         Null
     }
@@ -261,13 +241,56 @@ impl Consumer for DirectoryEntries {
     }
     fn edges(&self, v: &Value) -> Result<Vec<Edge>> {
         if v.at(0)?.boolean()? {
-            directory_refs(v.at(2)?)
+            directory_refs(v.at(1)?.field("contents")?)
         } else {
-            Ok(vec![])
+            Ok(vec![v.at(2)?.clone()])
         }
     }
 }
-fn build_directory<S: Storage>(b: &mut Basin<S>, tree: &Value) -> Result<packed::Built> {
+struct DirectoryBuilt {
+    descriptor: Value,
+    edges: Vec<Edge>,
+}
+fn directory_stats(n: &Value) -> Result<(usize, usize)> {
+    fn group(g: &Value) -> Result<usize> {
+        let mut depth = 0;
+        for v in g.field("values")?.array()? {
+            if v.at(0)?.boolean()? {
+                let d = v.at(1)?;
+                if matches!(d.field("contents")?, Map(_)) {
+                    depth = depth.max(d.field("nesting")?.number()? as usize);
+                }
+            }
+        }
+        Ok(depth)
+    }
+    fn scan(n: &Value) -> Result<usize> {
+        let mut depth = group(n.index(6)?.at(2)?)?;
+        let members = n.index(6)?.at(3)?;
+        if !members.is_null() {
+            for m in members.array()? {
+                if m.is_null() {
+                    continue;
+                }
+                if matches!(m, Array(_)) {
+                    for ch in m.array()? {
+                        if matches!(ch, Map(_)) {
+                            depth = depth.max(scan(ch)?);
+                        }
+                    }
+                } else {
+                    depth = depth.max(group(m)?);
+                }
+            }
+        }
+        Ok(depth)
+    }
+    Ok((
+        n.index(5)?.field("inlined")?.number()? as usize,
+        1 + scan(n)?,
+    ))
+}
+fn build_directory<S: Storage>(b: &mut Basin<S>, tree: &Value) -> Result<DirectoryBuilt> {
     let entries = tree.at(2)?.map_ref()?;
     let mut children = BTreeMap::new();
     for (name, v) in entries {
@@ -275,64 +298,41 @@ fn build_directory<S: Storage>(b: &mut Basin<S>, tree: &Value) -> Result<packed:
             children.insert(name.clone(), build_directory(b, v)?);
         }
     }
-    let nested = children.values().try_fold(0usize, |n, c| {
-        Ok::<_, anyhow::Error>(n + c.node.index(5)?.field("inlined")?.number()? as usize)
-    })?;
-    let nesting = 1 + children
-        .values()
-        .map(|c| {
-            c.node
-                .index(5)
-                .and_then(|h| h.field("nesting"))
-                .and_then(Value::number)
-        })
-        .collect::<Result<Vec<_>>>()?
-        .into_iter()
-        .max()
-        .unwrap_or(0);
-    let refs = children
-        .values()
-        .flat_map(|c| c.edges.clone())
-        .collect::<Vec<_>>();
-    let cut = entries.len() + nested > 1280
-        || nesting > 32
-        || basin::distinct(&refs)?.len() > b.max_degree;
     let mut rows = vec![];
     for (name, v) in entries {
-        let stored = if let Some(child) = children.remove(name) {
+        let stored = if let Some(child) = children.get(name) {
+            let d = &child.descriptor;
+            let contents = d.field("contents")?;
+            let cut = d.field("inlined")?.number()? >= 1280 || d.field("nesting")?.number()? >= 32;
             let source = if cut {
-                b.seal(child.node, &child.edges)?
+                b.seal(contents.clone(), &child.edges)?
             } else {
-                child.node
+                contents.clone()
             };
-            Array(vec![Bool(true), v.at(1)?.clone(), source])
+            Array(vec![
+                Bool(true),
+                Value::map([
+                    ("sha384", d.field("sha384")?.clone()),
+                    ("inlined", d.field("inlined")?.clone()),
+                    ("nesting", d.field("nesting")?.clone()),
+                    ("contents", source),
+                ]),
+            ])
         } else {
             v.clone()
         };
         rows.push((name.as_bytes().to_vec(), stored));
     }
-    let trie = trie::build_node(b, rows, &DirectoryEntries)?;
-    let inline =
-        trie.node.index(5)?.field("inlined")?.number()? as usize + if cut { 0 } else { nested };
-    let node = Value::map([
-        ("0", Symbol("species".into())),
-        ("1", DOMAIN.into()),
-        ("2", DIRECTORY.into()),
-        ("3", trie.node.index(3)?.clone()),
-        ("4", 0u32.into()),
-        (
-            "5",
-            Value::map([
-                ("sha384", tree.at(1)?.clone()),
-                ("inlined", inline.into()),
-                ("nesting", (if cut { 1 } else { nesting }).into()),
-            ]),
-        ),
-        ("6", Array(vec![0u32.into(), Null, trie.node])),
-    ]);
-    Ok(packed::Built {
-        node,
-        edges: trie.edges,
+    let t = trie::build_node(b, rows, &DirectoryEntries)?;
+    let (inline, nesting) = directory_stats(&t.node)?;
+    Ok(DirectoryBuilt {
+        descriptor: Value::map([
+            ("sha384", tree.at(1)?.clone()),
+            ("inlined", inline.into()),
+            ("nesting", nesting.into()),
+            ("contents", t.node),
+        ]),
+        edges: t.edges,
     })
 }
 fn source_root<S: Storage>(b: &mut Basin<S>, source: View) -> Result<View> {
@@ -343,17 +343,11 @@ fn source_root<S: Storage>(b: &mut Basin<S>, source: View) -> Result<View> {
     }
 }
 fn directory_contents<S: Storage>(b: &mut Basin<S>, source: View) -> Result<View> {
-    let node = source_root(b, source)?;
-    basin::validate_node(node.reader()?, Some(DIRECTORY))?;
-    ensure!(
-        node.field("6").reader()?.get_vector()?.len() == 3,
-        "unsupported directory"
-    );
-    Ok(node.field("6").item(2))
+    source_root(b, source.field("contents"))
 }
 fn directory_entry<S: Storage>(b: &mut Basin<S>, root: &Edge, name: &str) -> Result<(bool, View)> {
     let f = data(b, root)?;
-    let mut source = f.item(3);
+    let mut source = f.item(2);
     if name == "/" {
         return Ok((true, source));
     }
@@ -364,35 +358,27 @@ fn directory_entry<S: Storage>(b: &mut Basin<S>, root: &Edge, name: &str) -> Res
             trie::get_inline(b, contents, p.as_bytes().to_vec(), 0)?.context("missing pathname")?;
         let folder = entry.item(0).owned()?.boolean()?;
         if i == parts.len() - 1 {
-            return Ok((folder, if folder { entry.item(2) } else { entry }));
+            return Ok((folder, if folder { entry.item(1) } else { entry }));
         }
         ensure!(folder, "parent is not a directory");
-        source = entry.item(2);
+        source = entry.item(1);
     }
     anyhow::bail!("missing pathname")
 }
 fn materialize_directory<S: Storage>(b: &mut Basin<S>, source: View) -> Result<Value> {
-    let node = source_root(b, source)?;
-    basin::validate_node(node.reader()?, Some(DIRECTORY))?;
+    let digest = source.field("sha384").owned()?;
+    let node = directory_contents(b, source)?;
     let mut rows = vec![];
-    trie::visit_inline(
-        b,
-        node.field("6").item(2),
-        &[],
-        &[],
-        0,
-        &mut |_, _| true,
-        &mut |k, v| {
-            rows.push((String::from_utf8(k)?, v));
-            Ok(true)
-        },
-    )?;
+    trie::visit_inline(b, node, &[], &[], 0, &mut |_, _| true, &mut |k, v| {
+        rows.push((String::from_utf8(k)?, v));
+        Ok(true)
+    })?;
     let mut entries = BTreeMap::new();
     for (name, v) in rows {
         let entry = if v.item(0).owned()?.boolean()? {
-            let child = materialize_directory(b, v.item(2))?;
+            let child = materialize_directory(b, v.item(1))?;
             ensure!(
-                child.at(1)? == &v.item(1).owned()?,
+                child.at(1)? == &v.item(1).field("sha384").owned()?,
                 "directory digest mismatch"
             );
             child
@@ -401,62 +387,7 @@ fn materialize_directory<S: Storage>(b: &mut Basin<S>, source: View) -> Result<V
         };
         entries.insert(name, entry);
     }
-    Ok(Array(vec![
-        Bool(true),
-        node.field("5").field("sha384").owned()?,
-        Map(entries),
-    ]))
-}
-fn collect<S: Storage>(
-    basin: &mut Basin<S>,
-    n: &Value,
-    base: &[u8],
-    leaves: &mut Vec<Value>,
-) -> Result<()> {
-    let h = n.index(5)?;
-    let p = if h.field("prefix")?.is_null() {
-        &[][..]
-    } else {
-        h.field("prefix")?.blob()?
-    };
-    let here = [base, p].concat();
-    let m = n.index(6)?.at(3)?;
-    if m.is_null() {
-        return Ok(());
-    }
-    for (high, m) in m.array()?.iter().enumerate() {
-        if let Array(children) = m {
-            for (low, ch) in children.iter().enumerate() {
-                if ch.is_null() {
-                    continue;
-                }
-                let next = [here.as_slice(), &[(high as u8) << 4 | low as u8]].concat();
-                if matches!(ch, Array(_)) {
-                    let h = ch.at(5)?;
-                    if ch.at(3)?.field("degree")?.number()? == 0 && !h.field("keys")?.is_null() {
-                        let keys = h.field("keys")?;
-                        let lo = unlex(std::str::from_utf8(
-                            &[next.as_slice(), keys.at(0)?.blob()?].concat(),
-                        )?)?;
-                        let hi = unlex(std::str::from_utf8(
-                            &[next.as_slice(), keys.at(1)?.blob()?].concat(),
-                        )?)? + 1;
-                        let span: &num_bigint::BigInt = &(&hi - &lo);
-                        if let Ok(n) = u32::try_from(span.clone()) {
-                            leaves.push(Array(vec![Big(lo), n.into(), basin::weak(ch)?]));
-                        }
-                    } else {
-                        let bytes = basin.load(ch)?;
-                        let node = value::read(basin::node_reader(&bytes)?)?;
-                        collect(basin, &node, &next, leaves)?;
-                    }
-                } else {
-                    collect(basin, ch, &next, leaves)?;
-                }
-            }
-        }
-    }
-    Ok(())
+    Ok(Array(vec![Bool(true), digest, Map(entries)]))
 }
 pub fn build<S: Storage>(basin: &mut Basin<S>, files: Vec<(String, Vec<u8>)>) -> Result<Edge> {
     build_with_directories(basin, files, vec![])
@@ -478,90 +409,97 @@ pub struct BlockRoot {
     pub edge: Edge,
     pub digest: Vec<u8>,
 }
+fn page_spine<S: Storage>(b: &mut Basin<S>, root: &Value, last: bool) -> Result<Value> {
+    let mut node = root.clone();
+    let mut base = vec![];
+    let mut spine = vec![Null; root.index(3)?.field("height")?.number()? as usize];
+    for _ in 0..256 {
+        let h = node.index(5)?;
+        if h.field("keys")?.is_null() {
+            return Ok(Array(spine));
+        }
+        let target = h.field("keys")?.at(if last { 1 } else { 0 })?.blob()?;
+        let prefix = if h.field("prefix")?.is_null() {
+            &[][..]
+        } else {
+            h.field("prefix")?.blob()?
+        };
+        let members = node.index(6)?.at(3)?;
+        if members.is_null() || target.len() == prefix.len() {
+            return Ok(Array(spine));
+        }
+        let byte = target[prefix.len()] as usize;
+        let Some(m) = members.array()?.get(byte >> 4) else {
+            return Ok(Array(spine));
+        };
+        if !matches!(m, Array(_)) {
+            return Ok(Array(spine));
+        }
+        let Some(ch) = m.array()?.get(byte & 15) else {
+            return Ok(Array(spine));
+        };
+        if ch.is_null() {
+            return Ok(Array(spine));
+        }
+        base.extend_from_slice(prefix);
+        base.push(byte as u8);
+        if matches!(ch, Array(_)) {
+            spine[ch.at(3)?.field("height")?.number()? as usize] = Value::map([
+                ("prefix", Blob(base.clone())),
+                ("sha384", ch.at(6)?.field("sha384")?.clone()),
+                ("link", basin::weak(ch)?),
+            ]);
+            if ch.at(3)?.field("degree")?.number()? == 0 {
+                return Ok(Array(spine));
+            }
+            node = View::root(b.load(ch)?).owned()?;
+        } else {
+            node = ch.clone();
+        }
+    }
+    anyhow::bail!("page trie nesting limit")
+}
 pub fn build_block<S: Storage>(
-    basin: &mut Basin<S>,
+    b: &mut Basin<S>,
     input: Vec<(num_bigint::BigInt, Vec<u8>)>,
 ) -> Result<BlockRoot> {
     let pages = input
         .into_iter()
-        .map(|(n, b)| Ok((lex(&n)?.into_bytes(), Array(vec![Blob(b)]))))
+        .map(|(n, v)| Ok((lex(&n)?.into_bytes(), Array(vec![Blob(v)]))))
         .collect::<Result<Vec<_>>>()?;
-    let t = trie::build_node(basin, pages, &Sectors)?;
-    let mut leaves = vec![];
-    collect(basin, &t.node, &[], &mut leaves)?;
-    leaves.sort_by_key(|v| v.at(0).and_then(Value::big).unwrap());
-    let digest = t.node.index(6)?.at(1)?.field("brombergSL2")?.clone();
-    let count = leaves.len();
-    let shortcuts = vector::build_node_entries(
-        basin,
-        count.into(),
-        leaves
-            .into_iter()
-            .enumerate()
-            .map(|(i, v)| (i.into(), v))
-            .collect(),
-        &LeafShortcuts,
-        7,
-    )?;
-    let mut p = packed::pack(
-        basin,
-        vec![
-            packed::Built {
-                node: t.node,
-                edges: t.edges,
-            },
-            shortcuts,
-        ],
-        0,
-        vec![],
-    )?;
-    let trailing = p.slots.pop().unwrap();
-    let pages = p.slots.pop().unwrap();
-    let leading = vector_spine(basin, &trailing, false)?;
-    let lagging = vector_spine(basin, &trailing, true)?;
+    let t = trie::build_node(b, pages, &Sectors)?;
+    let leading = page_spine(b, &t.node, false)?;
+    let lagging = page_spine(b, &t.node, true)?;
+    let digest = t
+        .node
+        .index(6)?
+        .at(1)?
+        .field("brombergSL2")?
+        .blob()?
+        .to_vec();
+    let edged = t.node.index(5)?.field("inlined")?.number()? > 1280;
+    let source = if edged {
+        b.seal(t.node, &t.edges)?
+    } else {
+        t.node
+    };
+    let edges = if edged { vec![source.clone()] } else { t.edges };
     let node = Value::map([
         ("0", Symbol("species".into())),
         ("1", DOMAIN.into()),
         ("2", BLOCK.into()),
-        (
-            "3",
-            basin::query(&p.edges, basin.max_degree, basin.max_height)?,
-        ),
+        ("3", basin::query(&edges, b.max_degree, b.max_height)?),
         ("4", 0u32.into()),
         ("5", Null),
         (
             "6",
-            Array(vec![0u32.into(), Null, pages, trailing, leading, lagging]),
+            Array(vec![0u32.into(), Null, source, leading, lagging]),
         ),
     ]);
-    let edge = basin.seal(node, &p.edges)?;
     Ok(BlockRoot {
-        edge,
-        digest: digest.blob()?.to_vec(),
+        edge: b.seal(node, &edges)?,
+        digest,
     })
-}
-fn vector_spine<S: Storage>(basin: &mut Basin<S>, root: &Value, last: bool) -> Result<Value> {
-    let mut node = root.clone();
-    if matches!(node, Array(_)) {
-        node = View::root(basin.load(&node)?).owned()?;
-    }
-    let mut spine = vec![Null; node.index(3)?.field("height")?.number()? as usize];
-    for _ in 0..256 {
-        if node.index(5)?.field("shift")?.number()? == 0
-            || node.index(5)?.field("count")?.big()? == 0.into()
-        {
-            return Ok(Array(spine));
-        }
-        let slots = node.index(6)?.at(3)?.array()?;
-        let child = slots[if last { slots.len() - 1 } else { 0 }].clone();
-        node = if matches!(child, Array(_)) {
-            spine[child.at(3)?.field("height")?.number()? as usize] = basin::weak(&child)?;
-            View::root(basin.load(&child)?).owned()?
-        } else {
-            child
-        };
-    }
-    anyhow::bail!("vector nesting limit")
 }
 fn page_root<S: Storage>(basin: &mut Basin<S>, footer: &View) -> Result<View> {
     let pages = footer.item(2);
@@ -605,14 +543,6 @@ pub fn from_blocks<S: Storage>(
         );
         file_map.insert(name, (block.edge, Blob(block.digest)));
     }
-    let device = trie::build_node(
-        basin,
-        file_map
-            .iter()
-            .map(|(name, (e, _))| (name.as_bytes().to_vec(), Array(vec![e.clone()])))
-            .collect(),
-        &Devices,
-    )?;
     let mut tree = BTreeMap::new();
     for dir in directories {
         if dir != "/" {
@@ -623,28 +553,23 @@ pub fn from_blocks<S: Storage>(
         insert(
             &mut tree,
             &path(name)?,
-            Array(vec![Bool(false), digest.clone(), basin::weak(edge)?]),
+            Array(vec![Bool(false), digest.clone(), edge.clone()]),
         )?;
     }
     let root = finish(tree)?;
     let directory = build_directory(basin, &root)?;
-    let mut device_source = device.node.clone();
-    let mut dir = directory.node.clone();
-    let mut edges = basin::distinct(&[device.edges.clone(), directory.edges.clone()].concat())?;
-    if device.node.index(5)?.field("inlined")?.number()?
-        + directory.node.index(5)?.field("inlined")?.number()?
-        > 1280
-        || edges.len() > basin.max_degree
-    {
-        dir = basin.seal(directory.node, &directory.edges)?;
-        edges = basin::distinct(&[device.edges.clone(), vec![dir.clone()]].concat())?;
-        if device.node.index(5)?.field("inlined")?.number()? > 1280
-            || edges.len() > basin.max_degree
-        {
-            device_source = basin.seal(device.node, &device.edges)?;
-            edges = basin::distinct(&[device_source.clone(), dir.clone()])?;
+    let mut descriptor = directory.descriptor;
+    let edged = descriptor.field("inlined")?.number()? > 1280
+        || descriptor.field("nesting")?.number()? > 32;
+    let edges = if edged {
+        let e = basin.seal(descriptor.field("contents")?.clone(), &directory.edges)?;
+        if let Map(ref mut m) = descriptor {
+            m.insert("contents".into(), e.clone());
         }
-    }
+        vec![e]
+    } else {
+        directory.edges
+    };
     let node = Value::map([
         ("0", Symbol("species".into())),
         ("1", DOMAIN.into()),
@@ -655,7 +580,7 @@ pub fn from_blocks<S: Storage>(
         ),
         ("4", 0u32.into()),
         ("5", Null),
-        ("6", Array(vec![0u32.into(), Null, device_source, dir])),
+        ("6", Array(vec![0u32.into(), Null, descriptor])),
     ]);
     basin.seal(node, &edges)
 }
@@ -664,7 +589,7 @@ fn data<S: Storage>(basin: &mut Basin<S>, root: &Edge) -> Result<View> {
     basin::validate_node(v.reader()?, Some(PATH))?;
     let footer = v.field("6");
     ensure!(
-        footer.reader()?.get_vector()?.len() == 4
+        footer.reader()?.get_vector()?.len() == 3
             && value::item(footer.reader()?, 0)?.get_i64()? == 0,
         "unsupported volume migration"
     );
@@ -696,34 +621,6 @@ fn ready_source<S: Storage>(b: &mut Basin<S>, source: View) -> Result<Option<Vie
         Ok(b.peek(&source.owned()?)?.map(View::root))
     }
 }
-fn ready_file<S: Storage>(b: &mut Basin<S>, footer: &View, name: &str) -> Result<Option<Value>> {
-    let mut source = footer.item(3);
-    let parts = path(name)?;
-    for (i, p) in parts.iter().enumerate() {
-        let Some(node) = ready_source(b, source)? else {
-            return Ok(None);
-        };
-        basin::validate_node(node.reader()?, Some(DIRECTORY))?;
-        let Some(Some(entry)) =
-            trie::get_cached_inline(b, node.field("6").item(2), p.as_bytes().to_vec(), 0)?
-        else {
-            return Ok(None);
-        };
-        let folder = entry.item(0).owned()?.boolean()?;
-        if i == parts.len() - 1 {
-            return if folder {
-                Ok(None)
-            } else {
-                Ok(Some(entry.owned()?))
-            };
-        }
-        if !folder {
-            return Ok(None);
-        }
-        source = entry.item(2);
-    }
-    Ok(None)
-}
 fn sector_summary(footer: &View) -> Result<Value> {
     let pages = footer.item(2);
     if pages.reader()?.flexbuffer_type() == flexbuffers::FlexBufferType::Map {
@@ -733,51 +630,24 @@ fn sector_summary(footer: &View) -> Result<Value> {
     }
 }
 fn open_block<S: Storage>(
-    basin: &mut Basin<S>,
+    b: &mut Basin<S>,
     root: &Edge,
     name: &str,
-    shortcuts: bool,
+    _shortcuts: bool,
 ) -> Result<(View, Vec<u8>)> {
-    let f = data(basin, root)?;
-    let mut edge = None;
-    if shortcuts
-        && let Some(file) = ready_file(basin, &f, name)?
-        && let Ok(Some(candidate)) = basin.storage.resolve(file.at(2)?)
-        && basin::capability(&candidate)? == basin::weak_key(file.at(2)?)?
-        && let Ok(bytes) = basin.load(&candidate)
-    {
-        let block = View::root(bytes);
-        if basin::validate_node(block.reader()?, Some(BLOCK)).is_ok()
-            && sector_summary(&block.field("6"))?
-                .field("brombergSL2")?
-                .blob()?
-                == file.at(1)?.blob()?
-        {
-            edge = Some(candidate);
-        }
-    }
-    let edge = if let Some(e) = edge {
-        e
-    } else {
-        let device = source_root(basin, f.item(2))?;
-        trie::get_inline(basin, device, name.as_bytes().to_vec(), 0)?
-            .context("missing file")?
-            .owned()?
-            .at(0)?
-            .clone()
-    };
-    let block = View::root(basin.load(&edge)?);
+    let (folder, file) = directory_entry(b, root, name)?;
+    ensure!(!folder, "not a file");
+    let file = file.owned()?;
+    let block = View::root(b.load(file.at(2)?)?);
     basin::validate_node(block.reader()?, Some(BLOCK))?;
-    let footer = block.field("6");
+    let f = block.field("6");
     ensure!(
-        footer.reader()?.get_vector()?.len() == 6,
+        f.reader()?.get_vector()?.len() == 5,
         "unsupported block migration"
     );
-    let expected = sector_summary(&footer)?
-        .field("brombergSL2")?
-        .blob()?
-        .to_vec();
-    Ok((footer, expected))
+    let expected = sector_summary(&f)?.field("brombergSL2")?.blob()?.to_vec();
+    ensure!(expected == file.at(1)?.blob()?, "block checksum mismatch");
+    Ok((f, expected))
 }
 pub fn read<S: Storage>(
     basin: &mut Basin<S>,
@@ -824,71 +694,67 @@ pub fn read<S: Storage>(
     Ok(bytes)
 }
 fn shortcut_page<S: Storage>(
-    basin: &mut Basin<S>,
-    leaves: &View,
-    page: &num_bigint::BigInt,
+    b: &mut Basin<S>,
+    footer: &View,
     full: &[u8],
 ) -> Result<Option<Value>> {
-    let edge = leaves.owned()?;
-    let header = if matches!(edge, Array(_)) {
-        edge.at(5)?
-    } else {
-        edge.index(5)?
-    };
-    ensure!(
-        header.field("bits")?.number()? == 7,
-        "invalid shortcut vector"
-    );
-    let Some(root) = ready_source(basin, leaves.clone())? else {
-        return Ok(None);
-    };
-    let found = vector::find_last_cached_inline(
-        basin,
-        root,
-        0,
-        &mut |v| v.at(0).and_then(Value::big).is_ok_and(|v| v <= *page),
-        &mut |s| {
-            s.field("pages").is_ok_and(|p| {
-                !p.is_null() && p.at(0).and_then(Value::big).is_ok_and(|p| p <= *page)
-            })
-        },
-    )?;
-    let Some(Some((_, record))) = found else {
-        return Ok(None);
-    };
-    let low = record.item(0).owned()?.big()?;
-    let span = record.item(1).owned()?.number()?;
-    if page >= &(&low + span) {
-        return Ok(None);
+    let mut hints = footer.item(3).owned()?.array()?.to_vec();
+    hints.extend(footer.item(4).owned()?.array()?.to_vec());
+    hints.retain(|h| !h.is_null());
+    hints.sort_by_key(|h| {
+        h.field("link")
+            .and_then(|l| l.field("height"))
+            .and_then(Value::number)
+            .unwrap_or(u32::MAX)
+    });
+    for h in hints {
+        let attempt = (|| -> Result<Option<Value>> {
+            let prefix = h.field("prefix")?.blob()?;
+            if !full.starts_with(prefix) {
+                return Ok(None);
+            }
+            let Some(e) = b.storage.resolve(h.field("link")?)? else {
+                return Ok(None);
+            };
+            ensure!(
+                basin::capability(&e)? == basin::weak_key(h.field("link")?)?
+                    && e.at(6)?.field("sha384")? == h.field("sha384")?,
+                "page shortcut identity mismatch"
+            );
+            let keys = e.at(5)?.field("keys")?;
+            let k = &full[prefix.len()..];
+            if keys.is_null() || k < keys.at(0)?.blob()? || k > keys.at(1)?.blob()? {
+                return Ok(None);
+            }
+            let root = View::root(b.load(&e)?);
+            trie::get_inline(b, root, k.to_vec(), 0)?
+                .map(|v| v.owned())
+                .transpose()
+        })();
+        if let Ok(Some(v)) = attempt {
+            return Ok(Some(v));
+        }
     }
-    let link = record.item(2).owned()?;
-    let Some(edge) = basin.storage.resolve(&link)? else {
-        return Ok(None);
-    };
-    ensure!(
-        basin::capability(&edge)? == basin::weak_key(&link)?,
-        "shortcut capability mismatch"
-    );
-    let view = View::root(basin.load(&edge)?);
-    basin::validate_node(view.reader()?, Some(trie::PATH))?;
-    let header = view.field("5").owned()?;
-    let keys = header.field("keys")?;
-    if keys.is_null() {
-        return Ok(None);
+    Ok(None)
+}
+fn page_value<S: Storage>(
+    b: &mut Basin<S>,
+    f: &View,
+    full: Vec<u8>,
+    shortcuts: bool,
+) -> Result<Option<Value>> {
+    if let Some(root) = ready_source(b, f.item(2))? {
+        if let Some(value) = trie::get_cached_inline(b, root, full.clone(), 0)? {
+            return value.map(|v| v.owned()).transpose();
+        }
     }
-    let minimum = lex(&low)?.into_bytes();
-    let suffix = keys.at(0)?.blob()?;
-    ensure!(minimum.len() >= suffix.len(), "invalid shortcut prefix");
-    let base = &minimum[..minimum.len() - suffix.len()];
-    ensure!(
-        [base, suffix].concat() == minimum
-            && [base, keys.at(1)?.blob()?].concat() == lex(&(&low + span - 1u32))?.into_bytes(),
-        "shortcut span mismatch"
-    );
-    if !full.starts_with(base) {
-        return Ok(None);
+    if shortcuts {
+        if let Some(v) = shortcut_page(b, f, &full).ok().flatten() {
+            return Ok(Some(v));
+        }
     }
-    trie::get_inline(basin, view, full[base.len()..].to_vec(), 0)?
+    let root = page_root(b, f)?;
+    trie::get_inline(b, root, full, 0)?
         .map(|v| v.owned())
         .transpose()
 }
@@ -902,26 +768,7 @@ pub fn page<S: Storage>(
 ) -> Result<Option<Vec<u8>>> {
     let (footer, _) = open_block(basin, root, name, shortcuts)?;
     let full = lex(index)?.into_bytes();
-    let pages = page_root(basin, &footer)?;
-    let ready = trie::get_cached_inline(basin, pages.clone(), full.clone(), 0)?;
-    let value = if let Some(value) = ready {
-        value.map(|v| v.owned()).transpose()?
-    } else {
-        let fast = if shortcuts {
-            shortcut_page(basin, &footer.item(3), index, &full)
-                .ok()
-                .flatten()
-        } else {
-            None
-        };
-        if let Some(v) = fast {
-            Some(v)
-        } else {
-            trie::get_inline(basin, pages, full, 0)?
-                .map(|v| v.owned())
-                .transpose()?
-        }
-    };
+    let value = page_value(basin, &footer, full, shortcuts)?;
     value
         .map(|v| {
             ensure!(v.array()?.len() == 1, "invalid page");
@@ -943,8 +790,12 @@ pub fn read_range<S: Storage>(
     if length == 0 {
         return Ok(vec![]);
     }
-    let pages = page_root(basin, &footer)?;
-    let header = pages.field("5").owned()?;
+    let source = footer.item(2).owned()?;
+    let header = if matches!(source, Array(_)) {
+        source.at(5)?
+    } else {
+        source.index(5)?
+    };
     let keys = header.field("keys")?;
     if keys.is_null() {
         return Ok(vec![]);
@@ -965,25 +816,7 @@ pub fn read_range<S: Storage>(
     let mut page = first;
     while page <= last {
         let full = lex(&page)?.into_bytes();
-        let ready = trie::get_cached_inline(basin, pages.clone(), full.clone(), 0)?;
-        let value = if let Some(value) = ready {
-            value.context("missing page")?.owned()?
-        } else {
-            let fast = if shortcuts {
-                shortcut_page(basin, &footer.item(3), &page, &full)
-                    .ok()
-                    .flatten()
-            } else {
-                None
-            };
-            if let Some(v) = fast {
-                v
-            } else {
-                trie::get_inline(basin, pages.clone(), full, 0)?
-                    .context("missing page")?
-                    .owned()?
-            }
-        };
+        let value = page_value(basin, &footer, full, shortcuts)?.context("missing page")?;
         ensure!(value.array()?.len() == 1, "invalid page");
         let bytes = value.at(0)?.blob()?;
         ensure!(
@@ -1013,49 +846,33 @@ struct Catalogue {
     files: BTreeMap<String, BlockRoot>,
     dirs: BTreeSet<String>,
 }
-fn catalogue<S: Storage>(basin: &mut Basin<S>, root: &Edge) -> Result<Catalogue> {
-    fn walk(
-        v: &Value,
-        prefix: &str,
-        dirs: &mut BTreeSet<String>,
-        sums: &mut BTreeMap<String, Vec<u8>>,
-    ) -> Result<()> {
+fn catalogue<S: Storage>(b: &mut Basin<S>, root: &Edge) -> Result<Catalogue> {
+    fn walk(v: &Value, prefix: &str, c: &mut Catalogue) -> Result<()> {
         for (name, entry) in v.at(2)?.map_ref()? {
             let path = format!("{prefix}/{name}");
             if entry.at(0)?.boolean()? {
-                dirs.insert(path.clone());
-                walk(entry, &path, dirs, sums)?;
+                c.dirs.insert(path.clone());
+                walk(entry, &path, c)?;
             } else {
-                sums.insert(path, entry.at(1)?.blob()?.to_vec());
+                c.files.insert(
+                    path,
+                    BlockRoot {
+                        edge: entry.at(2)?.clone(),
+                        digest: entry.at(1)?.blob()?.to_vec(),
+                    },
+                );
             }
         }
         Ok(())
     }
-    let f = data(basin, root)?;
-    let mut dirs = BTreeSet::new();
-    let mut sums = BTreeMap::new();
-    walk(
-        &materialize_directory(basin, f.item(3))?,
-        "",
-        &mut dirs,
-        &mut sums,
-    )?;
-    let mut files = BTreeMap::new();
-    let device = source_root(basin, f.item(2))?;
-    trie::visit_inline(basin, device, &[], &[], 0, &mut |_, _| true, &mut |k, v| {
-        let name = String::from_utf8(k)?;
-        let digest = sums.remove(&name).context("device/directory mismatch")?;
-        files.insert(
-            name,
-            BlockRoot {
-                edge: v.owned()?.at(0)?.clone(),
-                digest,
-            },
-        );
-        Ok(true)
-    })?;
-    ensure!(sums.is_empty(), "missing retained block");
-    Ok(Catalogue { files, dirs })
+    let f = data(b, root)?;
+    let tree = materialize_directory(b, f.item(2))?;
+    let mut c = Catalogue {
+        files: BTreeMap::new(),
+        dirs: BTreeSet::new(),
+    };
+    walk(&tree, "", &mut c)?;
+    Ok(c)
 }
 fn exists(c: &Catalogue, name: &str) -> bool {
     c.files.contains_key(name) || c.dirs.contains(name)
@@ -1192,19 +1009,19 @@ pub fn update<S: Storage>(
 mod boundary_tests {
     use super::*;
     #[test]
-    fn seven_bit_spines_use_basin_heights_and_preserve_gaps() -> Result<()> {
+    fn page_spines_target_stored_trie_nodes() -> Result<()> {
         let mut b = Basin::new(basin::MemoryStorage::default(), vec![42; 32])?;
-        let rows = (0..98305u32).map(|i| (i.into(), i.into())).collect();
-        let n = vector::build_node_entries(&mut b, 98305u32.into(), rows, &trie::Plain, 7)?;
-        let leading = vector_spine(&mut b, &n.node, false)?;
-        let lagging = vector_spine(&mut b, &n.node, true)?;
-        assert_eq!(leading.array()?.len(), 2);
-        assert!(!leading.at(1)?.is_null());
-        assert!(lagging.at(1)?.is_null());
-        for stack in [leading, lagging] {
-            for (h, link) in stack.array()?.iter().enumerate() {
-                if !link.is_null() {
-                    assert_eq!(link.field("height")?.number()? as usize, h);
+        let block = build_block(
+            &mut b,
+            (0..20000u32)
+                .map(|i| (i.into(), vec![(i & 255) as u8]))
+                .collect(),
+        )?;
+        let r = View::root(b.load(&block.edge)?).owned()?;
+        for stack in [r.index(6)?.at(3)?, r.index(6)?.at(4)?] {
+            for (h, hint) in stack.array()?.iter().enumerate() {
+                if !hint.is_null() {
+                    assert_eq!(hint.field("link")?.field("height")?.number()? as usize, h);
                 }
             }
         }

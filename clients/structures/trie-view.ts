@@ -357,7 +357,7 @@ export class TrieView<V, M = null> {
         yield { kind: "row", key: k, value: value.value };
   }
   async buildNode() {
-    if (summaryReuse(this.consumer)) {
+    if (summaryReuse(this.consumer) && !this.consumer.trieInlineCost) {
       const pieces: Piece<V, M>[] = [];
       for await (const p of this.pieces(blank())) pieces.push(p);
       return (
@@ -370,7 +370,7 @@ export class TrieView<V, M = null> {
   }
   /** Compatible consumers reuse unchanged stored subtrees; others retain flat semantics. */
   async store(): Promise<Trie<V, M>> {
-    if (summaryReuse(this.consumer)) {
+    if (summaryReuse(this.consumer) && !this.consumer.trieInlineCost) {
       const pieces: Piece<V, M>[] = [];
       for await (const p of this.pieces(blank())) pieces.push(p);
       const built = await buildPieces(this.basin, pieces, this.consumer);

@@ -168,7 +168,7 @@ try {
   );
   const file = await volume.stat("/docs/a");
   assert.equal(file.kind, "file");
-  const shortcut = (file as Extract<typeof file, { kind: "file" }>).link;
+  const shortcut = link((file as Extract<typeof file, { kind: "file" }>).edge);
   validateNode(nodeView(await rawRead(shortcut)), BLOCK);
   for (const [name, data] of files)
     assert.deepEqual(

@@ -200,7 +200,7 @@ test("volume retention, basename hashes, UTF-8 maps, empty/multipage files, snap
     ]),
   ).rejects.toThrow("collision");
 }, 30000);
-test("range reads use weak leaf caches and avoid unrelated sector objects", async () => {
+test("range reads use page boundary spines and avoid unrelated sector objects", async () => {
   const storage = new MemoryStorage(),
     basin = new Basin(storage, { seed }),
     data = Uint8Array.from(
@@ -227,7 +227,7 @@ test("range reads use weak leaf caches and avoid unrelated sector objects", asyn
     data.slice(3, 20),
   );
   expect(transferred).toBeLessThan(data.length / 4);
-  expect(resolutions).toBeGreaterThanOrEqual(2);
+  expect(resolutions).toBeGreaterThanOrEqual(1);
   expect(storage.reads).toBeLessThanOrEqual(3);
   expect(
     await reader.read("/large", { start: data.length - 5, length: 40 }),

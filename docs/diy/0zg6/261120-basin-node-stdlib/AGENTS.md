@@ -30,6 +30,8 @@ Apply these when implementing or benchmarking this tutorial family:
   hints; measure ready-only navigation against direct authoritative traversal.
 - Distinguish logical fanout from stored packing. Count-based inline budgets can
   over-fetch large values; measure bytes and GETs before favoring wider branches.
+- For embedded structural values, count nested inline data per stored node and
+  reset at edges. Verify every stored body, rather than checking only the root.
 - Carry measured techniques across structures as candidates, then measure again;
   performance in one structure, runtime or language is not evidence for another.
 - Compare explicit path updates, whole-value copies and Proxy drafts separately under

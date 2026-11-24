@@ -247,20 +247,20 @@ func TestConsumerVectorWidthSurvivesUpdates(t *testing.T) {
 	}
 }
 
-func TestSevenBitBoundarySpines(t *testing.T) {
+func TestPageBoundarySpines(t *testing.T) {
 	b := newTestBasin(t)
-	rows := make([]VectorEntry, 98305)
+	rows := make([]PageInput, 20000)
 	for i := range rows {
-		rows[i] = VectorEntry{big.NewInt(int64(i)), int64(i)}
+		rows[i] = PageInput{big.NewInt(int64(i)), []byte{byte(i)}}
 	}
-	built := buildVectorNodeEntries(b, big.NewInt(int64(len(rows))), rows, PlainConsumer(), 7)
-	leading, lagging := vectorSpine(b, built.node, false), vectorSpine(b, built.node, true)
-	if len(leading) != 2 || len(lagging) != 2 || leading[1] == nil || lagging[1] != nil {
-		t.Fatal("boundary height gaps", leading, lagging)
+	block, err := BuildBlock(b, rows)
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, stack := range [][]any{leading, lagging} {
-		for h, link := range stack {
-			if link != nil && integer(field(link, "height")) != int64(h) {
+	footer := field(b.load(block.Edge).owned(0), "6")
+	for _, i := range []int{3, 4} {
+		for h, hint := range array(at(footer, i)) {
+			if hint != nil && integer(field(field(hint, "link"), "height")) != int64(h) {
 				t.Fatal("height index")
 			}
 		}

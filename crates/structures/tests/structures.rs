@@ -351,3 +351,10 @@ fn volume_filesystem_edits_retain_blocks_and_rehash_directory_paths() -> Result<
     );
     Ok(())
 }
+
+#[test]
+fn consumer_packing_hooks_preserve_trait_object_support() {
+    let c = basinsync_structures::trie::Plain;
+    let dynamic: &dyn basinsync_structures::trie::Consumer = &c;
+    assert!(dynamic.trie_inline_cost().is_none());
+}

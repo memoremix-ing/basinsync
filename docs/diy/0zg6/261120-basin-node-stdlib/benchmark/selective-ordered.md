@@ -2,6 +2,9 @@
 
 # Selective ordered export
 
+Historical directory measurements before the contents-only descriptor layout;
+the B-tree measurements are unchanged by that layout update.
+
 Bun 1.4.5, five alternating trials, memory storage. Medians below; *raw trials*[~][selective-ordered]
 assert identical canonical root digests for both paths. Counts are adapter calls,
 not newly allocated objects.

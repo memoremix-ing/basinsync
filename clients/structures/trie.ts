@@ -38,9 +38,12 @@ export interface Consumer<V, M> {
   entry(key: Uint8Array, value: V): M | Promise<M>;
   combine(summaries: readonly M[]): M | Promise<M>;
   edges?(value: V): Edge[];
+  /** Physical inline cost (1..1280); physical rewrites must preserve summaries. */
+  trieInlineCost?(value: V): number;
+  trieExternalize?(basin: Basin, value: V): V | Promise<V>;
 }
 export { composableConsumer } from "./summary";
-export const plain: Consumer<unknown, null> = composableConsumer<unknown, null>(
+export const plain = composableConsumer<unknown, null>(
   {
     migration: 0,
     empty: null,
@@ -48,7 +51,7 @@ export const plain: Consumer<unknown, null> = composableConsumer<unknown, null>(
     combine: () => null,
   },
   { keyIndependent: true },
-);
+) as Pick<Consumer<unknown, null>, "migration" | "empty" | "entry" | "combine">;
 type Row<V, M> = { key: Uint8Array; full: Uint8Array; value: V; summary: M };
 type Local<V, M> = TrieNode<V, M> | Edge;
 export const starts = (k: Uint8Array, p: Uint8Array) =>
@@ -229,6 +232,16 @@ export class Trie<V = unknown, M = null> {
     rows.sort((a, b) => compare(a.key, b.key));
     for (let i = 1; i < rows.length; i++)
       check(!equal(rows[i - 1].key, rows[i].key), "duplicate trie key");
+    const cost = (v: V) => {
+      const n = c.trieInlineCost?.(v) ?? 1;
+      check(
+        Number.isSafeInteger(n) && n >= 1 && n <= 1280,
+        "invalid trie inline cost",
+      );
+      return n;
+    };
+    const rowCost = (rs: Row<V, M>[]) =>
+      c.trieInlineCost ? rs.reduce((n, r) => n + cost(r.value), 0) : rs.length;
     const outgoing = new WeakMap<object, Edge[]>();
     const build = async (
       input: Row<V, M>[],
@@ -283,7 +296,14 @@ export class Trie<V = unknown, M = null> {
         return trim(low);
       };
       let highBuckets: Row<V, M>[][] | undefined;
-      if (rows.length > 255) {
+      if (
+        rows.length > 255 ||
+        (c.trieInlineCost &&
+          (rowCost(rows) > 1280 ||
+            (c.edges &&
+              distinct(rows.flatMap((r) => c.edges!(r.value))).length >
+                (basin.options.maxDegree ?? 320))))
+      ) {
         own = rows.filter((r) => r.key.length === 0);
         members = Array(16).fill(null);
         highBuckets = Array.from({ length: 16 }, () => []);
@@ -313,7 +333,7 @@ export class Trie<V = unknown, M = null> {
         return distinct(result);
       };
       const inlineCount = () =>
-        own.length +
+        rowCost(own) +
         (members ?? []).reduce(
           (n, m) =>
             n +
@@ -324,7 +344,9 @@ export class Trie<V = unknown, M = null> {
                     (s, t) => s + (!t || Array.isArray(t) ? 0 : t[5].inlined),
                     0,
                   )
-                : m.keys.length),
+                : c.trieInlineCost
+                  ? m.values.reduce((s, v) => s + cost(v), 0)
+                  : m.keys.length),
           0,
         );
       if (
@@ -334,7 +356,10 @@ export class Trie<V = unknown, M = null> {
       ) {
         // Value edges can fill small high-nibble groups too. Turn those groups into
         // low-nibble nodes before externalizing, so physical degree stays bounded.
-        if (refs().length > (basin.options.maxDegree ?? 320))
+        if (
+          refs().length > (basin.options.maxDegree ?? 320) ||
+          c.trieInlineCost
+        )
           for (let high = 0; high < members.length; high++) {
             const m = members[high];
             if (m && !Array.isArray(m))
@@ -349,6 +374,15 @@ export class Trie<V = unknown, M = null> {
             }
         edged = true;
       }
+      if (c.trieExternalize && refs().length > (basin.options.maxDegree ?? 320))
+        own = await Promise.all(
+          own.map(async (r) => ({
+            ...r,
+            value: await c.trieExternalize!(basin, r.value),
+          })),
+        );
+      if (c.trieInlineCost)
+        check(inlineCount() <= 1280, "trie inline budget exceeded");
       h.inlined = inlineCount();
       h.degree = (members ?? []).reduce(
         (n, m) =>

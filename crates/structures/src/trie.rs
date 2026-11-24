@@ -16,6 +16,15 @@ pub trait Consumer {
     fn empty(&self) -> Value;
     fn entry(&self, key: &[u8], value: &Value) -> Result<Value>;
     fn combine(&self, parts: &[Value]) -> Result<Value>;
+    fn trie_inline_cost(&self) -> Option<fn(&Value) -> Result<usize>> {
+        None
+    }
+    fn trie_externalize<S: Storage>(&self, _b: &mut Basin<S>, value: &Value) -> Result<Value>
+    where
+        Self: Sized,
+    {
+        Ok(value.clone())
+    }
     fn edges(&self, _value: &Value) -> Result<Vec<Edge>> {
         Ok(vec![])
     }
@@ -120,11 +129,21 @@ fn refs<C: Consumer>(own: &[Row], members: &[Option<Member>], c: &C) -> Result<V
     }
     basin::distinct(&edges)
 }
-fn inlined(own: &[Row], members: &[Option<Member>]) -> Result<usize> {
-    let mut n = own.len();
+fn row_cost<C: Consumer>(rows: &[Row], c: &C) -> Result<usize> {
+    let Some(cost) = c.trie_inline_cost() else {
+        return Ok(rows.len());
+    };
+    rows.iter().try_fold(0usize, |n, r| {
+        let v = cost(&r.value)?;
+        ensure!((1..=1280).contains(&v), "invalid trie inline cost");
+        Ok(n + v)
+    })
+}
+fn inlined<C: Consumer>(own: &[Row], members: &[Option<Member>], c: &C) -> Result<usize> {
+    let mut n = row_cost(own, c)?;
     for m in members.iter().flatten() {
         n += match m {
-            Member::Group(g) => g.len(),
+            Member::Group(g) => row_cost(g, c)?,
             Member::Nodes(v) => v
                 .iter()
                 .flatten()
@@ -201,7 +220,10 @@ fn build_rows<S: Storage, C: Consumer>(
     let mut own = rows.clone();
     let mut members = Vec::<Option<Member>>::new();
     let mut edged = Null;
-    if rows.len() > 255 {
+    if rows.len() > 255
+        || (c.trie_inline_cost().is_some()
+            && (row_cost(&rows, c)? > 1280 || refs(&rows, &[], c)?.len() > basin.max_degree))
+    {
         own = rows.iter().filter(|r| r.key.is_empty()).cloned().collect();
         for high in 0..16 {
             let bucket = rows
@@ -223,9 +245,9 @@ fn build_rows<S: Storage, C: Consumer>(
         edged = Bool(false);
     }
     if !members.is_empty()
-        && (inlined(&own, &members)? > 1280 || refs(&own, &members, c)?.len() > basin.max_degree)
+        && (inlined(&own, &members, c)? > 1280 || refs(&own, &members, c)?.len() > basin.max_degree)
     {
-        if refs(&own, &members, c)?.len() > basin.max_degree {
+        if refs(&own, &members, c)?.len() > basin.max_degree || c.trie_inline_cost().is_some() {
             for (high, m) in members.iter_mut().enumerate() {
                 if matches!(m, Some(Member::Group(_))) {
                     let bucket = rows
@@ -248,8 +270,19 @@ fn build_rows<S: Storage, C: Consumer>(
         }
         edged = Bool(true);
     }
+    if c.trie_inline_cost().is_some() && refs(&own, &members, c)?.len() > basin.max_degree {
+        for r in &mut own {
+            r.value = c.trie_externalize(basin, &r.value)?;
+        }
+    }
+    if c.trie_inline_cost().is_some() {
+        ensure!(
+            inlined(&own, &members, c)? <= 1280,
+            "trie inline budget exceeded"
+        );
+    }
     let edges = refs(&own, &members, c)?;
-    let inlined = inlined(&own, &members)?;
+    let inlined = inlined(&own, &members, c)?;
     let degree = members
         .iter()
         .flatten()

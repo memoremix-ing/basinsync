@@ -119,6 +119,29 @@ cases.push({
   ]),
   queries: [0n, 17000n, 19999n, 20000n],
 });
+cases.push({
+  kind: "pages",
+  seed,
+  pages: Array.from({ length: 20000 }, (_, i) => [
+    65536n + BigInt(i),
+    new Uint8Array([i >> 8, i & 255]),
+  ]),
+  queries: [65535n, 65536n, 65551n, 75536n, 85535n, 85536n],
+});
+cases.push({
+  kind: "volume",
+  seed,
+  files: [
+    ...Array.from({ length: 320 }, (_, i) => [
+      `/a/f${i}`,
+      new Uint8Array([i >> 8, i & 255]),
+    ]),
+    ...Array.from({ length: 1000 }, (_, i) => [
+      `/ab/f${i}`,
+      new Uint8Array([(i % 320) >> 8, (i % 320) & 255]),
+    ]),
+  ],
+});
 for (const bits of [1, 2, 3, 4, 6, 7, 8]) {
   const n = 2 ** bits;
   cases.push({

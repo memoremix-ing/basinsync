@@ -150,7 +150,9 @@ TypeScript selectively exports compatible trie, B-tree and directory subtrees;
 consumer summaries explicitly opt into composable reuse. Directory ancestor
 hashes still scan immediate entries; canonical B-tree rank shifts can repack
 siblings. *Export measurements*[~][selective-ordered] count requests separately
-from new objects. Native readers interoperate with these snapshots.
+from new objects. Native readers interoperate with these snapshots. Directory
+contents tries now directly retain file blocks; blocks have page-trie boundary
+spines, with no device trie or link vector.
 
 Trie and vector editors offer explicit owner-tagged scopes. *Browser CPU
 measurements*[~][client-browser] cover logical structures; *Rust/Wasm measurements*[~][wasm-cpu]

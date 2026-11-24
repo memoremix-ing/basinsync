@@ -10,11 +10,13 @@ import (
 const TriePath = ".trie-node/"
 
 type Consumer struct {
-	Migration int64
-	Empty     any
-	Entry     func([]byte, any) (any, error)
-	Combine   func([]any) (any, error)
-	Edges     func(any) ([]Edge, error)
+	Migration       int64
+	Empty           any
+	Entry           func([]byte, any) (any, error)
+	Combine         func([]any) (any, error)
+	Edges           func(any) ([]Edge, error)
+	TrieInlineCost  func(any) int
+	TrieExternalize func(*Basin, any) any
 }
 
 func PlainConsumer() Consumer {
@@ -116,14 +118,29 @@ func refs(own []row, members []*member, c Consumer) []Edge {
 	}
 	return distinct(out)
 }
-func inlined(own []row, members []*member) int {
-	n := len(own)
+func rowCost(rows []row, c Consumer) int {
+	if c.TrieInlineCost == nil {
+		return len(rows)
+	}
+	n := 0
+	for _, r := range rows {
+		v := 1
+		if c.TrieInlineCost != nil {
+			v = c.TrieInlineCost(r.value)
+		}
+		require(v >= 1 && v <= 1280, "invalid trie inline cost")
+		n += v
+	}
+	return n
+}
+func inlined(own []row, members []*member, c Consumer) int {
+	n := rowCost(own, c)
 	for _, m := range members {
 		if m == nil {
 			continue
 		}
 		if m.nodes == nil {
-			n += len(m.group)
+			n += rowCost(m.group, c)
 		} else {
 			for _, ch := range m.nodes {
 				if ch != nil && ch.local != nil {
@@ -199,7 +216,7 @@ func buildRows(b *Basin, input []row, c Consumer, depth int) Built {
 	own := rows
 	var members []*member
 	var edged any
-	if len(rows) > 255 {
+	if len(rows) > 255 || (c.TrieInlineCost != nil && (rowCost(rows, c) > 1280 || len(refs(rows, nil, c)) > b.MaxDegree)) {
 		own = []row{}
 		for _, r := range rows {
 			if len(r.key) == 0 {
@@ -225,8 +242,8 @@ func buildRows(b *Basin, input []row, c Consumer, depth int) Built {
 		members = trimMembers(members)
 		edged = false
 	}
-	if len(members) > 0 && (inlined(own, members) > 1280 || len(refs(own, members, c)) > b.MaxDegree) {
-		if len(refs(own, members, c)) > b.MaxDegree {
+	if len(members) > 0 && (inlined(own, members, c) > 1280 || len(refs(own, members, c)) > b.MaxDegree) {
+		if len(refs(own, members, c)) > b.MaxDegree || c.TrieInlineCost != nil {
 			for high, m := range members {
 				if m != nil && m.nodes == nil {
 					members[high] = &member{nodes: split(b, m.group, c, depth)}
@@ -244,6 +261,14 @@ func buildRows(b *Basin, input []row, c Consumer, depth int) Built {
 			}
 		}
 		edged = true
+	}
+	if c.TrieExternalize != nil && len(refs(own, members, c)) > b.MaxDegree {
+		for i := range own {
+			own[i].value = c.TrieExternalize(b, own[i].value)
+		}
+	}
+	if c.TrieInlineCost != nil {
+		require(inlined(own, members, c) <= 1280, "trie inline budget exceeded")
 	}
 	edges := refs(own, members, c)
 	degree := 0
@@ -279,7 +304,7 @@ func buildRows(b *Basin, input []row, c Consumer, depth int) Built {
 	if len(input) > 0 {
 		lengths = vector(int64(minLen), int64(maxLen))
 	}
-	header := map[string]any{"count": big.NewInt(int64(len(input))), "nullity": big.NewInt(int64(nullity)), "degree": int64(degree), "inlined": int64(inlined(own, members)), "prefix": prefix, "keys": bounds(keys), "lengths": lengths}
+	header := map[string]any{"count": big.NewInt(int64(len(input))), "nullity": big.NewInt(int64(nullity)), "degree": int64(degree), "inlined": int64(inlined(own, members, c)), "prefix": prefix, "keys": bounds(keys), "lengths": lengths}
 	node := Node{"0": Symbol{Name: "species"}, "1": Domain, "2": TriePath, "3": query(edges, b.MaxDegree, b.MaxHeight), "4": int64(0), "5": header, "6": vector(c.Migration, summary, group(own), nested, edged)}
 	return Built{node, edges}
 }

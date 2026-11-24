@@ -62,69 +62,61 @@ type TrieNest<
       edged: true, // (when no nodes are directly inlined members)
     ];
 
-type SyncDevice_M0 = TrieNode_S0<{
-  0: { Summary: null; Value: [edge: BasinEdge_S0<SyncBlock_M0>] };
-}>;
-
 interface SyncVolume_S0 extends BasinNode_S0<
   "sync.memoremix.com", ".sync-volume/", null,
-  { 0: [summary: null, device: SyncDevice_M0 | BasinEdge_S0<SyncDevice_M0>,
-    root: SyncDirectory_M0 | SyncDirectoryEdge_M0] }
+  { 0: [summary: null, root: SyncDirectory_M0] }
 > {}
 
-interface SyncDirectory_M0 extends BasinNode_S0<
-  "sync.memoremix.com", ".sync-directory/",
-  { sha384: Uint8Array; inlined: U32; nesting: U32 },
-  { 0: [summary: null, contents: TrieNode_S0<{
-    0: { Summary: null; Value: SyncDirectoryEntry_M0 };
-  }>] }
-> {}
+type SyncDirectory_M0 = {
+  sha384: Uint8Array;
+  inlined: U32;
+  nesting: U32;
+  contents: SyncDirectoryContents_M0 | SyncDirectoryContentsEdge_M0;
+};
+
+type SyncDirectoryContents_M0 = TrieNode_S0<{
+  0: { Summary: null; Value: SyncDirectoryEntry_M0 };
+}>;
+
+type SyncDirectoryContentsEdge_M0 = BasinEdge_S0<BasinNode_S0<
+  "sync.memoremix.com", ".trie-node/", SyncDirectoryContents_M0[5], {0:[summary:null]}
+>>;
 
 type SyncDirectoryEntry_M0 = SyncFile_M0 | [
-  folder: true, sha384: Uint8Array, directory: SyncDirectory_M0 | SyncDirectoryEdge_M0
+  folder: true, directory: SyncDirectory_M0
 ];
-type SyncDirectoryEdge_M0 = BasinEdge_S0<BasinNode_S0<
-  "sync.memoremix.com", ".sync-directory/", SyncDirectory_M0[5], {0:[summary:null]}
->>;
 
 type SyncFile_M0 = [
   folder: false,
-  brombergSL2: Uint8Array, // (cache of linked block's own digest)
-  link: SyncLink_M0<SyncBlock_M0>,
+  brombergSL2: Uint8Array,
+  edge: BasinEdge_S0<SyncBlock_M0>,
 ];
 
 type SyncLink_M0<LazyT extends BasinNode_S0<string, string>> = {
   height: U32;
   version: U32;
   entropy: Uint8Array;
-  revision: string; // node allocation revision
-
+  revision: string;
   [Symbol.unscopables]?: LazyT;
 };
 
-interface SyncBlock_M0
-  extends BasinNode_S0<
-    "sync.memoremix.com",
-    ".sync-block/",
-    null,
-    {
-      0: [
-        summary: null,
-        // (lexidecmal trie keys encoded from sparse page numbers)
-        pages: SyncSector_M0 | BasinEdge_S0<SyncSector_M0>,
-        leaves: SyncLeaves_M0 | BasinEdge_S0<SyncLeaves_M0>, // dense, page-sorted; seven bits per level
-        leading: Array<null | SyncLink_M0<SyncLeaves_M0>>, // basin height indexes; exclude vector root
-        lagging: Array<null | SyncLink_M0<SyncLeaves_M0>>,
-      ];
-    }
-  > {}
+interface SyncBlock_M0 extends BasinNode_S0<
+  "sync.memoremix.com", ".sync-block/", null,
+  {
+    0: [
+      summary: null,
+      pages: SyncSector_M0 | BasinEdge_S0<SyncSector_M0>,
+      leading: Array<null | SyncPageLink_M0>,
+      lagging: Array<null | SyncPageLink_M0>,
+    ];
+  }
+> {}
 
-type SyncLeaves_M0 = VectorNode_S0<{
-  0: {
-    Summary: { pages: Bounds<bigint> };
-    Value: [page: bigint, span: U32, link: SyncLink_M0<SyncSector_M0>];
-  };
-}>;
+type SyncPageLink_M0 = {
+  prefix: Uint8Array; // absolute key prefix removed before traversing the target
+  sha384: Uint8Array;
+  link: SyncLink_M0<SyncSector_M0>;
+};
 
 type SyncSector_M0 = TrieNode_S0<{
   0: {

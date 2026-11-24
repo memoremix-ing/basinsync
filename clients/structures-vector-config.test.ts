@@ -10,7 +10,7 @@ import {
 import { Vector, VectorEditor } from "./structures/vector";
 import { VectorMap } from "./structures/logical-vector";
 import { plain, Trie } from "./structures/trie";
-import { Volume, buildBlock, devices, sectors } from "./structures/volume";
+import { Volume, buildBlock, sectors } from "./structures/volume";
 import { produceTrie, produceTrieProxy, TrieEditor } from "./structures";
 const basin = () =>
   new Basin(new MemoryStorage(), { seed: new Uint8Array(32).fill(42) });
@@ -151,7 +151,7 @@ test("public explicit and Proxy entrypoints support scoped edits", () => {
   expect(e.get(utf8("file"))!.meta.n).toBe(1);
 });
 
-test("block shortcuts use an inline seven-bit vector and preserve strong sector retention", async () => {
+test("blocks retain page tries with only leading and lagging page spines", async () => {
   const b = basin(),
     block = await buildBlock(b, [
       [0n, utf8("hello")],
@@ -159,11 +159,9 @@ test("block shortcuts use an inline seven-bit vector and preserve strong sector 
     ]);
   const r = await b.load(block.edge),
     f = r.get("6");
-  expect(f.length()).toBe(6);
-  expect(f.get(3).isMap()).toBe(true);
-  expect(object<any>(f.get(3).get("5")).bits).toBe(7);
+  expect(f.length()).toBe(5);
+  expect(object<unknown[]>(f.get(3))).toEqual([]);
   expect(object<unknown[]>(f.get(4))).toEqual([]);
-  expect(object<unknown[]>(f.get(5))).toEqual([]);
   const v = await Volume.fromBlocks(b, [["/file", block]]);
   expect(await v.page("/file", 4n)).toEqual(utf8("later"));
   expect(await v.page("/file", 3n)).toBeUndefined();
@@ -215,24 +213,28 @@ test("seven-bit vector boundary stacks name non-root nodes at their actual basin
   expect(await reader.get(98304n)).toBe(98304);
 });
 
-test("missing shortcut-index objects fall back to the retained page trie", async () => {
-  const { capability, link } = await import("./structures/core");
+test("unavailable page spine targets fall back to the retaining trie", async () => {
   const b = basin(),
-    storage = b.storage as MemoryStorage;
-  const original = await buildBlock(b, [[0n, utf8("hello")]]);
-  const shortcut = await Vector.build(b, [[0n, 1, null]], plain, { bits: 7 });
+    storage = b.storage as MemoryStorage,
+    original = await buildBlock(
+      b,
+      Array.from(
+        { length: 20000 },
+        (_, i) =>
+          [BigInt(i), new Uint8Array([i & 255])] as [bigint, Uint8Array],
+      ),
+    );
   const n = object<Node>(await b.load(original.edge));
-  n[6][3] = shortcut.root;
-  const edge = await b.seal(n, [shortcut.root]);
-  const volume = await Volume.fromBlocks(b, [
-    ["/file", { edge, digest: original.digest }],
-  ]);
-  storage.objects.delete(capability(link(shortcut.root)));
+  expect((n[6][4] as unknown[]).some(Boolean)).toBe(true);
+  const volume = await Volume.fromBlocks(b, [["/file", original]]);
+  let resolves = 0;
+  storage.resolve = async () => {
+    resolves++;
+    return undefined;
+  };
   const reader = new Volume(new Basin(storage), volume.root);
-  expect(await reader.read("/file", { start: 0, length: 5 })).toEqual(
-    utf8("hello"),
+  expect(await reader.page("/file", 19999n)).toEqual(
+    new Uint8Array([19999 & 255]),
   );
-  expect(
-    await reader.read("/file", { start: 0, length: 5, shortcuts: false }),
-  ).toEqual(utf8("hello"));
+  expect(resolves).toBeGreaterThan(0);
 });

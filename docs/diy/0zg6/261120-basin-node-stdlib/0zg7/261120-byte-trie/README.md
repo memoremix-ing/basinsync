@@ -8,6 +8,7 @@ prerequisites:
 [basin]: <../../../../../glossary/basin.md>
 [block-index]: <benchmark/block-index.md>
 [client-costs]: <benchmark/client-costs.md>
+[directory-descriptors]: <benchmark/directory-descriptors.md>
 [diy/0zg6/261120-basin-node-stdlib]: <../../README.md>
 [diy/0zg6/261120-basin-node-stdlib/0zg7/261123-bitmapped-vector-trie]: <../261123-bitmapped-vector-trie/README.md>
 [envbuf]: <../../../../../glossary/envbuf.md>
@@ -22,6 +23,7 @@ prerequisites:
 [node-height]: <../../../../../glossary/node-height.md>
 [object-keys]: <../../../../../object-keys.md>
 [owner-mutation]: <benchmark/owner-mutation.md>
+[page-spines]: <benchmark/page-spines.md>
 [promoted-costs]: <benchmark/promoted-costs.md>
 [revision]: <../../../../../glossary/revision.md>
 [selective-export]: <benchmark/selective-export.md>
@@ -110,46 +112,44 @@ type TrieNest<
 
 ```
 
-## Volume and directory shortcuts
+## Volume and directories
 
 ```ts
-type SyncDevice_M0 = TrieNode_S0<{
-  0: { Summary: null; Value: [edge: BasinEdge_S0<SyncBlock_M0>] };
-}>;
-
 interface SyncVolume_S0 extends BasinNode_S0<
   "sync.memoremix.com", ".sync-volume/", null,
-  { 0: [summary: null, device: SyncDevice_M0 | BasinEdge_S0<SyncDevice_M0>,
-    root: SyncDirectory_M0 | SyncDirectoryEdge_M0] }
+  { 0: [summary: null, root: SyncDirectory_M0] }
 > {}
 
-interface SyncDirectory_M0 extends BasinNode_S0<
-  "sync.memoremix.com", ".sync-directory/",
-  { sha384: Uint8Array; inlined: U32; nesting: U32 },
-  { 0: [summary: null, contents: TrieNode_S0<{
-    0: { Summary: null; Value: SyncDirectoryEntry_M0 };
-  }>] }
-> {}
+type SyncDirectory_M0 = {
+  sha384: Uint8Array;
+  inlined: U32;
+  nesting: U32;
+  contents: SyncDirectoryContents_M0 | SyncDirectoryContentsEdge_M0;
+};
+
+type SyncDirectoryContents_M0 = TrieNode_S0<{
+  0: { Summary: null; Value: SyncDirectoryEntry_M0 };
+}>;
+
+type SyncDirectoryContentsEdge_M0 = BasinEdge_S0<BasinNode_S0<
+  "sync.memoremix.com", ".trie-node/", SyncDirectoryContents_M0[5], {0:[summary:null]}
+>>;
 
 type SyncDirectoryEntry_M0 = SyncFile_M0 | [
-  folder: true, sha384: Uint8Array, directory: SyncDirectory_M0 | SyncDirectoryEdge_M0
+  folder: true, directory: SyncDirectory_M0
 ];
-type SyncDirectoryEdge_M0 = BasinEdge_S0<BasinNode_S0<
-  "sync.memoremix.com", ".sync-directory/", SyncDirectory_M0[5], {0:[summary:null]}
->>;
 
 type SyncFile_M0 = [
   folder: false,
-  brombergSL2: Uint8Array, // (cache of linked block's own digest)
-  link: SyncLink_M0<SyncBlock_M0>,
+  brombergSL2: Uint8Array,
+  edge: BasinEdge_S0<SyncBlock_M0>,
 ];
 
 type SyncLink_M0<LazyT extends BasinNode_S0<string, string>> = {
   height: U32;
   version: U32;
   entropy: Uint8Array;
-  revision: string; // node allocation revision
-
+  revision: string;
   [Symbol.unscopables]?: LazyT;
 };
 
@@ -158,29 +158,23 @@ type SyncLink_M0<LazyT extends BasinNode_S0<string, string>> = {
 ## Blocks and sectors
 
 ```ts
-interface SyncBlock_M0
-  extends BasinNode_S0<
-    "sync.memoremix.com",
-    ".sync-block/",
-    null,
-    {
-      0: [
-        summary: null,
-        // (lexidecmal trie keys encoded from sparse page numbers)
-        pages: SyncSector_M0 | BasinEdge_S0<SyncSector_M0>,
-        leaves: SyncLeaves_M0 | BasinEdge_S0<SyncLeaves_M0>, // dense, page-sorted; seven bits per level
-        leading: Array<null | SyncLink_M0<SyncLeaves_M0>>, // basin height indexes; exclude vector root
-        lagging: Array<null | SyncLink_M0<SyncLeaves_M0>>,
-      ];
-    }
-  > {}
+interface SyncBlock_M0 extends BasinNode_S0<
+  "sync.memoremix.com", ".sync-block/", null,
+  {
+    0: [
+      summary: null,
+      pages: SyncSector_M0 | BasinEdge_S0<SyncSector_M0>,
+      leading: Array<null | SyncPageLink_M0>,
+      lagging: Array<null | SyncPageLink_M0>,
+    ];
+  }
+> {}
 
-type SyncLeaves_M0 = VectorNode_S0<{
-  0: {
-    Summary: { pages: Bounds<bigint> };
-    Value: [page: bigint, span: U32, link: SyncLink_M0<SyncSector_M0>];
-  };
-}>;
+type SyncPageLink_M0 = {
+  prefix: Uint8Array; // absolute key prefix removed before traversing the target
+  sha384: Uint8Array;
+  link: SyncLink_M0<SyncSector_M0>;
+};
 
 type SyncSector_M0 = TrieNode_S0<{
   0: {
@@ -263,13 +257,9 @@ are `[0, 0]`. Its group contains one empty suffix and one null value.
 ## Strong retention and weak shortcuts
 
 Use *strong basin edges*[~][strong-edge] as the retention graph declared to the
-*Heap*[~][heap]. A *weak link*[~][weak-link] supplies a shortcut without adding a
-retainer. The volume's `device` trie can strongly retain file blocks, while its
-adjacent directory tree links directly to those blocks; each block can similarly
-cache direct links to sector roots/leaves. Reads can follow shortcuts immediately,
-without first traversing the retaining trie. Its strong references still need
-explicit declaration to basinsync; serializing them inside opaque values does
-not establish retention.
+*Heap*[~][heap]. Directory file entries directly retain blocks; contents tries
+retain nested directory contents. Declare these references explicitly to basinsync;
+serializing them inside opaque values does not establish retention.
 
 Tie shortcut data to the same trusted root/version and validate its expected
 identity. Missing or stale shortcuts fall back to the authoritative trie; a
@@ -278,27 +268,29 @@ must not contribute to retention *degree*[~][node-degree] or
 *height*[~][node-height], nor be accidentally collected as declared edges.
 Their address may still carry the target's *height*[~][node-height].
 
-Store all page-sorted leaf shortcuts in a dense seven-bit/128-way
-*vector*[~][diy/0zg6/261120-basin-node-stdlib/0zg7/261123-bitmapped-vector-trie].
-Inline its root when packing permits; its ordinary *basin edges*[~][strong-edge]
-retain shortcut-index nodes, while leaf links remain *weak*[~][weak-link].
-`leading` and `lagging` cache the first/last paths' stored, non-root vector nodes,
-indexed from *basin-node height*[~][node-height] zero; missing heights are null.
-These links do not add retainers. Replicate inclusive page bounds in vector
-summaries; reverse search prunes branches whose first page exceeds the target.
-Point reads use only inline/cached shortcuts, falling back to the device/sector
-trie without fetching a secondary index merely to discover a hint.
+Each block's `leading` and `lagging` spines point to stored, non-root page-trie
+nodes on its first/last paths, indexed by *basin-node height*[~][node-height];
+missing heights are null. Each *weak hint*[~][weak-link] carries the incoming key
+prefix, target SHA-384 and allocation link. Validate identity and digest, remove
+the prefix, and check target bounds before reading. Missing/stale hints fall back
+to strong traversal; ready page reads need no shortcut lookup.
 
-Directories use `.sync-directory/` *basin nodes*[~][node] with a UTF-8 basename
-trie containing file entries or `[true, sha384, directory]` entries. The directory
-source and volume's device trie can be inline or *basin edges*[~][strong-edge].
-Directory hashes retain the basename/kind/child-digest framing above. File links
-remain *weak*[~][weak-link]; the device trie retains file blocks.
+A directory is a descriptor whose UTF-8 basename contents trie may be inline or
+an *edge*[~][strong-edge]. This removes a separate wrapper-node species and gives
+the same trie responsibility for packing, search and retention. Directory hashes
+retain basename/kind/child-digest framing. File entries carry strong block edges.
 
-Budget nested inline directory entries conservatively against 1,280 and cap inline
-directory nesting at 32; if either budget or the edge limit is exceeded, seal the
-immediate child directories. The basename trie independently pages wide directories.
-`stat` reads entry metadata; `list` loads only the requested directory index.
+Budget inline directory contents against 1,280 entries and nesting 32. Count along
+inline trie/directory paths; a stored contents-trie edge ends that inline path.
+A directory entry costs one plus the inline entries in its child contents; an
+edged child costs one. Apply that cost at every stored contents-trie boundary,
+including groups with fewer than 255 names; expand/split groups before sealing
+children. Externalize a prefix-ending directory's contents if its outgoing edges
+would exceed the degree limit. Mirror the inline count in the descriptor. These
+physical rewrites preserve the entry's logical digest and consumer summary.
+Seal child contents when nesting, size or physical degree requires it. The
+basename trie independently pages wide directories. `stat` reads metadata and
+`list` scans the requested contents trie. There is no separate device index.
 
 Before choosing a shortcut layout, measure first-useful-result latency, fetched
 bytes, request count, and update churn against ordinary trie traversal. Keep
@@ -398,8 +390,8 @@ Copy/move reject missing sources and destinations inside them; moving onto itsel
 is a no-op. These are byte prefixes: use `/dir/` to distinguish `/dir2/`.
 Stored export rebuilds queries, headers and consumer summaries for the new keys;
 logical handles defer that work until export. The footer starts with migration at
-index 0 and summary at index 1. Moving file paths also requires coordinating the
-separate directory tree; file checksums and allocation links remain unchanged.
+index 0 and summary at index 1. Volume filesystem operations instead relocate
+directory entries and contents handles; file checksums and block edges remain unchanged.
 
 `TrieView.from(trie)` provides lazy equivalents, recording source snapshots,
 prefix mounts/tombstones and point overrides. Resolve the longest matching prefix;
@@ -463,7 +455,7 @@ Replace byte fields and use array `splice` instead of deleting indices. Accessor
 nonenumerable/symbol property keys and custom prototypes are unsupported.
 See the *subtree/COW experiments*[~][subtree-cow] for performance and code costs.
 
-`Volume.mv`, `cp` and `rm` coordinate directory entries/hashes with device keys,
+`Volume.mv`, `cp` and `rm` update directory entries and ancestor hashes,
 preserving empty directories and sharing retained blocks without reading file
 bodies. Paths are absolute and destinations exact; parents must exist. Reject
 collisions unless `replace: true` permits the same kind, with destination
@@ -479,13 +471,14 @@ const removed = await copied.rm("/parent/new", { recursive: true });
 ```
 
 `Volume.update()` rebuilds changed file blocks and reuses unchanged descriptors.
-Directory edits open affected paths and reuse untouched stored subdirectories;
+Directory edits open affected paths and reuse untouched contents subtries;
 ancestor hashes still require their immediate names and child digests. Server-side retention
 and collection govern eventual storage reclamation.
 
 The *initial shortcut traces*[~][shortcut-reads] exposed extra secondary-index
-GETs. The *revised navigation traces*[~][shortcut-navigation] measure ready-only
-hints and paged directories. Prefer measured object-fetch paths over logical
+GETs. The *earlier navigation traces*[~][shortcut-navigation] measured the prior layout.
+The *page-spine traces*[~][page-spines] exercise the current retention graph and
+boundary paths. Prefer measured object-fetch paths over logical
 branching-factor comparisons.
 
 Pruning
@@ -506,13 +499,12 @@ Compare the three libraries using the *CPU and storage read measurements*[~][tri
 The 1,280-value inlining trigger is currently fixed for tries, vectors and block
 packing; vector `bits`, physical degree/height and object-byte limits are configurable.
 Trie groups cap at 255 entries. Small high-nibble groups can remain inline after
-larger children are sealed, so 1,280 is not a strict object-wide bound.
+larger children are sealed, so 1,280 is not a strict object-wide bound for ordinary
+byte tries. Directory contents use the weighted, per-body limit above.
 
-`buildBlock(..., { leafIndex: false })` omits optional leaf-index entries while
-retaining the empty index shape. Point reads still use the authoritative page trie.
-Boundary index stacks are currently consumed only by the navigation experiment;
-production point reads use ready-only leaf hints.
-
-The *block-index traces*[~][block-index] found no GET savings from the leaf vector,
-including explicit boundary spines. The *selective export measurements*[~][selective-ordered]
-separate directory/ancestor work from unchanged bodies.
+The historical *block-index traces*[~][block-index] motivated removing the leaf
+vector. Page boundary spines now target the authoritative page trie directly.
+The *selective export measurements*[~][selective-ordered] separate directory and
+ancestor work from unchanged bodies; earlier measurements used the prior layout.
+Current *descriptor export measurements*[~][directory-descriptors] include the
+weighted contents-trie packing.

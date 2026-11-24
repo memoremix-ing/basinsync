@@ -1,9 +1,13 @@
 [diy/0zg6/261120-basin-node-stdlib/0zg7/261120-byte-trie]: <../README.md>
 [node]: <../../../../../../glossary/node.md>
+[page-spines]: <page-spines.md>
 [shortcut-reads]: <shortcut-reads.json>
 [weak-link]: <../../../../../../glossary/weak-link.md>
 
 # Shortcut request traces
+
+Historical measurements of the prior device/leaf-index layout; see the current
+*page-spine measurements*[~][page-spines].
 
 Bun 1.4.5; fresh read cache for each case, one-byte sparse pages, and an in-memory
 resolver doing no I/O. These are request/byte counts, not network timing or
