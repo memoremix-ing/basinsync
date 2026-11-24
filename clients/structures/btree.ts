@@ -18,6 +18,9 @@ import { Reference } from "../flexbuffer";
 import { type Consumer } from "./trie";
 import { pack, built, type Built } from "./packed";
 import { type Operation, resolveOperation } from "./operation";
+import { exportBTree, type BTreeChange } from "./btree-export";
+import { summaryReuse } from "./summary";
+import { TrieMap } from "./logical-trie";
 import { BTreeMap } from "./logical-btree";
 export { BTreeMap } from "./logical-btree";
 export const BTREE = ".btree-node/";
@@ -259,10 +262,8 @@ export class BTree<V = unknown, M = null> {
   async get(raw: Uint8Array | string): Promise<V | undefined> {
     return resolveOperation(this.getOrDefer(raw));
   }
-  async edit(): Promise<BTreeEditor<V, M>> {
-    const rows: [Uint8Array, V][] = [];
-    for await (const row of this.entries()) rows.push(row);
-    return new BTreeEditor(this.basin, this.consumer, BTreeMap.from(rows));
+  edit(): Promise<BTreeEditor<V, M>> {
+    return BTreeEditor.load(this);
   }
   async *entries(
     from: Uint8Array | string = new Uint8Array(),
@@ -322,6 +323,33 @@ export class BTree<V = unknown, M = null> {
 
 /** In-memory edits path-copy; store performs canonical full export. */
 export class BTreeEditor<V, M = null> {
+  private plan?: {
+    source: BTree<V, M>;
+    changes: TrieMap<BTreeChange<V>>;
+    policy: string;
+  };
+  static async load<V, M>(source: BTree<V, M>) {
+    const rows: [Uint8Array, V][] = [];
+    for await (const row of source.entries()) rows.push(row);
+    const editor = BTreeEditor.from(source.basin, rows, source.consumer);
+    editor.plan = {
+      source,
+      changes: TrieMap.from([]),
+      policy: JSON.stringify(source.basin.options),
+    };
+    return editor;
+  }
+  private changed(
+    tree: BTreeMap<V>,
+    key: Uint8Array | string,
+    change: BTreeChange<V>,
+  ) {
+    const next = new BTreeEditor(this.basin, this.consumer, tree);
+    if (this.plan)
+      next.plan = { ...this.plan, changes: this.plan.changes.set(key, change) };
+    return next;
+  }
+
   constructor(
     readonly basin: Basin,
     readonly consumer: Consumer<V, M>,
@@ -345,20 +373,41 @@ export class BTreeEditor<V, M = null> {
   }
   set(k: Uint8Array | string, v: V) {
     const next = this.tree.set(k, v);
-    return next === this.tree
-      ? this
-      : new BTreeEditor(this.basin, this.consumer, next);
+    return next === this.tree ? this : this.changed(next, k, { set: v });
   }
   delete(k: Uint8Array | string) {
     const next = this.tree.delete(k);
-    return next === this.tree
-      ? this
-      : new BTreeEditor(this.basin, this.consumer, next);
+    return next === this.tree ? this : this.changed(next, k, { delete: true });
   }
   entries(from?: Uint8Array | string, to?: Uint8Array | string) {
     return this.tree.entries(from, to);
   }
-  store() {
-    return BTree.build(this.basin, this.tree.entries(), this.consumer);
+  async store() {
+    if (
+      this.plan &&
+      summaryReuse(this.consumer) &&
+      this.plan.policy === JSON.stringify(this.basin.options)
+    )
+      return new BTree(
+        this.basin,
+        await exportBTree(
+          this.basin,
+          this.plan.source.root,
+          this.consumer,
+          this.plan.changes.entries(),
+        ),
+        this.consumer,
+      );
+    const stored = await BTree.build(
+      this.basin,
+      this.tree.entries(),
+      this.consumer,
+    );
+    this.plan = {
+      source: stored,
+      changes: TrieMap.from([]),
+      policy: JSON.stringify(this.basin.options),
+    };
+    return stored;
   }
 }

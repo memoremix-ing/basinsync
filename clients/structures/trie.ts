@@ -674,7 +674,7 @@ export interface TrieEditorMutation<V, M> {
   finish(): TrieEditor<V, M>;
   abort(): void;
 }
-/** Immutable logical snapshots. Canonical export is a separate, full packing pass. */
+/** Immutable logical snapshots. Canonical export separately reuses compatible source subtrees. */
 export class TrieEditor<V, M = null> {
   private constructor(
     readonly basin: Basin,

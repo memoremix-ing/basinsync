@@ -151,51 +151,168 @@ const directoryEntries = composableConsumer<StoredEntry, null>(
   { ...plain, edges: (v) => (v[0] ? directoryRefs(v[2]) : []) },
   { keyIndependent: true },
 );
+type DirectoryHeader = { sha384: Uint8Array; inlined: number; nesting: number };
+type DirectoryOrigin = {
+  basin: Basin;
+  source: Reference | Edge;
+  h: DirectoryHeader;
+  policy: string;
+  entries?: Promise<Record<string, Directory | File>>;
+  raw: Map<string, StoredEntry>;
+};
+const directoryOrigins = new WeakMap<Directory, DirectoryOrigin>();
+const directoryPolicy = (b: Basin) => JSON.stringify(b.options);
+function directoryHandle(basin: Basin, source: Reference | Edge): Directory {
+  const h = Array.isArray(source)
+    ? (source[5] as DirectoryHeader)
+    : object<DirectoryHeader>(source.get("5"));
+  const tree: Directory = [true, h.sha384, Object.create(null)];
+  directoryOrigins.set(tree, {
+    basin,
+    source,
+    h,
+    policy: directoryPolicy(basin),
+    raw: new Map(),
+  });
+  return tree;
+}
+async function readDirectory(
+  tree: Directory,
+): Promise<Record<string, Directory | File>> {
+  const origin = directoryOrigins.get(tree);
+  if (!origin) return tree[2];
+  return (origin.entries ??= (async () => {
+    const r = Array.isArray(origin.source)
+      ? await origin.basin.load(origin.source)
+      : origin.source;
+    validateNode(r, DIRECTORY);
+    const entries: Record<string, Directory | File> = Object.create(null);
+    for await (const [name, value] of new Trie(
+      origin.basin,
+      r.get("6").get(2),
+      directoryEntries,
+    ).entries()) {
+      const n = new TextDecoder("utf-8", { fatal: true }).decode(name);
+      origin.raw.set(n, value);
+      entries[n] = value[0]
+        ? directoryHandle(
+            origin.basin,
+            Array.isArray(value[2]) ? value[2] : nodeView(nodeBytes(value[2])),
+          )
+        : value;
+      if (value[0])
+        check(equal(entries[n][1], value[1]), "directory digest mismatch");
+    }
+    return entries;
+  })());
+}
+// Changed handles carry their stored ancestor separately from their current entries.
+const changedOrigins = new WeakMap<Directory, Directory>();
+type DirectoryBuild = {
+  h: DirectoryHeader;
+  node: () => Promise<Node>;
+  edges: () => Promise<Edge[]>;
+  seal: () => Promise<Edge>;
+};
+function once<T>(f: () => Promise<T>) {
+  let p: Promise<T> | undefined;
+  return () => (p ??= f());
+}
 async function buildDirectory(
   basin: Basin,
   tree: Directory,
-): Promise<{ node: Node; edges: Edge[] }> {
-  const children = new Map<string, { node: Node; edges: Edge[] }>();
-  for (const [name, value] of Object.entries(tree[2]))
-    if (value[0]) children.set(name, await buildDirectory(basin, value));
+): Promise<DirectoryBuild> {
+  const old = directoryOrigins.get(tree);
+  if (old && old.policy === directoryPolicy(basin)) {
+    if (Array.isArray(old.source)) basin.peek(old.source);
+    const node = once(async () =>
+      object<Node>(
+        Array.isArray(old.source) ? await basin.load(old.source) : old.source,
+      ),
+    );
+    const edges = once(async () => directoryRefs(await node()));
+    return {
+      h: old.h,
+      node,
+      edges,
+      seal: once(async () =>
+        Array.isArray(old.source)
+          ? old.source
+          : basin.seal(await node(), await edges()),
+      ),
+    };
+  }
+  const contents = await readDirectory(tree),
+    children = new Map<string, DirectoryBuild>();
+  for (const [name, v] of Object.entries(contents))
+    if (v[0]) children.set(name, await buildDirectory(basin, v));
   const nested = [...children.values()],
     total =
-      Object.keys(tree[2]).length +
-      nested.reduce((n, c) => n + (c.node[5] as any).inlined, 0),
-    nesting = 1 + Math.max(0, ...nested.map((c) => (c.node[5] as any).nesting));
-  const cut =
-    total > 1280 ||
-    nesting > 32 ||
-    distinct(nested.flatMap((c) => c.edges)).length >
-      (basin.options.maxDegree ?? 320);
+      Object.keys(contents).length +
+      nested.reduce((n, c) => n + c.h.inlined, 0),
+    nesting = 1 + Math.max(0, ...nested.map((c) => c.h.nesting));
+  let cut = total > 1280 || nesting > 32;
+  if (!cut)
+    cut =
+      distinct((await Promise.all(nested.map((c) => c.edges()))).flat())
+        .length > (basin.options.maxDegree ?? 320);
+  const ancestor = changedOrigins.get(tree),
+    origin = ancestor ? directoryOrigins.get(ancestor) : undefined;
   const entries: [Uint8Array, StoredEntry][] = [];
-  for (const [name, value] of Object.entries(tree[2])) {
+  for (const [name, value] of Object.entries(contents)) {
     if (!value[0]) entries.push([utf8(name), value]);
     else {
-      const c = children.get(name)!;
-      entries.push([
-        utf8(name),
-        [true, value[1], cut ? await basin.seal(c.node, c.edges) : c.node],
-      ]);
+      const child = children.get(name)!,
+        raw = origin?.raw.get(name),
+        previous = ancestor ? (await readDirectory(ancestor))[name] : undefined;
+      if (previous === value && raw?.[0] && Array.isArray(raw[2]) === cut)
+        entries.push([utf8(name), raw]);
+      else
+        entries.push([
+          utf8(name),
+          [true, value[1], cut ? await child.seal() : await child.node()],
+        ]);
     }
   }
-  const trie = await Trie.buildNode(basin, entries, directoryEntries);
+  let trie: { node: Node; edges: Edge[] };
+  if (origin && origin.policy === directoryPolicy(basin)) {
+    const r = Array.isArray(origin.source)
+      ? await basin.load(origin.source)
+      : origin.source;
+    let view = TrieView.from(
+      new Trie<StoredEntry, null>(basin, r.get("6").get(2), directoryEntries),
+    );
+    const names = new Set(Object.keys(contents));
+    for (const name of origin.raw.keys())
+      if (!names.has(name)) view = view.delete(utf8(name));
+    for (const [k, value] of entries) {
+      const name = new TextDecoder().decode(k);
+      if (origin.raw.get(name) !== value) view = view.set(k, value);
+    }
+    trie = await view.buildNode();
+  } else trie = await Trie.buildNode(basin, entries, directoryEntries);
+  const h = {
+    sha384: tree[1],
+    inlined:
+      (trie.node[5] as Header).inlined +
+      (cut ? 0 : nested.reduce((n, c) => n + c.h.inlined, 0)),
+    nesting: cut ? 1 : nesting,
+  };
   const node = {
     0: Symbol.species,
     1: DOMAIN,
     2: DIRECTORY,
     3: trie.node[3],
     4: 0,
-    5: {
-      sha384: tree[1],
-      inlined:
-        trie.node[5].inlined +
-        (cut ? 0 : nested.reduce((n, c) => n + (c.node[5] as any).inlined, 0)),
-      nesting: cut ? 1 : nesting,
-    },
+    5: h,
     6: [0, null, trie.node],
   } as Node;
-  return { node, edges: trie.edges };
+  return {
+    h,
+    node: async () => node,
+    edges: async () => trie.edges,
+    seal: once(() => basin.seal(node, trie.edges)),
+  };
 }
 async function sourceRef(basin: Basin, source: Reference): Promise<Reference> {
   return source.isMap() ? source : basin.load(edgeFrom(source));
@@ -212,34 +329,11 @@ async function directoryContents(basin: Basin, source: Reference) {
 function trieSource(source: Reference): Reference | Edge {
   return source.isMap() ? source : edgeFrom(source);
 }
-async function materializeDirectory(
-  basin: Basin,
-  source: Reference,
-): Promise<Directory> {
-  const r = await sourceRef(basin, source);
-  validateNode(r, DIRECTORY);
-  const entries: Record<string, Directory | File> = Object.create(null);
-  for await (const [name, v] of new Trie(
-    basin,
-    r.get("6").get(2),
-    directoryEntries,
-  ).entries()) {
-    const n = new TextDecoder("utf-8", { fatal: true }).decode(name);
-    if (v[0]) {
-      const childSource = v[2];
-      const childRef = Array.isArray(childSource)
-        ? await basin.load(childSource)
-        : nodeView(nodeBytes(childSource));
-      entries[n] = await materializeDirectory(basin, childRef);
-      check(equal(entries[n][1], v[1]), "directory digest mismatch");
-    } else entries[n] = v;
-  }
-  return [true, object<Uint8Array>(r.get("5").get("sha384")), entries];
-}
 export type BlockRoot = { edge: Edge; digest: Uint8Array };
 export async function buildBlock(
   basin: Basin,
   input: Iterable<[bigint, Uint8Array]>,
+  options: { leafIndex?: boolean } = {},
 ): Promise<BlockRoot> {
   const pages: [Uint8Array, [Uint8Array]][] = [];
   for (const [page, data] of input) {
@@ -276,7 +370,7 @@ export async function buildBlock(
         }
       }
   }
-  await collect(t.node, new Uint8Array());
+  if (options.leafIndex !== false) await collect(t.node, new Uint8Array());
   leaves.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   const shortcuts = await Vector.buildNode(basin, leaves, leafShortcuts, {
     bits: 7,
@@ -313,12 +407,16 @@ async function pageRoot(basin: Basin, footer: Reference): Promise<Reference> {
 export type VolumeTransferOptions = { replace?: boolean };
 export type VolumeRemoveOptions = { recursive?: boolean };
 type DirectoryEntry = Directory | File;
-function entryAt(root: Directory, parts: readonly string[]): DirectoryEntry {
+async function entryAt(
+  root: Directory,
+  parts: readonly string[],
+): Promise<DirectoryEntry> {
   let current: DirectoryEntry = root;
   for (const part of parts) {
     check(current[0], "parent is not a directory");
-    check(Object.hasOwn(current[2], part), "missing pathname");
-    current = current[2][part];
+    const contents = await readDirectory(current);
+    check(Object.hasOwn(contents, part), "missing pathname");
+    current = contents[part];
   }
   return current;
 }
@@ -326,18 +424,31 @@ async function changeEntry(
   root: Directory,
   parts: readonly string[],
   value?: DirectoryEntry,
+  create = false,
 ): Promise<Directory> {
-  const contents = Object.assign(Object.create(null), root[2]),
+  const contents = Object.assign(
+      Object.create(null),
+      await readDirectory(root),
+    ),
     name = parts[0];
   if (parts.length === 1) {
-    if (value) contents[name] = value;
-    else delete contents[name];
+    if (value) {
+      check(
+        !contents[name] || contents[name][0] === value[0],
+        "file/directory collision",
+      );
+      contents[name] = value;
+    } else delete contents[name];
   } else {
-    const child = entryAt(root, [name]);
-    check(child[0], "parent is not a directory");
-    contents[name] = await changeEntry(child, parts.slice(1), value);
+    let child = contents[name];
+    if (!child && create) child = await directory(Object.create(null));
+    check(child?.[0], "parent is not a directory");
+    contents[name] = await changeEntry(child, parts.slice(1), value, create);
   }
-  return directory(contents);
+  const next = await directory(contents);
+  const ancestor = directoryOrigins.has(root) ? root : changedOrigins.get(root);
+  if (ancestor) changedOrigins.set(next, ancestor);
+  return next;
 }
 async function sealVolume(
   basin: Basin,
@@ -347,19 +458,19 @@ async function sealVolume(
   const dir = await buildDirectory(basin, root),
     max = basin.options.maxDegree ?? 320;
   let deviceSource: Node | Edge = device.node,
-    dirSource: Node | Edge = dir.node,
-    edges = distinct([...device.edges, ...dir.edges]);
+    dirSource: Node | Edge,
+    edges = device.edges;
   if (
-    (device.node[5] as Header).inlined + (dir.node[5] as any).inlined > 1280 ||
-    edges.length > max
+    (device.node[5] as Header).inlined + dir.h.inlined > 1280 ||
+    (edges = distinct([...device.edges, ...(await dir.edges())])).length > max
   ) {
-    dirSource = await basin.seal(dir.node, dir.edges);
+    dirSource = await dir.seal();
     edges = distinct([...device.edges, dirSource]);
     if ((device.node[5] as Header).inlined > 1280 || edges.length > max) {
       deviceSource = await basin.seal(device.node, device.edges);
       edges = distinct([deviceSource, dirSource]);
     }
-  }
+  } else dirSource = await dir.node();
   const node = {
     0: Symbol.species,
     1: DOMAIN,
@@ -810,22 +921,25 @@ export class Volume {
     const a = path(from),
       b = path(to),
       footer = await this.data();
-    let root = await materializeDirectory(this.basin, footer.get(3));
-    const source = entryAt(root, a);
+    let root = directoryHandle(this.basin, trieSource(footer.get(3)));
+    const source = await entryAt(root, a);
     if (from === to) {
       check(move, "cannot copy onto itself");
       return this;
     }
     check(!to.startsWith(from + "/"), "destination is inside source");
-    const parent = entryAt(root, b.slice(0, -1));
+    const parent = await entryAt(root, b.slice(0, -1));
     check(parent[0], "parent is not a directory");
     const name = b.at(-1)!,
-      target = Object.hasOwn(parent[2], name) ? parent[2][name] : undefined;
+      parentContents = await readDirectory(parent),
+      target = Object.hasOwn(parentContents, name)
+        ? parentContents[name]
+        : undefined;
     if (target) {
       check(options.replace === true, "destination exists");
       check(source[0] === target[0], "file/directory collision");
       check(
-        !target[0] || Object.keys(target[2]).length === 0,
+        !target[0] || Object.keys(await readDirectory(target)).length === 0,
         "destination directory is not empty",
       );
     }
@@ -851,12 +965,12 @@ export class Volume {
   async rm(name: string, options: VolumeRemoveOptions = {}): Promise<Volume> {
     const parts = path(name),
       footer = await this.data();
-    const root = await materializeDirectory(this.basin, footer.get(3)),
-      source = entryAt(root, parts);
+    const root = directoryHandle(this.basin, trieSource(footer.get(3))),
+      source = await entryAt(root, parts);
     check(
       !source[0] ||
         options.recursive === true ||
-        Object.keys(source[2]).length === 0,
+        Object.keys(await readDirectory(source)).length === 0,
       "directory is not empty",
     );
     const view = TrieView.from(
@@ -876,43 +990,32 @@ export class Volume {
   async update(
     changes: Iterable<[string, Uint8Array | null]>,
   ): Promise<Volume> {
-    const footer = await this.data(),
-      root = await materializeDirectory(this.basin, footer.get(3));
-    const sums = new Map<string, Uint8Array>(),
-      directories: string[] = [];
-    const walk = (dir: Directory, prefix: string) => {
-      for (const [name, value] of Object.entries(dir[2])) {
-        const path = prefix + "/" + name;
-        if (value[0]) {
-          directories.push(path);
-          walk(value, path);
-        } else sums.set(path, value[1]);
-      }
-    };
-    walk(root, "");
-    const files = new Map<string, BlockRoot>();
-    for await (const [k, v] of new Trie(
-      this.basin,
-      trieSource(footer.get(2)),
-      devices,
-    ).entries()) {
-      const name = new TextDecoder("utf-8", { fatal: true }).decode(k),
-        digest = sums.get(name);
-      check(digest, "device/directory mismatch");
-      files.set(name, { edge: v[0], digest });
-      sums.delete(name);
-    }
-    check(sums.size === 0, "missing retained block");
+    const footer = await this.data();
+    let root = directoryHandle(this.basin, trieSource(footer.get(3)));
+    let device = TrieView.from(
+      new Trie<[Edge], null>(this.basin, trieSource(footer.get(2)), devices),
+    );
     for (const [name, bytes] of changes) {
-      path(name);
-      if (bytes === null) files.delete(name);
-      else {
+      const parts = path(name);
+      if (bytes === null) {
+        if (await device.get(utf8(name))) {
+          root = await changeEntry(root, parts);
+          device = device.delete(utf8(name));
+        }
+      } else {
         const pages: [bigint, Uint8Array][] = [];
         for (let i = 0; i < bytes.length; i += PAGE_SIZE)
           pages.push([BigInt(i / PAGE_SIZE), bytes.slice(i, i + PAGE_SIZE)]);
-        files.set(name, await buildBlock(this.basin, pages));
+        const block = await buildBlock(this.basin, pages);
+        root = await changeEntry(
+          root,
+          parts,
+          [false, block.digest, link(block.edge)],
+          true,
+        );
+        device = device.set(utf8(name), [block.edge]);
       }
     }
-    return Volume.fromBlocks(this.basin, files, directories);
+    return this.saveFilesystem(root, device);
   }
 }

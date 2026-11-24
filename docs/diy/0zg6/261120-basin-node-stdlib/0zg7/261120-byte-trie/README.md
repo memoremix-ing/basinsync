@@ -6,6 +6,7 @@ prerequisites:
 
 [access-token]: <../../../../../glossary/access-token.md>
 [basin]: <../../../../../glossary/basin.md>
+[block-index]: <benchmark/block-index.md>
 [client-costs]: <benchmark/client-costs.md>
 [diy/0zg6/261120-basin-node-stdlib]: <../../README.md>
 [diy/0zg6/261120-basin-node-stdlib/0zg7/261123-bitmapped-vector-trie]: <../261123-bitmapped-vector-trie/README.md>
@@ -24,6 +25,7 @@ prerequisites:
 [promoted-costs]: <benchmark/promoted-costs.md>
 [revision]: <../../../../../glossary/revision.md>
 [selective-export]: <benchmark/selective-export.md>
+[selective-ordered]: <../../benchmark/selective-ordered.md>
 [shortcut-navigation]: <benchmark/shortcut-navigation.md>
 [shortcut-reads]: <benchmark/shortcut-reads.md>
 [strong-edge]: <../../../../../glossary/strong-edge.md>
@@ -467,8 +469,8 @@ bodies. Paths are absolute and destinations exact; parents must exist. Reject
 collisions unless `replace: true` permits the same kind, with destination
 directories empty. Copy includes a whole subtree; removing a nonempty directory
 requires `recursive: true`. Reject root edits and moves/copies into descendants.
-Each call returns a new snapshot after success; metadata export remains a full
-canonical pass. Rust/Go expose equivalent operations.
+Each call returns a new snapshot after success. TypeScript selectively exports
+unchanged subdirectories; Rust/Go expose equivalent filesystem operations.
 
 ```js
 const moved = await volume.mv("/old", "/parent/new");
@@ -476,8 +478,9 @@ const copied = await moved.cp("/parent/new", "/copy");
 const removed = await copied.rm("/parent/new", { recursive: true });
 ```
 
-`Volume.update()` rebuilds changed file blocks and reuses unchanged descriptors;
-filesystem edits still materialize directory metadata before rebuilding it. Server-side retention
+`Volume.update()` rebuilds changed file blocks and reuses unchanged descriptors.
+Directory edits open affected paths and reuse untouched stored subdirectories;
+ancestor hashes still require their immediate names and child digests. Server-side retention
 and collection govern eventual storage reclamation.
 
 The *initial shortcut traces*[~][shortcut-reads] exposed extra secondary-index
@@ -499,3 +502,17 @@ bun clients/structures-integration.ts
 ```
 
 Compare the three libraries using the *CPU and storage read measurements*[~][trie-performance].
+
+The 1,280-value inlining trigger is currently fixed for tries, vectors and block
+packing; vector `bits`, physical degree/height and object-byte limits are configurable.
+Trie groups cap at 255 entries. Small high-nibble groups can remain inline after
+larger children are sealed, so 1,280 is not a strict object-wide bound.
+
+`buildBlock(..., { leafIndex: false })` omits optional leaf-index entries while
+retaining the empty index shape. Point reads still use the authoritative page trie.
+Boundary index stacks are currently consumed only by the navigation experiment;
+production point reads use ready-only leaf hints.
+
+The *block-index traces*[~][block-index] found no GET savings from the leaf vector,
+including explicit boundary spines. The *selective export measurements*[~][selective-ordered]
+separate directory/ancestor work from unchanged bodies.

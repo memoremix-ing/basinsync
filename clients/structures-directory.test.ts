@@ -94,3 +94,67 @@ test("listed file links bypass a separately stored device index", async () => {
   };
   expect(await reader.read("/f250")).toEqual(utf8("file-250"));
 });
+test("directory export retains untouched subdirectories and matches a full canonical rebuild", async () => {
+  const storage = new MemoryStorage(),
+    writer = new Basin(storage, { seed }),
+    block = await buildBlock(writer, [[0n, utf8("old")]]);
+  const files = Array.from(
+    { length: 2000 },
+    (_, i) =>
+      [
+        `/d${Math.floor(i / 20)
+          .toString()
+          .padStart(3, "0")}/f${i}`,
+        block,
+      ] as [string, typeof block],
+  );
+  const original = await Volume.fromBlocks(writer, files);
+  const reader = new Volume(new Basin(storage, { seed }), original.root);
+  storage.reads = 0;
+  const edited = await reader.update([["/d050/f1000", utf8("new")]]),
+    reads = storage.reads;
+  expect(reads).toBeLessThan(15);
+  const newBlock = await buildBlock(writer, [[0n, utf8("new")]]);
+  const canonical = await Volume.fromBlocks(
+    writer,
+    files.map(([n, b]) => [n, n === "/d050/f1000" ? newBlock : b]),
+  );
+  expect(edited.root[6].sha384).toEqual(canonical.root[6].sha384);
+  expect(await edited.read("/d050/f1000")).toEqual(utf8("new"));
+  expect(await reader.read("/d050/f1000")).toEqual(utf8("old"));
+  const moved = await edited.mv("/d050", "/moved");
+  expect(await moved.read("/moved/f1000")).toEqual(utf8("new"));
+  expect(await moved.list("/d001")).toHaveLength(20);
+});
+test("blocks may omit their optional leaf index without changing file data", async () => {
+  const storage = new MemoryStorage(),
+    b = new Basin(storage, { seed }),
+    input = Array.from(
+      { length: 5000 },
+      (_, i) => [BigInt(i), new Uint8Array([i & 255])] as [bigint, Uint8Array],
+    );
+  const block = await buildBlock(b, input, { leafIndex: false }),
+    volume = await Volume.fromBlocks(b, [["/file", block]]);
+  for (const i of [0, 2500, 4999])
+    expect(await volume.page("/file", BigInt(i))).toEqual(input[i][1]);
+  expect(await volume.read("/file", { start: 2500 * 4096, length: 1 })).toEqual(
+    input[2500][1],
+  );
+});
+test("directory export repacks canonically when an edit crosses the inline budget", async () => {
+  const storage = new MemoryStorage(),
+    b = new Basin(storage, { seed }),
+    block = await buildBlock(b, [[0n, utf8("x")]]),
+    files = Array.from(
+      { length: 1260 },
+      (_, i) =>
+        [`/d${Math.floor(i / 63)}/f${i}`, block] as [string, typeof block],
+    ),
+    original = await Volume.fromBlocks(b, files);
+  const changed = await original.update([["/d0/extra", utf8("y")]]),
+    extra = await buildBlock(b, [[0n, utf8("y")]]),
+    canonical = await Volume.fromBlocks(b, [...files, ["/d0/extra", extra]]);
+  expect(changed.root[6].sha384).toEqual(canonical.root[6].sha384);
+  const reverted = await changed.update([["/d0/extra", null]]);
+  expect(reverted.root[6].sha384).toEqual(original.root[6].sha384);
+});
