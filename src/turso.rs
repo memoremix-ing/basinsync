@@ -23,6 +23,7 @@ mod cleanup;
 pub mod cow;
 #[cfg(test)]
 mod deep;
+mod file_io;
 mod heap;
 mod promotion;
 pub mod volume;

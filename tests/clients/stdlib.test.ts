@@ -1,5 +1,5 @@
 import { vectors } from "./vectors";
-const shared = vectors<{sl2: {message: string; digest: string}[]; trieCounts: number[]; orderedCounts: number[]}>("structures");
+const shared = vectors<{trieCounts: number[]; orderedCounts: number[]}>("structures");
 import { test, expect } from "bun:test";
 import {
   Basin,

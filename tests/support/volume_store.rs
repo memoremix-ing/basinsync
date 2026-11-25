@@ -2,15 +2,15 @@
 use anyhow::{Result, ensure};
 use basinsync::structures::{
     Value,
-    basin::{self, Edge, PendingEdge, Storage},
+    basin::{self, Edge, PendingEdge, PreparedObject, Storage},
     value,
 };
 use std::{
     fs,
     io::Write,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
-    time::Duration,
+    sync::{Arc, Condvar, Mutex},
+    time::{Duration, Instant},
 };
 fn sync(file: &fs::File) -> std::io::Result<()> {
     let _profile = basinsync::structures::profile::span("storage.sync");
@@ -23,6 +23,7 @@ pub struct Stats {
     pub puts: u64,
     pub put_bytes: u64,
     pub reused: u64,
+    pub max_in_flight: u64,
 }
 #[derive(Clone)]
 pub struct DiskObjects {
@@ -30,10 +31,22 @@ pub struct DiskObjects {
     pub stats: Arc<Mutex<Stats>>,
     pub delay: Duration,
     pub bytes_per_second: u64,
+    pub concurrency: usize,
+    pub request_limit: usize,
+    bandwidth: Arc<Mutex<Instant>>,
+    active: Arc<(Mutex<u64>, Condvar)>,
     pub fail_reads: Arc<Mutex<bool>>,
     pub fail_writes: Arc<Mutex<Option<usize>>>,
     pub read_keys: Arc<Mutex<std::collections::BTreeSet<String>>>,
     pub forbidden: Arc<Mutex<std::collections::BTreeSet<String>>>,
+}
+struct Transfer<'a>(&'a DiskObjects);
+impl Drop for Transfer<'_> {
+    fn drop(&mut self) {
+        let (lock, ready) = &*self.0.active;
+        *lock.lock().unwrap() -= 1;
+        ready.notify_one();
+    }
 }
 impl DiskObjects {
     pub fn new(root: &Path) -> Result<Self> {
@@ -43,6 +56,10 @@ impl DiskObjects {
             stats: Default::default(),
             delay: Duration::ZERO,
             bytes_per_second: 0,
+            concurrency: 1,
+            request_limit: 2,
+            bandwidth: Arc::new(Mutex::new(Instant::now())),
+            active: Arc::new((Mutex::new(0), Condvar::new())),
             fail_reads: Default::default(),
             fail_writes: Default::default(),
             read_keys: Default::default(),
@@ -56,14 +73,33 @@ impl DiskObjects {
     pub fn stats(&self) -> Stats {
         self.stats.lock().unwrap().clone()
     }
+    fn transfer(&self) -> Transfer<'_> {
+        let (lock, ready) = &*self.active;
+        let mut active = lock.lock().unwrap();
+        while *active >= self.request_limit.max(1) as u64 {
+            active = ready.wait(active).unwrap();
+        }
+        *active += 1;
+        let mut stats = self.stats.lock().unwrap();
+        stats.max_in_flight = stats.max_in_flight.max(*active);
+        Transfer(self)
+    }
     fn wait(&self, size: usize) {
         let _profile = basinsync::structures::profile::span("storage.wait");
-        let transfer = if self.bytes_per_second == 0 {
-            Duration::ZERO
-        } else {
-            Duration::from_secs_f64(size as f64 / self.bytes_per_second as f64)
-        };
-        std::thread::sleep(self.delay + transfer);
+        if !self.delay.is_zero() {
+            std::thread::sleep(self.delay);
+        }
+        if self.bytes_per_second > 0 {
+            // All clones share one link. Concurrency can overlap latency, never
+            // multiply the configured aggregate transfer bandwidth.
+            let end = {
+                let mut next = self.bandwidth.lock().unwrap();
+                *next = (*next).max(Instant::now())
+                    + Duration::from_secs_f64(size as f64 / self.bytes_per_second as f64);
+                *next
+            };
+            std::thread::sleep(end.saturating_duration_since(Instant::now()));
+        }
     }
     pub fn read_raw(&self, key: &str) -> Result<Vec<u8>> {
         let _profile = basinsync::structures::profile::span("storage.body_read");
@@ -76,6 +112,7 @@ impl DiskObjects {
             "unrequested object read"
         );
         self.read_keys.lock().unwrap().insert(key.into());
+        let _transfer = self.transfer();
         let bytes = fs::read(self.root.join(key))?;
         self.wait(bytes.len());
         let mut s = self.stats.lock().unwrap();
@@ -96,6 +133,7 @@ impl DiskObjects {
             ensure!(*left > 0, "injected object write failure");
             *left -= 1;
         }
+        let _transfer = self.transfer();
         self.wait(bytes.len());
         let mut file = tempfile::NamedTempFile::new_in(path.parent().unwrap())?;
         file.write_all(bytes)?;
@@ -123,6 +161,41 @@ impl DiskObjects {
     }
 }
 impl Storage for DiskObjects {
+    fn put_many(&mut self, objects: &[PreparedObject]) -> Result<Vec<String>> {
+        if self.concurrency <= 1 || objects.len() <= 1 {
+            return objects
+                .iter()
+                .map(|o| self.put(&o.pending, &o.bytes, &o.edges))
+                .collect();
+        }
+        let next = std::sync::atomic::AtomicUsize::new(0);
+        let results = Mutex::new((0..objects.len()).map(|_| None).collect::<Vec<_>>());
+        std::thread::scope(|scope| {
+            for _ in 0..self.concurrency.min(objects.len()) {
+                let next = &next;
+                let results = &results;
+                let mut store = self.clone();
+                scope.spawn(move || {
+                    loop {
+                        let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        let Some(o) = objects.get(i) else {
+                            break;
+                        };
+                        let result = store.put(&o.pending, &o.bytes, &o.edges);
+                        results.lock().unwrap()[i] = Some(result);
+                    }
+                });
+            }
+        });
+        // scope joins every worker even if a sibling failed. No parent can be
+        // published until all these results have been acknowledged.
+        results
+            .into_inner()
+            .unwrap()
+            .into_iter()
+            .map(|r| r.unwrap())
+            .collect()
+    }
     fn put(&mut self, pending: &PendingEdge, bytes: &[u8], _: &[Edge]) -> Result<String> {
         let _profile = basinsync::structures::profile::span("storage.put");
         let dir = Self::address(pending.as_value())?;

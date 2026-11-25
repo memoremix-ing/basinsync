@@ -2,6 +2,7 @@
 [cpu-1]: <cpu-1.json>
 [cpu-16]: <cpu-16.json>
 [incremental]: <incremental.md>
+[io]: <io.md>
 [kernelspace]: <../../../../glossary/kernelspace.md>
 [profile]: <profile.md>
 [revision]: <../../../../glossary/revision.md>
@@ -14,6 +15,8 @@
 [wan-16]: <wan-16.json>
 
 # SyncVolume VFS measurements
+
+Historical measurements; the current cross-language checksum and I/O follow-up are in the *I/O comparison*[~][io].
 
 These are the full-rebuild controls. The *incremental/CRC comparison*[~][incremental]
 adds ordinary packing and distinguishes object reuse from incremental construction.

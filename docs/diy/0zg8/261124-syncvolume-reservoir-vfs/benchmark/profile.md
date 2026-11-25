@@ -4,6 +4,7 @@
 [control-16]: <control-16.json>
 [flexbuffers]: <../../../../glossary/flexbuffers.md>
 [incremental]: <incremental.md>
+[io]: <io.md>
 [profile]: <profile.html>
 [profile-local-1]: <profile-local-1.json>
 [profile-local-16]: <profile-local-16.json>
@@ -15,6 +16,8 @@
 [volume]: <../../../../glossary/volume.md>
 
 # Where SyncVolume time goes
+
+Historical measurements; the current cross-language checksum and I/O follow-up are in the *I/O comparison*[~][io].
 
 This profiles the full-rebuild control; the *incremental comparison*[~][incremental]
 describes the updated export path.

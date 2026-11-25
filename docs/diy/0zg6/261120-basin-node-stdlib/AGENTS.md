@@ -31,6 +31,8 @@ Apply these when implementing or benchmarking this tutorial family:
   mutate, and pending/reject/evict, rather than testing each operation only in isolation.
 - Verify shared unchanged branches, old snapshots, owned versus borrowed data,
   canonical output and cross-language reads. Record request/byte counts as well as CPU.
+- Carry integrity verification across adapter layers with immutable, descriptor-bound
+  byte proofs; avoid duplicate hashing without trusting mutable cached data.
 - Optional shortcut indexes should not add cold-path fetches merely to discover
   hints; measure ready-only navigation against direct authoritative traversal.
 - Distinguish logical fanout from stored packing. Count-based inline budgets can

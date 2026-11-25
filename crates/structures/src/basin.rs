@@ -283,9 +283,62 @@ impl std::fmt::Display for MissingNode {
     }
 }
 impl std::error::Error for MissingNode {}
+/// Independent objects whose referenced children are already durable.
+pub struct PreparedObject {
+    pub pending: PendingEdge,
+    pub bytes: Vec<u8>,
+    pub edges: Vec<Edge>,
+}
+/// Owned immutable bytes that have passed object-integrity verification. An
+/// adapter can pass this proof to Basin without hashing a disk-cache hit twice.
+pub struct VerifiedObject {
+    bytes: Vec<u8>,
+    digest: Vec<u8>,
+}
+impl VerifiedObject {
+    pub fn new(edge: &Edge, bytes: Vec<u8>) -> Result<Self> {
+        let object = Self {
+            digest: sha384(&bytes),
+            bytes,
+        };
+        object.validate_for(edge)?;
+        Ok(object)
+    }
+    pub fn validate_for(&self, edge: &Edge) -> Result<()> {
+        ensure!(
+            self.bytes.len() == footer(edge)?.field("length")?.number()? as usize
+                && self.digest == footer(edge)?.field("sha384")?.blob()?,
+            "basin node digest/length mismatch"
+        );
+        Ok(())
+    }
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+    pub fn into_bytes(self, edge: &Edge) -> Result<Vec<u8>> {
+        self.validate_for(edge)?;
+        Ok(self.bytes)
+    }
+}
 pub trait Storage {
     fn put(&mut self, edge: &PendingEdge, bytes: &[u8], edges: &[Edge]) -> Result<String>;
+    /// Return only after every PUT has finished. On error, implementations must
+    /// drain in-flight work; successful siblings may be reused by a retry.
+    fn put_many(&mut self, objects: &[PreparedObject]) -> Result<Vec<String>> {
+        objects
+            .iter()
+            .map(|o| self.put(&o.pending, &o.bytes, &o.edges))
+            .collect()
+    }
     fn get(&mut self, edge: &Edge) -> Result<Vec<u8>>;
+    fn get_verified(&mut self, edge: &Edge) -> Result<VerifiedObject> {
+        VerifiedObject::new(edge, self.get(edge)?)
+    }
+    /// Optional bounded lookahead for a caller that intends to read every edge.
+    /// It must not change the contents or weaken subsequent descriptor checks.
+    fn prefetch(&mut self, _edges: &[Edge]) -> Result<()> {
+        Ok(())
+    }
     fn resolve(&mut self, _link: &Value) -> Result<Option<Edge>> {
         Ok(None)
     }
@@ -394,7 +447,7 @@ impl<S: Storage> Basin<S> {
             cache: BTreeMap::new(),
         })
     }
-    pub fn seal(&mut self, mut node: Value, edges: &[Edge]) -> Result<Edge> {
+    fn prepare(&self, mut node: Value, edges: &[Edge]) -> Result<PreparedObject> {
         let _profile = crate::profile::span("basin.seal");
         let refs = distinct(edges)?;
         node.set("3", query(&refs, self.max_degree, self.max_height)?)?;
@@ -427,16 +480,46 @@ impl<S: Storage> Basin<S> {
                 ("rotation", self.rotation.into()),
             ]),
         ]);
-        let pending = PendingEdge(edge);
-        let revision = self.storage.put(&pending, &bytes, &refs)?;
-        let edge = pending.allocated(&revision)?;
+        Ok(PreparedObject {
+            pending: PendingEdge(edge),
+            bytes,
+            edges: refs,
+        })
+    }
+    fn allocated(&mut self, object: PreparedObject, revision: &str) -> Result<Edge> {
+        let edge = object.pending.allocated(revision)?;
         let k = format!(
             "{}/{}",
             capability(&edge)?,
             hex(footer(&edge)?.field("sha384")?.blob()?)
         );
-        self.remember(k, Arc::new(bytes));
+        self.remember(k, Arc::new(object.bytes));
         Ok(edge)
+    }
+    pub fn seal(&mut self, node: Value, edges: &[Edge]) -> Result<Edge> {
+        let object = self.prepare(node, edges)?;
+        let revision = self
+            .storage
+            .put(&object.pending, &object.bytes, &object.edges)?;
+        self.allocated(object, &revision)
+    }
+    /// Publish independent siblings as a durability barrier, before constructing
+    /// their parent. The adapter may overlap transfers without exposing a root early.
+    pub fn seal_many(&mut self, nodes: Vec<(Value, Vec<Edge>)>) -> Result<Vec<Edge>> {
+        let objects = nodes
+            .into_iter()
+            .map(|(n, e)| self.prepare(n, &e))
+            .collect::<Result<Vec<_>>>()?;
+        let revisions = self.storage.put_many(&objects)?;
+        ensure!(
+            revisions.len() == objects.len(),
+            "incomplete object publication"
+        );
+        objects
+            .into_iter()
+            .zip(revisions)
+            .map(|(o, r)| self.allocated(o, &r))
+            .collect()
     }
     pub fn load(&mut self, e: &Edge) -> Result<Arc<Vec<u8>>> {
         let _profile = crate::profile::span("basin.load");
@@ -449,12 +532,7 @@ impl<S: Storage> Basin<S> {
         let bytes = if let Some(v) = self.cache.get(&k) {
             v.clone()
         } else {
-            let b = self.storage.get(e)?;
-            ensure!(
-                b.len() == footer(e)?.field("length")?.number()? as usize
-                    && sha384(&b) == footer(e)?.field("sha384")?.blob()?,
-                "basin node digest/length mismatch"
-            );
+            let b = self.storage.get_verified(e)?.into_bytes(e)?;
             let bytes = Arc::new(b);
             self.remember(k, bytes.clone());
             bytes

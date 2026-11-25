@@ -1,0 +1,296 @@
+[
+  {
+    "profiling_enabled": false,
+    "mode": "eager",
+    "round": 0,
+    "rows": 64,
+    "append_rows": 512,
+    "inline_pages": 16,
+    "summary": "crc64nvme",
+    "incremental": true,
+    "warm_writer": false,
+    "disk_cache_bytes": 134217728,
+    "read_strategy": "batched",
+    "concurrency": 1,
+    "file_concurrency": 1,
+    "prefetch": 0,
+    "latency_ms": 0,
+    "mib_per_sec": 0,
+    "database_bytes": 1409024,
+    "kernel_bytes": 262144,
+    "initial_backup_bytes": 1681056,
+    "load_primary": {
+      "ms": 18.381584,
+      "io": {
+        "gets": 7,
+        "get_bytes": 1418000,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    "first_query": {
+      "ms": 0.396542,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 0
+      }
+    },
+    "load_kernel": {
+      "ms": 5.596541,
+      "io": {
+        "gets": 1,
+        "get_bytes": 263056,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    "hydrate_all": {
+      "ms": 9.116875,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 0
+      }
+    },
+    "warm_queries": {
+      "ms": 2.800334,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 0
+      }
+    },
+    "local_commit": {
+      "ms": 42.6605,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 0
+      }
+    },
+    "backup": {
+      "ms": 868.886291,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 38,
+        "put_bytes": 9583064,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    }
+  },
+  {
+    "profiling_enabled": false,
+    "mode": "eager",
+    "round": 1,
+    "rows": 64,
+    "append_rows": 512,
+    "inline_pages": 16,
+    "summary": "crc64nvme",
+    "incremental": true,
+    "warm_writer": false,
+    "disk_cache_bytes": 134217728,
+    "read_strategy": "batched",
+    "concurrency": 1,
+    "file_concurrency": 1,
+    "prefetch": 0,
+    "latency_ms": 0,
+    "mib_per_sec": 0,
+    "database_bytes": 1409024,
+    "kernel_bytes": 262144,
+    "initial_backup_bytes": 1681056,
+    "load_primary": {
+      "ms": 11.882333000000001,
+      "io": {
+        "gets": 7,
+        "get_bytes": 1418000,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    "first_query": {
+      "ms": 0.078375,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 0
+      }
+    },
+    "load_kernel": {
+      "ms": 2.88075,
+      "io": {
+        "gets": 1,
+        "get_bytes": 263056,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    "hydrate_all": {
+      "ms": 5.408125,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 0
+      }
+    },
+    "warm_queries": {
+      "ms": 1.6850829999999999,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 0
+      }
+    },
+    "local_commit": {
+      "ms": 31.51475,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 0
+      }
+    },
+    "backup": {
+      "ms": 802.155,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 38,
+        "put_bytes": 9583064,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    }
+  },
+  {
+    "profiling_enabled": false,
+    "mode": "eager",
+    "round": 2,
+    "rows": 64,
+    "append_rows": 512,
+    "inline_pages": 16,
+    "summary": "crc64nvme",
+    "incremental": true,
+    "warm_writer": false,
+    "disk_cache_bytes": 134217728,
+    "read_strategy": "batched",
+    "concurrency": 1,
+    "file_concurrency": 1,
+    "prefetch": 0,
+    "latency_ms": 0,
+    "mib_per_sec": 0,
+    "database_bytes": 1409024,
+    "kernel_bytes": 262144,
+    "initial_backup_bytes": 1681056,
+    "load_primary": {
+      "ms": 11.619833,
+      "io": {
+        "gets": 7,
+        "get_bytes": 1418000,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    "first_query": {
+      "ms": 0.07391700000000001,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 0
+      }
+    },
+    "load_kernel": {
+      "ms": 3.542458,
+      "io": {
+        "gets": 1,
+        "get_bytes": 263056,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    "hydrate_all": {
+      "ms": 5.429125,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 0
+      }
+    },
+    "warm_queries": {
+      "ms": 1.584333,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 0
+      }
+    },
+    "local_commit": {
+      "ms": 32.476,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 0
+      }
+    },
+    "backup": {
+      "ms": 886.105625,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 38,
+        "put_bytes": 9583064,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    }
+  }
+]

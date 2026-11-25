@@ -7,15 +7,24 @@ use basinsync::{
     structures::{basin::Basin, profile},
     turso::{
         self,
-        volume::{Backup, DatabaseFile, LoadMode, SyncVolume, checkpoint_with_algorithm},
+        volume::{
+            Backup, DatabaseFile, LoadMode, ReadStrategy, SyncVolume, cache::DiskCache,
+            checkpoint_parallel, checkpoint_with_algorithm,
+        },
     },
 };
 use objects::{DiskObjects, Stats};
 use serde::Serialize;
 struct Experiment {
+    append_rows: usize,
     algorithm: Algorithm,
     incremental: bool,
     warm_writer: bool,
+    disk_cache_bytes: u64,
+    read_strategy: ReadStrategy,
+    concurrency: usize,
+    file_concurrency: usize,
+    prefetch: usize,
 }
 use std::time::{Duration, Instant};
 #[derive(Serialize)]
@@ -54,13 +63,20 @@ fn scalar(db: &DatabaseFile, sql: &str) -> Result<i64> {
 }
 #[derive(Serialize)]
 struct Sample {
+    profiling_enabled: bool,
     mode: String,
     round: usize,
     rows: usize,
+    append_rows: usize,
     inline_pages: usize,
     summary: String,
     incremental: bool,
     warm_writer: bool,
+    disk_cache_bytes: u64,
+    read_strategy: String,
+    concurrency: usize,
+    file_concurrency: usize,
+    prefetch: usize,
     latency_ms: u64,
     mib_per_sec: u64,
     database_bytes: u64,
@@ -85,6 +101,12 @@ fn sample(
 ) -> Result<Sample> {
     let directory = tempfile::tempdir()?;
     let mut store = DiskObjects::new(directory.path())?;
+    store.concurrency = experiment.concurrency;
+    store.request_limit = experiment
+        .concurrency
+        .max(experiment.prefetch)
+        .max(experiment.file_concurrency);
+    let cache_directory = directory.path().join("encoded-cache");
     let mut primary = DatabaseFile::create(turso::SCHEMA)?;
     primary
         .connection()
@@ -109,7 +131,10 @@ fn sample(
         None
     } else {
         Some(Backup::create(
-            &mut Basin::new(store.clone(), vec![42; 32])?,
+            &mut Basin::new(
+                DiskCache::new(store.clone(), &cache_directory, 0)?,
+                vec![42; 32],
+            )?,
             vec![
                 ("/default.turso".into(), original.clone()),
                 ("/kernel.turso".into(), companion.clone()),
@@ -124,10 +149,17 @@ fn sample(
     store.bytes_per_second = mib_per_sec * 1024 * 1024;
     let mounted = root.as_ref().map(|r| {
         SyncVolume::new(
-            Basin::new(store.clone(), vec![42; 32]).unwrap(),
+            Basin::new(
+                DiskCache::new(store.clone(), &cache_directory, experiment.disk_cache_bytes)
+                    .unwrap()
+                    .with_prefetch(experiment.prefetch),
+                vec![42; 32],
+            )
+            .unwrap(),
             r.clone(),
             mode.parse::<LoadMode>().unwrap(),
         )
+        .with_read_strategy(experiment.read_strategy)
     });
     let (mut primary, load_primary) = measure(&store, || match &mounted {
         Some(v) => v.open("/default.turso"),
@@ -176,6 +208,18 @@ fn sample(
             "01".repeat(12000),
             rows / 2
         ))?;
+        if experiment.append_rows > 0 {
+            let end = rows
+                .checked_add(experiment.append_rows)
+                .context("row count overflow")?;
+            primary.connection().execute("BEGIN CONCURRENT")?;
+            for id in rows..end {
+                primary
+                    .connection()
+                    .execute(format!("INSERT INTO payload VALUES({id},zeroblob(12000))"))?;
+            }
+            primary.connection().execute("COMMIT")?;
+        }
         kernel
             .connection()
             .execute("UPDATE kernel_state SET activity='1' WHERE id=1")?;
@@ -190,11 +234,25 @@ fn sample(
             let mut b = if experiment.warm_writer {
                 mounted.as_ref().unwrap().cached_basin()
             } else {
-                Basin::new(store.clone(), vec![42; 32])?
+                Basin::new(
+                    DiskCache::new(store.clone(), &cache_directory, experiment.disk_cache_bytes)?,
+                    vec![42; 32],
+                )?
             };
-            b.storage = store.clone();
+            b.storage.origin = store.clone();
             Ok(Some(if experiment.incremental {
-                previous.advance(&mut b, files)?.root().clone()
+                previous
+                    .advance_parallel(&mut b, files, experiment.file_concurrency)?
+                    .root()
+                    .clone()
+            } else if experiment.file_concurrency > 1 {
+                checkpoint_parallel(
+                    &mut b,
+                    Some(previous.root()),
+                    files,
+                    inline_pages,
+                    experiment.file_concurrency,
+                )?
             } else {
                 checkpoint_with_algorithm(
                     &mut b,
@@ -243,17 +301,23 @@ fn sample(
         );
     }
     Ok(Sample {
+        profiling_enabled: profile::ENABLED,
         mode: mode.into(),
         round,
         rows,
+        append_rows: experiment.append_rows,
         inline_pages,
         summary: match experiment.algorithm {
-            Algorithm::Sl2 => "sl2",
             Algorithm::Crc64Nvme => "crc64nvme",
         }
         .into(),
         incremental: experiment.incremental,
         warm_writer: experiment.warm_writer,
+        disk_cache_bytes: experiment.disk_cache_bytes,
+        read_strategy: format!("{:?}", experiment.read_strategy).to_lowercase(),
+        concurrency: experiment.concurrency,
+        file_concurrency: experiment.file_concurrency,
+        prefetch: experiment.prefetch,
         latency_ms,
         mib_per_sec,
         database_bytes: image.len() as u64,
@@ -279,6 +343,7 @@ fn main() -> Result<()> {
         ensure!(
             [
                 "--rows",
+                "--append-rows",
                 "--rounds",
                 "--latency-ms",
                 "--mib-per-sec",
@@ -286,6 +351,11 @@ fn main() -> Result<()> {
                 "--mode",
                 "--summary",
                 "--export",
+                "--disk-cache-mib",
+                "--read-strategy",
+                "--concurrency",
+                "--file-concurrency",
+                "--prefetch",
                 "--writer-cache"
             ]
             .contains(&p[0].as_str()),
@@ -299,10 +369,9 @@ fn main() -> Result<()> {
     let rows = number("--rows", 256)?;
     let rounds = number("--rounds", 3)?;
     let inline = number("--inline-pages", 1280)?;
-    let algorithm = match options.get("--summary").copied().unwrap_or("sl2") {
-        "sl2" => Algorithm::Sl2,
+    let algorithm = match options.get("--summary").copied().unwrap_or("crc64nvme") {
         "crc64nvme" => Algorithm::Crc64Nvme,
-        _ => anyhow::bail!("expected sl2 or crc64nvme"),
+        _ => anyhow::bail!("expected crc64nvme"),
     };
     let incremental = match options.get("--export").copied().unwrap_or("incremental") {
         "incremental" => true,
@@ -310,6 +379,19 @@ fn main() -> Result<()> {
         _ => anyhow::bail!("expected incremental or full"),
     };
     let experiment = Experiment {
+        append_rows: number("--append-rows", 0)?,
+        disk_cache_bytes: u64::try_from(number("--disk-cache-mib", 128)?)?
+            .checked_mul(1024 * 1024)
+            .context("cache size overflow")?,
+        concurrency: number("--concurrency", 2)?,
+        file_concurrency: number("--file-concurrency", 2)?,
+        prefetch: number("--prefetch", 2)?,
+        read_strategy: match options.get("--read-strategy").copied().unwrap_or("batched") {
+            "lookup" => ReadStrategy::Lookup,
+            "cursor" => ReadStrategy::Cursor,
+            "batched" => ReadStrategy::Batched,
+            _ => anyhow::bail!("expected lookup, cursor or batched"),
+        },
         algorithm,
         incremental,
         warm_writer: match options.get("--writer-cache").copied().unwrap_or("cold") {
@@ -318,6 +400,15 @@ fn main() -> Result<()> {
             _ => anyhow::bail!("expected warm or cold writer cache"),
         },
     };
+    ensure!(
+        (1..=32).contains(&experiment.file_concurrency),
+        "invalid file concurrency"
+    );
+    ensure!(experiment.prefetch <= 32, "invalid prefetch slots");
+    ensure!(
+        (1..=32).contains(&experiment.concurrency),
+        "invalid concurrency"
+    );
     ensure!(rows > 0 && rounds > 0, "positive rows/rounds required");
     let latency = number("--latency-ms", 0)? as u64;
     let bandwidth = number("--mib-per-sec", 0)? as u64;

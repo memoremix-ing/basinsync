@@ -1,22 +1,19 @@
-use super::{Consumer, Sectors};
+use super::Consumer;
 use crate::{Value, profile};
 use anyhow::{Result, ensure};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Algorithm {
-    Sl2,
     Crc64Nvme,
 }
 impl Algorithm {
     pub fn migration(self) -> u32 {
         match self {
-            Self::Sl2 => 0,
             Self::Crc64Nvme => 1,
         }
     }
     pub fn from_migration(n: u32) -> Result<Self> {
         match n {
-            0 => Ok(Self::Sl2),
             1 => Ok(Self::Crc64Nvme),
             _ => anyhow::bail!("unsupported page checksum migration"),
         }
@@ -24,7 +21,6 @@ impl Algorithm {
     pub fn digest(self, summary: &Value) -> Result<Vec<u8>> {
         Ok(summary
             .field(match self {
-                Self::Sl2 => "brombergSL2",
                 Self::Crc64Nvme => "crc64nvme",
             })?
             .blob()?
@@ -32,7 +28,6 @@ impl Algorithm {
     }
     pub fn hash(self, bytes: &[u8]) -> Vec<u8> {
         match self {
-            Self::Sl2 => crate::bromberg::hash(bytes),
             Self::Crc64Nvme => {
                 let _profile = profile::span("crc64nvme.hash");
                 crc_fast::crc64_nvme(bytes).to_be_bytes().to_vec()
@@ -74,7 +69,7 @@ static SHIFTS: std::sync::LazyLock<[[u64; 64]; 64]> = std::sync::LazyLock::new(|
     }
     powers
 });
-fn combine_crc(mut left: u64, right: u64, mut length: u64) -> u64 {
+pub fn combine_crc(mut left: u64, right: u64, mut length: u64) -> u64 {
     while length != 0 {
         left = apply(&SHIFTS[length.trailing_zeros() as usize], left);
         length &= length - 1;
@@ -90,41 +85,38 @@ impl Consumer for Pages {
     }
     fn empty(&self) -> Value {
         match self.algorithm {
-            Algorithm::Sl2 => Sectors.empty(),
             Algorithm::Crc64Nvme => Value::map([
                 ("crc64nvme", Value::Blob(vec![0; 8])),
-                ("length", Value::Big(0.into())),
+                ("size", Value::Big(0.into())),
             ]),
         }
     }
-    fn entry(&self, k: &[u8], v: &Value) -> Result<Value> {
+    fn entry(&self, _k: &[u8], v: &Value) -> Result<Value> {
         match self.algorithm {
-            Algorithm::Sl2 => Sectors.entry(k, v),
             Algorithm::Crc64Nvme => {
                 ensure!(v.array()?.len() == 1, "invalid page");
                 let bytes = v.at(0)?.blob()?;
                 Ok(Value::map([
                     ("crc64nvme", Value::Blob(self.algorithm.hash(bytes))),
-                    ("length", Value::Big(bytes.len().into())),
+                    ("size", Value::Big(bytes.len().into())),
                 ]))
             }
         }
     }
     fn combine(&self, parts: &[Value]) -> Result<Value> {
         match self.algorithm {
-            Algorithm::Sl2 => Sectors.combine(parts),
             Algorithm::Crc64Nvme => {
                 let _profile = profile::span("crc64nvme.combine");
                 let mut sum = 0;
                 let mut length = num_bigint::BigInt::from(0);
                 for p in parts {
-                    let n = p.field("length")?.big()?;
+                    let n = p.field("size")?.big()?;
                     sum = combine_crc(sum, crc(p)?, u64::try_from(&n)?);
                     length += n;
                 }
                 Ok(Value::map([
                     ("crc64nvme", Value::Blob(sum.to_be_bytes().to_vec())),
-                    ("length", Value::Big(length)),
+                    ("size", Value::Big(length)),
                 ]))
             }
         }

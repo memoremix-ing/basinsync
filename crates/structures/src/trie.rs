@@ -164,6 +164,29 @@ fn inlined<C: Consumer>(own: &[Row], members: &[Option<Member>], c: &C) -> Resul
     }
     Ok(n)
 }
+fn seal_children<S: Storage>(basin: &mut Basin<S>, members: &mut [Option<Member>]) -> Result<()> {
+    let mut nodes = vec![];
+    for member in members.iter().flatten() {
+        if let Member::Nodes(children) = member {
+            for child in children.iter().flatten() {
+                if let Child::Inline(b) = child {
+                    nodes.push((b.node.clone(), b.edges.clone()));
+                }
+            }
+        }
+    }
+    let mut edges = basin.seal_many(nodes)?.into_iter();
+    for member in members.iter_mut().flatten() {
+        if let Member::Nodes(children) = member {
+            for child in children.iter_mut().flatten() {
+                if matches!(child, Child::Inline(_)) {
+                    *child = Child::Edge(edges.next().unwrap());
+                }
+            }
+        }
+    }
+    Ok(())
+}
 fn split<S: Storage, C: Consumer>(
     basin: &mut Basin<S>,
     rows: &[Row],
@@ -271,15 +294,7 @@ fn build_rows<S: Storage, C: Consumer>(
                 }
             }
         }
-        for m in members.iter_mut().flatten() {
-            if let Member::Nodes(v) = m {
-                for child in v.iter_mut().flatten() {
-                    if let Child::Inline(b) = child {
-                        *child = Child::Edge(basin.seal(b.node.clone(), &b.edges)?);
-                    }
-                }
-            }
-        }
+        seal_children(basin, &mut members)?;
         edged = Bool(true);
     }
     if strict && refs(&own, &members, c)?.len() > basin.max_degree {
@@ -647,6 +662,43 @@ pub fn visit_inline<S: Storage>(
         emit,
         0,
     )
+}
+/// Look ahead only to the stored children of this encoded node. Callers must
+/// intend a complete traversal (selective readers must not fetch pruned edges).
+pub fn prefetch_inline<S: Storage>(
+    basin: &mut Basin<S>,
+    view: &View,
+    migration: u32,
+) -> Result<()> {
+    fn collect(view: &View, migration: u32, edges: &mut Vec<Edge>, depth: usize) -> Result<()> {
+        ensure!(depth < 256, "trie nesting limit");
+        let (_, _, members, edged) = parts(view, migration)?;
+        if let Some(edged) = edged {
+            let groups = members.reader()?.get_vector()?;
+            for high in 0..groups.len() {
+                let member = members.item(high);
+                let r = member.reader()?;
+                if r.flexbuffer_type() != flexbuffers::FlexBufferType::Vector {
+                    continue;
+                }
+                for low in 0..r.get_vector()?.len() {
+                    let child = member.item(low);
+                    if child.reader()?.flexbuffer_type() == flexbuffers::FlexBufferType::Null {
+                        continue;
+                    }
+                    if edged {
+                        edges.push(child.owned()?);
+                    } else {
+                        collect(&child, migration, edges, depth + 1)?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+    let mut edges = vec![];
+    collect(view, migration, &mut edges, 0)?;
+    basin.storage.prefetch(&basin::distinct(&edges)?)
 }
 struct Traversal<'a> {
     prefix: &'a [u8],

@@ -72,13 +72,6 @@ impl Node {
             node,
         })
     }
-    fn edge<S: Storage>(&self, b: &mut Basin<S>) -> Result<Edge> {
-        if let Some(e) = &self.existing {
-            return Ok(e.clone());
-        }
-        let built = self.materialize(b)?;
-        b.seal(built.node, &built.edges)
-    }
 }
 fn node_refs(n: &Value) -> Result<Vec<Edge>> {
     let mut out = vec![];
@@ -362,7 +355,11 @@ impl<S: Storage, C: Consumer> Editor<'_, S, C> {
                         .map(|n| {
                             n.map(|n| {
                                 if external {
-                                    Ok(Child::Edge(n.edge(self.basin)?))
+                                    if let Some(edge) = &n.existing {
+                                        Ok(Child::Edge(edge.clone()))
+                                    } else {
+                                        Ok(Child::Inline(n.materialize(self.basin)?))
+                                    }
                                 } else {
                                     Ok(Child::Inline(n.materialize(self.basin)?))
                                 }
@@ -373,17 +370,8 @@ impl<S: Storage, C: Consumer> Editor<'_, S, C> {
                 )),
             });
         }
-        // Groups split by the canonical strict-budget rule still need sealing.
         if external {
-            for m in result.iter_mut().flatten() {
-                if let Member::Nodes(ns) = m {
-                    for n in ns.iter_mut().flatten() {
-                        if let Child::Inline(v) = n {
-                            *n = Child::Edge(self.basin.seal(v.node.clone(), &v.edges)?);
-                        }
-                    }
-                }
-            }
+            seal_children(self.basin, &mut result)?;
         }
         let edges = refs(&own, &result, self.consumer)?;
         let inline = inlined(&own, &result, self.consumer)?;
@@ -553,29 +541,56 @@ pub fn update_node_pruned<S: Storage, C: Consumer>(
         let p = parts.swap_remove(i);
         parts.extend(e.expand(p)?);
     }
-    for (key, value) in std::mem::take(&mut e.changes) {
-        let old = parts
-            .iter()
-            .position(|p| matches!(p,Part::Row(r) if r.key==key))
-            .map(|i| parts.swap_remove(i));
-        if let Some(value) = value {
-            ensure!(
-                c.edges(&value)?.is_empty(),
-                "incremental values must not contain basin edges"
-            );
-            if let Some(Part::Row(row)) = old
-                && row.value == value
-            {
-                parts.push(Part::Row(row));
-                continue;
+    // Exposed rows and untouched trees have disjoint key ranges. Merge the
+    // ordered edits once rather than searching all earlier appends per edit.
+    order(&mut parts)?;
+    let mut edits = std::mem::take(&mut e.changes).into_iter().peekable();
+    let mut merged = Vec::with_capacity(parts.len() + edits.len());
+    for part in parts {
+        let first = part.bounds()?.0;
+        while edits.peek().is_some_and(|(key, _)| key < &first) {
+            let (key, value) = edits.next().unwrap();
+            merged.extend(edit_row(c, key, value, None)?);
+        }
+        if let Part::Row(row) = part {
+            if edits.peek().is_some_and(|(key, _)| key == &row.key) {
+                let (key, value) = edits.next().unwrap();
+                merged.extend(edit_row(c, key, value, Some(row))?);
+            } else {
+                merged.push(Part::Row(row));
             }
-            parts.push(Part::Row(Row {
-                summary: c.entry(&key, &value)?,
-                key,
-                value,
-            }));
+        } else {
+            merged.push(part);
         }
     }
-    let node = e.build(parts, 0, 0)?;
+    for (key, value) in edits {
+        merged.extend(edit_row(c, key, value, None)?);
+    }
+    let node = e.build(merged, 0, 0)?;
     node.materialize(e.basin)
+}
+
+fn edit_row<C: Consumer>(
+    c: &C,
+    key: Vec<u8>,
+    value: Option<Value>,
+    old: Option<Row>,
+) -> Result<Option<Part>> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    ensure!(
+        c.edges(&value)?.is_empty(),
+        "incremental values must not contain basin edges"
+    );
+    if let Some(row) = old
+        && row.value == value
+    {
+        return Ok(Some(Part::Row(row)));
+    }
+    Ok(Some(Part::Row(Row {
+        summary: c.entry(&key, &value)?,
+        key,
+        value,
+    })))
 }

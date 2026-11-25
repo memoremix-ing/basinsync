@@ -5,6 +5,32 @@ use basinsync_structures::{
     trie::{self, Consumer, Count},
 };
 use std::collections::BTreeMap;
+#[test]
+fn verified_bytes_cannot_be_rebound_to_another_descriptor() -> Result<()> {
+    use basinsync_structures::basin::{Edge, PendingEdge, Storage, VerifiedObject};
+    struct Alternate {
+        edge: Edge,
+        bytes: Vec<u8>,
+    }
+    impl Storage for Alternate {
+        fn put(&mut self, _: &PendingEdge, _: &[u8], _: &[Edge]) -> Result<String> {
+            anyhow::bail!("read only")
+        }
+        fn get(&mut self, _: &Edge) -> Result<Vec<u8>> {
+            Ok(self.bytes.clone())
+        }
+        fn get_verified(&mut self, _: &Edge) -> Result<VerifiedObject> {
+            VerifiedObject::new(&self.edge, self.bytes.clone())
+        }
+    }
+    let mut b = Basin::new(MemoryStorage::default(), vec![42; 32])?;
+    let first = trie::build(&mut b, vec![(vec![1], 1u32.into())], &Count(0))?;
+    let second = trie::build(&mut b, vec![(vec![1], 2u32.into())], &Count(0))?;
+    let bytes = (*b.load(&first)?).clone();
+    let mut reader = Basin::new(Alternate { edge: first, bytes }, vec![42; 32])?;
+    assert!(reader.load(&second).is_err());
+    Ok(())
+}
 struct Budget(usize);
 impl Consumer for Budget {
     fn trie_inline_limit(&self) -> usize {
@@ -134,7 +160,7 @@ fn crc64nvme_summaries_compose_and_incremental_pages_match_full_rebuilds() -> Re
             0xae8b14860a799888
         );
     }
-    for algorithm in [Algorithm::Sl2, Algorithm::Crc64Nvme] {
+    for algorithm in [Algorithm::Crc64Nvme] {
         for budget in [1, 4, 16] {
             let mut b = Basin::new(MemoryStorage::default(), vec![23; 32])?;
             let mut model = (0..270u32)
@@ -200,6 +226,47 @@ fn crc64nvme_summaries_compose_and_incremental_pages_match_full_rebuilds() -> Re
             )?;
             assert_eq!(changed.edge, full.edge);
         }
+    }
+    Ok(())
+}
+
+#[test]
+fn batched_growth_and_mixed_edits_match_full_canonical_rebuilds() -> Result<()> {
+    for budget in [16, 1280] {
+        let c = Budget(budget);
+        let mut b = Basin::new(MemoryStorage::default(), vec![43; 32])?;
+        let mut model = (0..300u32)
+            .map(|i| (i.to_be_bytes().to_vec(), i.into()))
+            .collect::<BTreeMap<_, Value>>();
+        let root = trie::build(&mut b, model.clone().into_iter().collect(), &c)?;
+        let mut edits = (300..2300u32)
+            .map(|i| (i.to_be_bytes().to_vec(), Some(i.into())))
+            .collect::<Vec<_>>();
+        for i in 0..300u32 {
+            edits.push((
+                i.to_be_bytes().to_vec(),
+                if i % 3 == 0 {
+                    None
+                } else {
+                    Some((i + 1).into())
+                },
+            ));
+        }
+        edits.push((9999u32.to_be_bytes().to_vec(), None));
+        // Input order is irrelevant; the last occurrence of a duplicate wins.
+        edits.reverse();
+        edits.push((1000u32.to_be_bytes().to_vec(), Some(Value::Null)));
+        for (k, v) in &edits {
+            if let Some(v) = v {
+                model.insert(k.clone(), v.clone());
+            } else {
+                model.remove(k);
+            }
+        }
+        let updated = trie::update_node(&mut b, root.clone(), edits, &c)?;
+        let full = trie::build_node(&mut b, model.into_iter().collect(), &c)?;
+        assert_eq!(updated.node, full.node);
+        assert_eq!(trie::entries(&mut b, &root, &[], 0)?.len(), 300);
     }
     Ok(())
 }

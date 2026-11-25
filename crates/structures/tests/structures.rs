@@ -3,7 +3,6 @@ use anyhow::Result;
 use basinsync_structures::{
     Value,
     basin::{self, Basin, MemoryStorage},
-    bromberg,
     trie::{self, Count, Plain},
     volume,
 };
@@ -28,17 +27,15 @@ fn rows(n: usize) -> Vec<(Vec<u8>, Value)> {
         .collect()
 }
 #[test]
-fn published_sl2_vector_and_composition() -> Result<()> {
-    for v in shared_vectors()["sl2"].as_array().unwrap() {
+fn published_crc64nvme_vectors_and_composition() -> Result<()> {
+    use volume::Algorithm;
+    for v in shared_vectors()["crc64nvme"].as_array().unwrap() {
+        let bytes = v["message"].as_str().unwrap().as_bytes();
         assert_eq!(
-            basin::hex(&bromberg::hash(v["message"].as_str().unwrap().as_bytes())),
+            basin::hex(&Algorithm::Crc64Nvme.hash(bytes)),
             v["digest"].as_str().unwrap()
         );
     }
-    assert_eq!(
-        bromberg::combine(&[bromberg::hash(b"hello, "), bromberg::hash(b"world!")])?,
-        bromberg::hash(b"hello, world!")
-    );
     Ok(())
 }
 #[test]

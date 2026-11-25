@@ -1,7 +1,6 @@
 use crate::{
     Value,
     basin::{self, Basin, DOMAIN, Edge, Storage},
-    bromberg,
     trie::{self, Consumer, View},
     value,
 };
@@ -15,31 +14,29 @@ mod checksum;
 pub use checksum::Algorithm;
 pub struct Sectors;
 impl Consumer for Sectors {
+    fn migration(&self) -> u32 {
+        1
+    }
     fn empty(&self) -> Value {
-        Value::map([
-            ("brombergSL2", Blob(bromberg::bytes(bromberg::IDENTITY))),
-            ("size", Big(0.into())),
-        ])
+        checksum::Pages {
+            algorithm: Algorithm::Crc64Nvme,
+            inline: 1280,
+        }
+        .empty()
     }
-    fn entry(&self, _: &[u8], v: &Value) -> Result<Value> {
-        ensure!(v.array()?.len() == 1, "invalid page");
-        Ok(Value::map([
-            ("brombergSL2", Blob(bromberg::hash(v.at(0)?.blob()?))),
-            ("size", Big(v.at(0)?.blob()?.len().into())),
-        ]))
+    fn entry(&self, key: &[u8], value: &Value) -> Result<Value> {
+        checksum::Pages {
+            algorithm: Algorithm::Crc64Nvme,
+            inline: 1280,
+        }
+        .entry(key, value)
     }
-    fn combine(&self, s: &[Value]) -> Result<Value> {
-        let parts = s
-            .iter()
-            .map(|v| Ok(v.field("brombergSL2")?.blob()?.to_vec()))
-            .collect::<Result<Vec<_>>>()?;
-        let size = s.iter().try_fold(num_bigint::BigInt::from(0), |n, v| {
-            Ok::<_, anyhow::Error>(n + v.field("size")?.big()?)
-        })?;
-        Ok(Value::map([
-            ("brombergSL2", Blob(bromberg::combine(&parts)?)),
-            ("size", Big(size)),
-        ]))
+    fn combine(&self, parts: &[Value]) -> Result<Value> {
+        checksum::Pages {
+            algorithm: Algorithm::Crc64Nvme,
+            inline: 1280,
+        }
+        .combine(parts)
     }
 }
 pub fn lex(n: &num_bigint::BigInt) -> Result<String> {
@@ -470,7 +467,7 @@ pub fn build_block_with_inline_pages<S: Storage>(
     input: Vec<(num_bigint::BigInt, Vec<u8>)>,
     inline_pages: usize,
 ) -> Result<BlockRoot> {
-    build_block_with_algorithm(b, input, inline_pages, Algorithm::Sl2)
+    build_block_with_algorithm(b, input, inline_pages, Algorithm::Crc64Nvme)
 }
 pub fn build_block_with_algorithm<S: Storage>(
     b: &mut Basin<S>,
@@ -618,7 +615,7 @@ pub fn from_blocks<S: Storage>(
     blocks: Vec<(String, BlockRoot)>,
     directories: Vec<String>,
 ) -> Result<Edge> {
-    let migration = blocks.iter().try_fold(0u32, |m, b| {
+    let migration = blocks.iter().try_fold(1u32, |m, b| {
         Ok::<_, anyhow::Error>(m.max(b.1.edge.at(6)?.field("0")?.number()?))
     })?;
     let mut file_map = BTreeMap::new();
@@ -627,13 +624,8 @@ pub fn from_blocks<S: Storage>(
         ensure!(!file_map.contains_key(&name), "duplicate pathname");
         ensure!(
             block.edge.at(2)?.text()? == BLOCK
-                && matches!(block.edge.at(6)?.field("0")?.number()?, 0 | 1)
-                && block.digest.len()
-                    == if block.edge.at(6)?.field("0")?.number()? == 0 {
-                        64
-                    } else {
-                        8
-                    },
+                && block.edge.at(6)?.field("0")?.number()? == 1
+                && block.digest.len() == 8,
             "invalid block descriptor"
         );
         file_map.insert(name, (block.edge, Blob(block.digest)));
@@ -684,7 +676,7 @@ fn data<S: Storage>(basin: &mut Basin<S>, root: &Edge) -> Result<View> {
     let footer = v.field("6");
     ensure!(
         footer.reader()?.get_vector()?.len() == 3
-            && matches!(value::item(footer.reader()?, 0)?.get_i64()?, 0 | 1),
+            && value::item(footer.reader()?, 0)?.get_i64()? == 1,
         "unsupported volume migration"
     );
     Ok(footer)
@@ -729,10 +721,12 @@ fn open_block<S: Storage>(
     name: &str,
     _shortcuts: bool,
 ) -> Result<(View, Vec<u8>)> {
-    let (folder, file) = directory_entry(b, root, name)?;
-    ensure!(!folder, "not a file");
-    let file = file.owned()?;
-    let block = View::root(b.load(file.at(2)?)?);
+    let descriptor = block(b, root, name)?;
+    let footer = open_descriptor(b, &descriptor)?;
+    Ok((footer, descriptor.digest))
+}
+fn open_descriptor<S: Storage>(b: &mut Basin<S>, descriptor: &BlockRoot) -> Result<View> {
+    let block = View::root(b.load(&descriptor.edge)?);
     basin::validate_node(block.reader()?, Some(BLOCK))?;
     let f = block.field("6");
     ensure!(
@@ -741,8 +735,8 @@ fn open_block<S: Storage>(
     );
     let algorithm = Algorithm::from_migration(f.item(0).owned()?.number()?)?;
     let expected = algorithm.digest(&sector_summary(&f)?)?;
-    ensure!(expected == file.at(1)?.blob()?, "block checksum mismatch");
-    Ok((f, expected))
+    ensure!(expected == descriptor.digest, "block checksum mismatch");
+    Ok(f)
 }
 pub fn read<S: Storage>(
     basin: &mut Basin<S>,
@@ -872,7 +866,7 @@ pub fn page<S: Storage>(
         })
         .transpose()
 }
-/// Partial reads verify fetched basin-object SHA-384s; full reads also verify SL2.
+/// Partial reads verify fetched basin-object SHA-384s; full reads also verify CRC64NVME.
 pub fn read_range<S: Storage>(
     basin: &mut Basin<S>,
     root: &Edge,
@@ -1103,26 +1097,100 @@ pub fn update<S: Storage>(
 
 /// Read only file/sector descriptors; no page-trie descendants need to be fetched.
 pub fn dense_page_count<S: Storage>(b: &mut Basin<S>, root: &Edge, name: &str) -> Result<u64> {
-    let _profile = crate::profile::span("volume.file_lookup");
-    let (footer, _) = open_block(b, root, name, false)?;
-    let pages = footer.item(2);
-    let header = if pages.reader()?.flexbuffer_type() == flexbuffers::FlexBufferType::Map {
-        pages.field("5").owned()?
-    } else {
-        pages.item(5).owned()?
-    };
-    let count = u64::try_from(header.field("count")?.big()?)?;
-    let keys = header.field("keys")?;
-    if count == 0 {
-        ensure!(keys.is_null(), "nonempty page bounds");
-    } else {
-        ensure!(
-            unlex(std::str::from_utf8(keys.at(0)?.blob()?)?)? == 0.into()
-                && unlex(std::str::from_utf8(keys.at(1)?.blob()?)?)? == (count - 1).into(),
-            "sparse database page map"
-        );
+    Ok(PageReader::open(b, root, name)?.count)
+}
+
+/// Retains the resolved block descriptor, with a weak encoded-owner cursor so
+/// idle file cursors cannot pin unbounded object bodies in RAM. Bulk
+/// visitation descends the trie once, borrowing each page directly from its object.
+pub struct PageReader {
+    block: Edge,
+    owner: std::sync::Mutex<std::sync::Weak<Vec<u8>>>,
+    pub count: u64,
+}
+pub struct PagePin {
+    _owner: std::sync::Arc<Vec<u8>>,
+}
+impl PageReader {
+    pub fn open<S: Storage>(b: &mut Basin<S>, root: &Edge, name: &str) -> Result<Self> {
+        let _profile = crate::profile::span("volume.file_lookup");
+        let descriptor = block(b, root, name)?;
+        let footer = open_descriptor(b, &descriptor)?;
+        let pages = footer.item(2);
+        let header = if pages.reader()?.flexbuffer_type() == flexbuffers::FlexBufferType::Map {
+            pages.field("5").owned()?
+        } else {
+            pages.item(5).owned()?
+        };
+        let count = u64::try_from(header.field("count")?.big()?)?;
+        let keys = header.field("keys")?;
+        if count == 0 {
+            ensure!(keys.is_null(), "nonempty page bounds");
+        } else {
+            ensure!(
+                unlex(std::str::from_utf8(keys.at(0)?.blob()?)?)? == 0.into()
+                    && unlex(std::str::from_utf8(keys.at(1)?.blob()?)?)? == (count - 1).into(),
+                "sparse database page map"
+            );
+        }
+        Ok(Self {
+            block: descriptor.edge,
+            owner: std::sync::Mutex::new(std::sync::Arc::downgrade(&footer.bytes)),
+            count,
+        })
     }
-    Ok(count)
+    fn footer<S: Storage>(&self, b: &mut Basin<S>) -> Result<View> {
+        let mut owner = self.owner.lock().unwrap();
+        let bytes = match owner.upgrade() {
+            Some(bytes) => bytes,
+            None => {
+                let bytes = b.load(&self.block)?;
+                *owner = std::sync::Arc::downgrade(&bytes);
+                bytes
+            }
+        };
+        Ok(View::root(bytes).field("6"))
+    }
+    /// Keep the active cursor alive for a read batch, without retaining its
+    /// encoded object for the entire mount lifetime.
+    pub fn pin<S: Storage>(&self, b: &mut Basin<S>) -> Result<PagePin> {
+        Ok(PagePin {
+            _owner: self.footer(b)?.bytes,
+        })
+    }
+    pub fn page<S: Storage>(&self, b: &mut Basin<S>, index: u64) -> Result<Option<Vec<u8>>> {
+        let footer = self.footer(b)?;
+        page_value(b, &footer, lex(&index.into())?.into_bytes(), true)?
+            .map(|v| {
+                ensure!(v.array()?.len() == 1, "invalid page");
+                Ok(v.at(0)?.blob()?.to_vec())
+            })
+            .transpose()
+    }
+    pub fn visit<S: Storage>(
+        &self,
+        b: &mut Basin<S>,
+        mut emit: impl FnMut(u64, &[u8]) -> Result<()>,
+    ) -> Result<()> {
+        let _profile = crate::profile::span("volume.pages_visit");
+        let footer = self.footer(b)?;
+        let root = page_root(b, &footer)?;
+        trie::prefetch_inline(b, &root, 1)?;
+        let mut seen = BTreeSet::new();
+        trie::visit_inline(b, root, &[], &[], 1, &mut |_, _| true, &mut |key, v| {
+            let index = u64::try_from(unlex(std::str::from_utf8(&key)?)?)?;
+            ensure!(
+                index < self.count && seen.insert(index),
+                "sparse database page map"
+            );
+            let array = v.reader()?.get_vector()?;
+            ensure!(array.len() == 1, "invalid page");
+            emit(index, array.index(0)?.get_blob()?.0)?;
+            Ok(true)
+        })?;
+        ensure!(seen.len() as u64 == self.count, "missing Turso page");
+        Ok(())
+    }
 }
 
 /// Path-copy only changed directories, preserving unopened sibling contents.
@@ -1205,13 +1273,8 @@ pub fn replace_blocks<S: Storage>(
     for (name, block) in blocks {
         ensure!(
             block.edge.at(2)?.text()? == BLOCK
-                && matches!(block.edge.at(6)?.field("0")?.number()?, 0 | 1)
-                && block.digest.len()
-                    == if block.edge.at(6)?.field("0")?.number()? == 0 {
-                        64
-                    } else {
-                        8
-                    },
+                && block.edge.at(6)?.field("0")?.number()? == 1
+                && block.digest.len() == 8,
             "invalid block"
         );
         descriptor = replace(b, descriptor, &path(&name)?, &block)?;

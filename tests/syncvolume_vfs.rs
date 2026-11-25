@@ -31,6 +31,203 @@ fn sample() -> Result<DatabaseFile> {
     db.snapshot()?;
     Ok(db)
 }
+
+#[test]
+fn disk_object_cache_survives_restart_detects_corruption_and_bounds_space() -> Result<()> {
+    use basinsync::structures::basin;
+    use basinsync::turso::volume::cache::DiskCache;
+    let directory = tempfile::tempdir()?;
+    let objects = DiskObjects::new(directory.path())?;
+    let cache_dir = directory.path().join("cache");
+    let mut db = sample()?;
+    let view = db.snapshot()?;
+    let mut b = Basin::new(objects.clone(), vec![42; 32])?;
+    let root = checkpoint(&mut b, None, vec![("/db".into(), view.clone())], 16)?;
+    let cached = || -> Result<_> {
+        Basin::new(
+            DiskCache::new(objects.clone(), &cache_dir, 8 * 1024 * 1024)?.with_prefetch(2),
+            vec![42; 32],
+        )
+    };
+    let mount = SyncVolume::new(cached()?, root.clone(), LoadMode::EagerFile);
+    assert_eq!(mount.open("/db")?.snapshot()?.image()?, view.image()?);
+    drop(mount);
+    *objects.fail_reads.lock().unwrap() = true;
+    let mount = SyncVolume::new(cached()?, root.clone(), LoadMode::EagerFile);
+    assert_eq!(
+        mount.open("/db")?.snapshot()?.image()?,
+        view.image()?,
+        "restart lost the disk cache"
+    );
+    drop(mount);
+    let mut forged = root.clone();
+    if let basinsync::structures::Value::Array(parts) = &mut forged {
+        parts[6].set("entropy", basinsync::structures::Value::Blob(vec![7; 32]))?;
+        parts[6].set("revision", "00000000-0000-4000-8000-000000000001".into())?;
+    }
+    assert!(
+        cached()?.load(&forged).is_err(),
+        "known digest bypassed a different capability's origin lookup"
+    );
+    for entry in std::fs::read_dir(&cache_dir)? {
+        std::fs::write(entry?.path(), [0; 16])?;
+    }
+    assert!(
+        cached()?.load(&root).is_err(),
+        "corrupt cache bypassed origin integrity"
+    );
+    *objects.fail_reads.lock().unwrap() = false;
+    assert!(
+        cached()?.load(&root).is_ok(),
+        "cache corruption could not be repaired"
+    );
+    let tiny = directory.path().join("tiny-cache");
+    let length = basin::footer(&root)?.field("length")?.number()? as u64;
+    let mut bounded = Basin::new(
+        DiskCache::new(objects.clone(), &tiny, length)?,
+        vec![42; 32],
+    )?;
+    bounded.load(&root)?;
+    // Larger bodies bypass the cache; root and block reads cannot exceed its budget.
+    layout::page(&mut bounded, &root, "/db", &0.into(), false)?;
+    let size = std::fs::read_dir(tiny)?
+        .map(|e| Ok(e?.metadata()?.len()))
+        .collect::<std::io::Result<Vec<_>>>()?
+        .into_iter()
+        .sum::<u64>();
+    assert!(size <= length);
+    Ok(())
+}
+
+#[test]
+fn read_strategies_preserve_lazy_and_eager_images() -> Result<()> {
+    use basinsync::turso::volume::ReadStrategy;
+    let directory = tempfile::tempdir()?;
+    let objects = DiskObjects::new(directory.path())?;
+    let mut b = Basin::new(objects.clone(), vec![42; 32])?;
+    let view = sample()?.snapshot()?;
+    let root = checkpoint(&mut b, None, vec![("/db".into(), view.clone())], 16)?;
+    for strategy in [
+        ReadStrategy::Lookup,
+        ReadStrategy::Cursor,
+        ReadStrategy::Batched,
+    ] {
+        for mode in [LoadMode::LazyPages, LoadMode::EagerFile] {
+            let mount = SyncVolume::new(
+                Basin::new(objects.clone(), vec![42; 32])?,
+                root.clone(),
+                mode,
+            )
+            .with_read_strategy(strategy);
+            let mut file = mount.open("/db")?;
+            if mode == LoadMode::EagerFile {
+                *objects.fail_reads.lock().unwrap() = true;
+            }
+            assert_eq!(file.snapshot()?.image()?, view.image()?);
+            *objects.fail_reads.lock().unwrap() = false;
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn parallel_sibling_publication_drains_failures_and_keeps_prior_root() -> Result<()> {
+    use basinsync::structures::volume::Algorithm;
+    use std::time::Duration;
+    let directory = tempfile::tempdir()?;
+    let mut objects = DiskObjects::new(directory.path())?;
+    objects.concurrency = 2;
+    objects.delay = Duration::from_millis(2);
+    let mut b = Basin::new(objects.clone(), vec![42; 32])?;
+    layout::build_block_with_inline_pages(
+        &mut b,
+        (0..64u32)
+            .map(|i| (i.into(), vec![i as u8; 16384]))
+            .collect(),
+        4,
+    )?;
+    assert_eq!(objects.stats().max_in_flight, 2);
+    let before = sample()?.snapshot()?;
+    let root = checkpoint(&mut b, None, vec![("/db".into(), before.clone())], 16)?;
+    let mut db = DatabaseFile::fork(before.clone())?;
+    db.connection()
+        .execute("UPDATE payload SET body=zeroblob(13000)")?;
+    let next = db.snapshot()?;
+    *objects.fail_writes.lock().unwrap() = Some(1);
+    assert!(checkpoint(&mut b, Some(&root), vec![("/db".into(), next.clone())], 16).is_err());
+    let puts = objects.stats().puts;
+    std::thread::sleep(Duration::from_millis(15));
+    assert_eq!(
+        objects.stats().puts,
+        puts,
+        "publication returned with live uploads"
+    );
+    *objects.fail_writes.lock().unwrap() = None;
+    let next_root = basinsync::turso::volume::checkpoint_with_algorithm(
+        &mut b,
+        Some(&root),
+        vec![("/db".into(), next.clone())],
+        16,
+        Algorithm::Crc64Nvme,
+    )?;
+    for (root, expected) in [(root, before), (next_root, next)] {
+        let mount = SyncVolume::new(
+            Basin::new(objects.clone(), vec![42; 32])?,
+            root,
+            LoadMode::EagerFile,
+        );
+        assert_eq!(mount.open("/db")?.snapshot()?.image()?, expected.image()?);
+    }
+    Ok(())
+}
+
+#[test]
+fn concurrent_database_exports_preserve_the_group_barrier_and_canonical_root() -> Result<()> {
+    use basinsync::{structures::basin, turso::volume::Backup};
+    use layout::Algorithm;
+    let directory = tempfile::tempdir()?;
+    let mut objects = DiskObjects::new(directory.path())?;
+    objects.concurrency = 2;
+    objects.request_limit = 2;
+    let mut b = Basin::new(objects.clone(), vec![42; 32])?;
+    let mut primary = sample()?;
+    let mut kernel = DatabaseFile::create(basinsync::kernel::SCHEMA)?;
+    let old_files = vec![
+        ("/primary".into(), primary.snapshot()?),
+        ("/kernel".into(), kernel.snapshot()?),
+    ];
+    let old = Backup::create(&mut b, old_files.clone(), 16, Algorithm::Crc64Nvme)?;
+    primary
+        .connection()
+        .execute("UPDATE payload SET body=zeroblob(14000) WHERE id=7")?;
+    kernel
+        .connection()
+        .execute("UPDATE kernel_state SET activity='7' WHERE id=1")?;
+    let next = vec![
+        ("/primary".into(), primary.snapshot()?),
+        ("/kernel".into(), kernel.snapshot()?),
+    ];
+    *objects.fail_writes.lock().unwrap() = Some(1);
+    assert!(old.advance_parallel(&mut b, next.clone(), 2).is_err());
+    *objects.fail_writes.lock().unwrap() = None;
+    let new = old.advance_parallel(&mut b, next.clone(), 2)?;
+    let serial = checkpoint(&mut b, Some(old.root()), next.clone(), 16)?;
+    assert_eq!(
+        basin::footer(new.root())?.field("sha384")?,
+        basin::footer(&serial)?.field("sha384")?
+    );
+    for (root, files) in [(old.root(), old_files), (new.root(), next)] {
+        let mount = SyncVolume::new(
+            Basin::new(objects.clone(), vec![42; 32])?,
+            root.clone(),
+            LoadMode::EagerFile,
+        );
+        for (path, image) in files {
+            assert_eq!(mount.open(&path)?.snapshot()?.image()?, image.image()?);
+        }
+    }
+    Ok(())
+}
 #[test]
 fn lazy_and_eager_files_preserve_turso_snapshots_and_share_unchanged_objects() -> Result<()> {
     let dir = tempfile::tempdir()?;
@@ -387,7 +584,7 @@ fn failed_group_publication_keeps_the_old_root_and_local_rollback_needs_no_netwo
 fn incremental_backups_recover_canonical_roots_without_scanning_unmodified_files() -> Result<()> {
     use basinsync::structures::volume::Algorithm;
     use basinsync::turso::volume::{Backup, checkpoint_with_algorithm};
-    for algorithm in [Algorithm::Sl2, Algorithm::Crc64Nvme] {
+    for algorithm in [Algorithm::Crc64Nvme] {
         for budget in [1, 16, 1280] {
             let dir = tempfile::tempdir()?;
             let objects = DiskObjects::new(dir.path())?;

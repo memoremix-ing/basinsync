@@ -1,0 +1,296 @@
+[
+  {
+    "profiling_enabled": false,
+    "mode": "eager",
+    "round": 0,
+    "rows": 64,
+    "append_rows": 512,
+    "inline_pages": 1280,
+    "summary": "crc64nvme",
+    "incremental": true,
+    "warm_writer": false,
+    "disk_cache_bytes": 134217728,
+    "read_strategy": "batched",
+    "concurrency": 1,
+    "file_concurrency": 1,
+    "prefetch": 0,
+    "latency_ms": 0,
+    "mib_per_sec": 0,
+    "database_bytes": 1409024,
+    "kernel_bytes": 262144,
+    "initial_backup_bytes": 1675768,
+    "load_primary": {
+      "ms": 5.4138329999999995,
+      "io": {
+        "gets": 2,
+        "get_bytes": 1412712,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    "first_query": {
+      "ms": 0.051583,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 0
+      }
+    },
+    "load_kernel": {
+      "ms": 2.017625,
+      "io": {
+        "gets": 1,
+        "get_bytes": 263056,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    "hydrate_all": {
+      "ms": 3.9349169999999996,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 0
+      }
+    },
+    "warm_queries": {
+      "ms": 1.097291,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 0
+      }
+    },
+    "local_commit": {
+      "ms": 29.999291,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 0
+      }
+    },
+    "backup": {
+      "ms": 94.84975,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 3,
+        "put_bytes": 10075976,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    }
+  },
+  {
+    "profiling_enabled": false,
+    "mode": "eager",
+    "round": 1,
+    "rows": 64,
+    "append_rows": 512,
+    "inline_pages": 1280,
+    "summary": "crc64nvme",
+    "incremental": true,
+    "warm_writer": false,
+    "disk_cache_bytes": 134217728,
+    "read_strategy": "batched",
+    "concurrency": 1,
+    "file_concurrency": 1,
+    "prefetch": 0,
+    "latency_ms": 0,
+    "mib_per_sec": 0,
+    "database_bytes": 1409024,
+    "kernel_bytes": 262144,
+    "initial_backup_bytes": 1675768,
+    "load_primary": {
+      "ms": 5.330625,
+      "io": {
+        "gets": 2,
+        "get_bytes": 1412712,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    "first_query": {
+      "ms": 0.042709000000000004,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 0
+      }
+    },
+    "load_kernel": {
+      "ms": 1.9659170000000001,
+      "io": {
+        "gets": 1,
+        "get_bytes": 263056,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    "hydrate_all": {
+      "ms": 3.6575420000000003,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 0
+      }
+    },
+    "warm_queries": {
+      "ms": 1.052209,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 0
+      }
+    },
+    "local_commit": {
+      "ms": 28.51725,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 0
+      }
+    },
+    "backup": {
+      "ms": 94.64233399999999,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 3,
+        "put_bytes": 10075976,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    }
+  },
+  {
+    "profiling_enabled": false,
+    "mode": "eager",
+    "round": 2,
+    "rows": 64,
+    "append_rows": 512,
+    "inline_pages": 1280,
+    "summary": "crc64nvme",
+    "incremental": true,
+    "warm_writer": false,
+    "disk_cache_bytes": 134217728,
+    "read_strategy": "batched",
+    "concurrency": 1,
+    "file_concurrency": 1,
+    "prefetch": 0,
+    "latency_ms": 0,
+    "mib_per_sec": 0,
+    "database_bytes": 1409024,
+    "kernel_bytes": 262144,
+    "initial_backup_bytes": 1675768,
+    "load_primary": {
+      "ms": 5.2871250000000005,
+      "io": {
+        "gets": 2,
+        "get_bytes": 1412712,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    "first_query": {
+      "ms": 0.040834,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 0
+      }
+    },
+    "load_kernel": {
+      "ms": 1.863042,
+      "io": {
+        "gets": 1,
+        "get_bytes": 263056,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    "hydrate_all": {
+      "ms": 3.56975,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 0
+      }
+    },
+    "warm_queries": {
+      "ms": 1.039792,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 0
+      }
+    },
+    "local_commit": {
+      "ms": 27.60075,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 0
+      }
+    },
+    "backup": {
+      "ms": 96.747083,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 3,
+        "put_bytes": 10075976,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    }
+  }
+]

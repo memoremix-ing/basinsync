@@ -56,7 +56,7 @@ for (let trial = 0; trial < 5; trial++)
                 dirs.push(name);
                 await walk(name);
               } else
-                blocks.push([name, { edge: s.edge, digest: s.brombergSL2 }]);
+                blocks.push([name, { edge: s.edge, digest: s.crc64nvme }]);
             }
           };
           await walk("/");

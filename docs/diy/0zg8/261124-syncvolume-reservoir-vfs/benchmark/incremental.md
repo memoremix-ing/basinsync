@@ -2,6 +2,7 @@
 [bromberg-sl2]: <../../../../glossary/bromberg-sl2.md>
 [crc64nvme]: <../../../../glossary/crc64nvme.md>
 [incremental]: <incremental.html>
+[io]: <io.md>
 [packing]: <packing.md>
 [results]: <results.json>
 [sha384]: <../../../../glossary/sha384.md>
@@ -11,6 +12,8 @@
 [volume]: <../../../../glossary/volume.md>
 
 # Incremental export and CRC64NVME
+
+Historical measurements; the current cross-language checksum and I/O follow-up are in the *I/O comparison*[~][io].
 
 Explore the *comparison*[~][incremental].
 

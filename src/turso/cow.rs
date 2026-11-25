@@ -1,7 +1,6 @@
+use super::file_io::FileExt;
 use super::*;
 use anyhow::Context;
-#[cfg(unix)]
-use std::os::unix::fs::FileExt;
 use std::{fs, io::Write};
 use turso_core::io::PlatformIO;
 use turso_core::{
@@ -735,28 +734,6 @@ mod tests {
         assert_eq!(digest, hash(&original));
         assert_eq!(store.retained().0, 0);
         Ok(())
-    }
-}
-
-// The History mutex serializes these fallback file-position operations.
-#[cfg(not(unix))]
-trait FileExt {
-    fn read_exact_at(&self, bytes: &mut [u8], pos: u64) -> std::io::Result<()>;
-    fn write_all_at(&self, bytes: &[u8], pos: u64) -> std::io::Result<()>;
-}
-#[cfg(not(unix))]
-impl FileExt for fs::File {
-    fn read_exact_at(&self, bytes: &mut [u8], pos: u64) -> std::io::Result<()> {
-        use std::io::{Read, Seek, SeekFrom};
-        let mut file = self;
-        file.seek(SeekFrom::Start(pos))?;
-        file.read_exact(bytes)
-    }
-    fn write_all_at(&self, bytes: &[u8], pos: u64) -> std::io::Result<()> {
-        use std::io::{Seek, SeekFrom};
-        let mut file = self;
-        file.seek(SeekFrom::Start(pos))?;
-        file.write_all(bytes)
     }
 }
 
