@@ -4,8 +4,7 @@ import ts from "typescript";
 const root = "docs/diy/0zg6/261120-basin-node-stdlib";
 const files = [
   "stdlib.d.ts",
-  "0zg8/261125-prolly-page-storage/prolly.d.ts",
-  "0zg8/261125-prolly-page-storage/prolly-file.d.ts",
+  "0zg8/261125-prolly-treelist/prolly-treelist.d.ts",
   "0zg7/261120-byte-trie/trie.d.ts",
   "0zg7/261123-bitmapped-vector-trie/vector.d.ts",
   "0zg7/261123-b-tree/btree.d.ts",

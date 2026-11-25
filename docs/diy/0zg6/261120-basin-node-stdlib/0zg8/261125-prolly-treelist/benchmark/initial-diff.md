@@ -1,11 +1,13 @@
-[comparison]: <comparison.html>
 [crc64nvme]: <../../../../../../glossary/crc64nvme.md>
 [diff-results]: <diff-results.json>
+[initial-diff-comparison]: <initial-diff-comparison.html>
 [page-index]: <page-index.md>
 [prolly-tree]: <../../../../../../glossary/prolly-tree.md>
 [sha384]: <../../../../../../glossary/sha384.md>
 
-# File-diff experiment
+# Initial file-diff experiment
+
+Historical low-bit Gear control, before the matched trie/treelist comparison.
 
 2026-11-25, Apple M2/macOS 27.0.1, Bun 1.4.5. Three sequential trials, 8 MiB
 files, random bytes, 16 KiB constant-byte page runs, and zeros. Alternate policy
@@ -45,7 +47,7 @@ costs: denser 16 KiB leaves are a tradeoff, not a universal win. Zero-run insert
 still scans a long equal suffix, although immutable chunk reuse limits downloads
 to about 537 KiB. CRC is never accepted alone as proof of equality.
 
-Explore all operations in the *comparison*[~][comparison] or inspect the *raw
+Explore all operations in the *comparison*[~][initial-diff-comparison] or inspect the *raw
 trials*[~][diff-results]. The earlier *page-index experiment*[~][page-index] separates
 keyed lookup/packing concerns from content diffs. A prior bounded-total refinement
 returned a multi-megabyte replacement for one-byte insertion: patch bytes are a

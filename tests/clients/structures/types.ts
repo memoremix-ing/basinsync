@@ -176,7 +176,7 @@ interface SyncBlock_M1 extends BasinNode_S0<
   {
     1: [
       summary: null,
-      pages: SyncSector_M1 | BasinEdge_S0<SyncSector_M1>,
+      contents: SyncSector_M1 | BasinEdge_S0<SyncSector_M1>,
       leading: Array<null | SyncPageLink_M0>,
       lagging: Array<null | SyncPageLink_M0>,
     ];
@@ -286,40 +286,8 @@ type BPlusHint_S0<
   sha384: Uint8Array;
 };
 
-export type ProllyPolicy_S0 = {
-  target: U32;
-  min: U32;
-  max: U32;
-  maxBytes: U32;
-  branchTarget: U32;
-  branchMax: U32;
-};
-
-export type ProllySummary_S0 = {
-  size: bigint; // concatenated page bytes; no keys, envelopes or sparse-grid gaps
-  count: bigint;
-  crc64nvme: Uint8Array;
-};
-
-export interface ProllyPages_S0 extends BasinNode_S0<
-  "sync.memoremix.com",
-  ".prolly-pages/",
-  {
-    depth: U32;
-    keys: Bounds<Uint8Array>;
-    closed: boolean; // boundary closes independently of EOF
-    policy: ProllyPolicy_S0;
-  },
-  {
-    0: [
-      summary: ProllySummary_S0,
-      leaf: { keys: Array<Uint8Array>; pages: Array<Uint8Array> } | null,
-      children: Array<BasinEdge_S0<ProllyPages_S0, ProllyPages_S0[5], { 0: [ProllySummary_S0] }>> | null,
-    ];
-  }
-> {}
-
-export type ProllyFilePolicy_S0 = {
+export type ProllyTreelistPolicy_S0 = {
+  boundary: "low" | "mixed";
   min: U32;
   target: U32;
   max: U32;
@@ -328,21 +296,22 @@ export type ProllyFilePolicy_S0 = {
   runAnchors: boolean;
 };
 
-export type ProllyFileSummary_S0 = {
+export type ProllyTreelistSummary_S0 = {
   size: bigint;
+  uniform: U32 | null; // repeated byte, 0..255, otherwise null
   crc64nvme: Uint8Array;
   content: Uint8Array; // domain-separated SHA-384 of bytes or ordered child content IDs/sizes
 };
 
-export interface ProllyFile_S0 extends BasinNode_S0<
+export interface ProllyTreelist_S0 extends BasinNode_S0<
   "sync.memoremix.com",
-  ".prolly-file/",
-  { depth: U32; closed: boolean; policy: ProllyFilePolicy_S0 },
+  ".prolly-treelist/",
+  { depth: U32; closed: boolean; policy: ProllyTreelistPolicy_S0 },
   {
     0: [
-      summary: ProllyFileSummary_S0,
+      summary: ProllyTreelistSummary_S0,
       bytes: Uint8Array | null,
-      children: Array<BasinEdge_S0<ProllyFile_S0, ProllyFile_S0[5], { 0: [ProllyFileSummary_S0] }>> | null,
+      children: Array<BasinEdge_S0<ProllyTreelist_S0, ProllyTreelist_S0[5], { 0: [ProllyTreelistSummary_S0] }>> | null,
     ];
   }
 > {}

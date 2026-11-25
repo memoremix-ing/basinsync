@@ -35,6 +35,9 @@ Apply these when implementing or benchmarking this tutorial family:
   byte proofs; avoid duplicate hashing without trusting mutable cached data.
 - Optional shortcut indexes should not add cold-path fetches merely to discover
   hints; measure ready-only navigation against direct authoritative traversal.
+- For sequence diffs, check patch reconstruction and patch bytes alongside retrieval
+  cost. Separate chunking, routing and refinement changes; include shifted, scattered,
+  periodic and uniform content before interpreting a fast comparison as a useful diff.
 - Distinguish logical fanout from stored packing. Count-based inline budgets can
   over-fetch large values; measure bytes and GETs before favoring wider branches.
 - For embedded structural values, count nested inline data per stored node and

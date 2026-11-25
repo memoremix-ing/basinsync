@@ -90,7 +90,7 @@ interface SyncBlock_M1 extends BasinNode_S0<
   {
     1: [
       summary: null,
-      pages: SyncSector_M1 | BasinEdge_S0<SyncSector_M1>,
+      contents: SyncSector_M1 | BasinEdge_S0<SyncSector_M1>,
       leading: Array<null | SyncPageLink_M0>,
       lagging: Array<null | SyncPageLink_M0>,
     ];

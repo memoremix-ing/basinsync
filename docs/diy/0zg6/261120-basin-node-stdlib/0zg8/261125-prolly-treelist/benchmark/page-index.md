@@ -1,5 +1,5 @@
-[page-index-comparison]: <page-index-comparison.html>
 [crc64nvme]: <../../../../../../glossary/crc64nvme.md>
+[page-index-comparison]: <page-index-comparison.html>
 [prolly-tree]: <../../../../../../glossary/prolly-tree.md>
 [results]: <results.json>
 [sha384]: <../../../../../../glossary/sha384.md>
