@@ -1,0 +1,2137 @@
+{
+  "runtime": "1.4.5",
+  "pages": 2048,
+  "rounds": 3,
+  "results": [
+    {
+      "dataset": "fixed",
+      "round": 0,
+      "variant": "trie-1280",
+      "pages": 2048,
+      "bytes": 33554432,
+      "build": {
+        "ms": 298.810875,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 16,
+        "newObjects": 16,
+        "putBytes": 33607608
+      },
+      "point": {
+        "ms": 10.92349999999999,
+        "gets": 5,
+        "getBytes": 10520760,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 14.83583299999998,
+        "gets": 7,
+        "getBytes": 14727696,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 56.85812499999997,
+          "gets": 2,
+          "getBytes": 4206936,
+          "puts": 2,
+          "newObjects": 2,
+          "putBytes": 4206936
+        },
+        "append": {
+          "ms": 21.341250000000002,
+          "gets": 1,
+          "getBytes": 2106888,
+          "puts": 1,
+          "newObjects": 1,
+          "putBytes": 3156904
+        },
+        "insert": {
+          "ms": 53.51133299999998,
+          "gets": 2,
+          "getBytes": 4206936,
+          "puts": 2,
+          "newObjects": 2,
+          "putBytes": 4223344
+        },
+        "resize": {
+          "ms": 52.18104100000005,
+          "gets": 2,
+          "getBytes": 4206936,
+          "puts": 2,
+          "newObjects": 2,
+          "putBytes": 4190568
+        }
+      },
+      "packing": {
+        "objects": 16,
+        "min": 2100048,
+        "median": 2100048,
+        "max": 2106888
+      }
+    },
+    {
+      "dataset": "fixed",
+      "round": 0,
+      "variant": "trie-16",
+      "pages": 2048,
+      "bytes": 33554432,
+      "build": {
+        "ms": 305.1447079999999,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 256,
+        "newObjects": 252,
+        "putBytes": 33286376
+      },
+      "point": {
+        "ms": 2.68587500000001,
+        "gets": 5,
+        "getBytes": 973456,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 2.158083999999917,
+        "gets": 7,
+        "getBytes": 1341832,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 366.3813339999999,
+          "gets": 256,
+          "getBytes": 33813064,
+          "puts": 256,
+          "newObjects": 2,
+          "putBytes": 368376
+        },
+        "append": {
+          "ms": 388.8710840000001,
+          "gets": 256,
+          "getBytes": 33813064,
+          "puts": 264,
+          "newObjects": 2,
+          "putBytes": 371544
+        },
+        "insert": {
+          "ms": 397.3665420000002,
+          "gets": 256,
+          "getBytes": 33813064,
+          "puts": 256,
+          "newObjects": 2,
+          "putBytes": 384776
+        },
+        "resize": {
+          "ms": 379.93783299999996,
+          "gets": 256,
+          "getBytes": 33813064,
+          "puts": 256,
+          "newObjects": 2,
+          "putBytes": 352000
+        }
+      },
+      "packing": {
+        "objects": 252,
+        "min": 131672,
+        "median": 131672,
+        "max": 236704
+      }
+    },
+    {
+      "dataset": "fixed",
+      "round": 0,
+      "variant": "prolly-8",
+      "pages": 2048,
+      "bytes": 33554432,
+      "build": {
+        "ms": 286.259916,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 196,
+        "newObjects": 196,
+        "putBytes": 33761648
+      },
+      "point": {
+        "ms": 3.8126659999998083,
+        "gets": 9,
+        "getBytes": 733328,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 4.66945799999985,
+        "gets": 12,
+        "getBytes": 1092568,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 12.545125000000098,
+          "gets": 6,
+          "getBytes": 729736,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 359240
+        },
+        "append": {
+          "ms": 15.813540999999987,
+          "gets": 5,
+          "getBytes": 335608,
+          "puts": 11,
+          "newObjects": 11,
+          "putBytes": 1344704
+        },
+        "insert": {
+          "ms": 10.60437499999989,
+          "gets": 6,
+          "getBytes": 729736,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 375648
+        },
+        "resize": {
+          "ms": 10.485124999999698,
+          "gets": 6,
+          "getBytes": 729736,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 342872
+        }
+      },
+      "packing": {
+        "objects": 196,
+        "min": 1536,
+        "median": 131728,
+        "max": 672976
+      }
+    },
+    {
+      "dataset": "fixed",
+      "round": 0,
+      "variant": "prolly-16",
+      "pages": 2048,
+      "bytes": 33554432,
+      "build": {
+        "ms": 276.13029099999994,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 109,
+        "newObjects": 109,
+        "putBytes": 33684472
+      },
+      "point": {
+        "ms": 2.489208999999846,
+        "gets": 9,
+        "getBytes": 947792,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 3.6579169999999976,
+        "gets": 12,
+        "getBytes": 1420384,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 10.594707999999628,
+          "gets": 6,
+          "getBytes": 812984,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 472592
+        },
+        "append": {
+          "ms": 15.377124999999978,
+          "gets": 5,
+          "getBytes": 435256,
+          "puts": 9,
+          "newObjects": 9,
+          "putBytes": 1453768
+        },
+        "insert": {
+          "ms": 10.209125000000313,
+          "gets": 6,
+          "getBytes": 812984,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 488992
+        },
+        "resize": {
+          "ms": 9.845375000000331,
+          "gets": 6,
+          "getBytes": 812984,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 456224
+        }
+      },
+      "packing": {
+        "objects": 109,
+        "min": 1544,
+        "median": 246528,
+        "max": 1050192
+      }
+    },
+    {
+      "dataset": "fixed",
+      "round": 0,
+      "variant": "prolly-32",
+      "pages": 2048,
+      "bytes": 33554432,
+      "build": {
+        "ms": 275.7705410000003,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 62,
+        "newObjects": 62,
+        "putBytes": 33643464
+      },
+      "point": {
+        "ms": 2.9629170000002887,
+        "gets": 9,
+        "getBytes": 1769664,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 4.412124999999833,
+        "gets": 12,
+        "getBytes": 2677120,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 14.744500000000244,
+          "gets": 5,
+          "getBytes": 1418696,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 907456
+        },
+        "append": {
+          "ms": 15.399250000000393,
+          "gets": 4,
+          "getBytes": 581712,
+          "puts": 5,
+          "newObjects": 5,
+          "putBytes": 1613192
+        },
+        "insert": {
+          "ms": 15.283625000000029,
+          "gets": 5,
+          "getBytes": 1418696,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 923856
+        },
+        "resize": {
+          "ms": 15.330417000000125,
+          "gets": 5,
+          "getBytes": 1418696,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 891088
+        }
+      },
+      "packing": {
+        "objects": 62,
+        "min": 1192,
+        "median": 541736,
+        "max": 1050192
+      }
+    },
+    {
+      "dataset": "fixed",
+      "round": 1,
+      "variant": "prolly-32",
+      "pages": 2048,
+      "bytes": 33554432,
+      "build": {
+        "ms": 285.1917079999994,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 62,
+        "newObjects": 62,
+        "putBytes": 33643464
+      },
+      "point": {
+        "ms": 2.968542000000525,
+        "gets": 9,
+        "getBytes": 1769664,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 4.224957999999788,
+        "gets": 12,
+        "getBytes": 2677120,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 14.858000000000175,
+          "gets": 5,
+          "getBytes": 1418696,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 907456
+        },
+        "append": {
+          "ms": 15.570666999999958,
+          "gets": 4,
+          "getBytes": 581712,
+          "puts": 5,
+          "newObjects": 5,
+          "putBytes": 1613192
+        },
+        "insert": {
+          "ms": 15.352375000000393,
+          "gets": 5,
+          "getBytes": 1418696,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 923856
+        },
+        "resize": {
+          "ms": 15.249790999999277,
+          "gets": 5,
+          "getBytes": 1418696,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 891088
+        }
+      },
+      "packing": {
+        "objects": 62,
+        "min": 1192,
+        "median": 541736,
+        "max": 1050192
+      }
+    },
+    {
+      "dataset": "fixed",
+      "round": 1,
+      "variant": "prolly-16",
+      "pages": 2048,
+      "bytes": 33554432,
+      "build": {
+        "ms": 292.39445800000067,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 109,
+        "newObjects": 109,
+        "putBytes": 33684472
+      },
+      "point": {
+        "ms": 2.2878329999994094,
+        "gets": 9,
+        "getBytes": 947792,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 3.421291999999994,
+        "gets": 12,
+        "getBytes": 1420384,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 10.27099999999973,
+          "gets": 6,
+          "getBytes": 812984,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 472592
+        },
+        "append": {
+          "ms": 14.862374999999702,
+          "gets": 5,
+          "getBytes": 435256,
+          "puts": 9,
+          "newObjects": 9,
+          "putBytes": 1453768
+        },
+        "insert": {
+          "ms": 10.852583000000777,
+          "gets": 6,
+          "getBytes": 812984,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 488992
+        },
+        "resize": {
+          "ms": 10.411959000000024,
+          "gets": 6,
+          "getBytes": 812984,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 456224
+        }
+      },
+      "packing": {
+        "objects": 109,
+        "min": 1544,
+        "median": 246528,
+        "max": 1050192
+      }
+    },
+    {
+      "dataset": "fixed",
+      "round": 1,
+      "variant": "prolly-8",
+      "pages": 2048,
+      "bytes": 33554432,
+      "build": {
+        "ms": 297.1426250000004,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 196,
+        "newObjects": 196,
+        "putBytes": 33761648
+      },
+      "point": {
+        "ms": 3.0378340000006574,
+        "gets": 9,
+        "getBytes": 733328,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 3.9731250000004366,
+        "gets": 12,
+        "getBytes": 1092568,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 11.810375000000022,
+          "gets": 6,
+          "getBytes": 729736,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 359240
+        },
+        "append": {
+          "ms": 16.12945899999977,
+          "gets": 5,
+          "getBytes": 335608,
+          "puts": 11,
+          "newObjects": 11,
+          "putBytes": 1344704
+        },
+        "insert": {
+          "ms": 11.163166999999703,
+          "gets": 6,
+          "getBytes": 729736,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 375648
+        },
+        "resize": {
+          "ms": 11.44866599999932,
+          "gets": 6,
+          "getBytes": 729736,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 342872
+        }
+      },
+      "packing": {
+        "objects": 196,
+        "min": 1536,
+        "median": 131728,
+        "max": 672976
+      }
+    },
+    {
+      "dataset": "fixed",
+      "round": 1,
+      "variant": "trie-16",
+      "pages": 2048,
+      "bytes": 33554432,
+      "build": {
+        "ms": 318.9155410000003,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 256,
+        "newObjects": 252,
+        "putBytes": 33286376
+      },
+      "point": {
+        "ms": 1.1872910000001866,
+        "gets": 5,
+        "getBytes": 973456,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 1.9807080000000497,
+        "gets": 7,
+        "getBytes": 1341832,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 381.1397080000006,
+          "gets": 256,
+          "getBytes": 33813064,
+          "puts": 256,
+          "newObjects": 2,
+          "putBytes": 368376
+        },
+        "append": {
+          "ms": 388.8077089999997,
+          "gets": 256,
+          "getBytes": 33813064,
+          "puts": 264,
+          "newObjects": 2,
+          "putBytes": 371544
+        },
+        "insert": {
+          "ms": 389.8150829999995,
+          "gets": 256,
+          "getBytes": 33813064,
+          "puts": 256,
+          "newObjects": 2,
+          "putBytes": 384776
+        },
+        "resize": {
+          "ms": 378.56191599999966,
+          "gets": 256,
+          "getBytes": 33813064,
+          "puts": 256,
+          "newObjects": 2,
+          "putBytes": 352000
+        }
+      },
+      "packing": {
+        "objects": 252,
+        "min": 131672,
+        "median": 131672,
+        "max": 236704
+      }
+    },
+    {
+      "dataset": "fixed",
+      "round": 1,
+      "variant": "trie-1280",
+      "pages": 2048,
+      "bytes": 33554432,
+      "build": {
+        "ms": 294.0749589999996,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 16,
+        "newObjects": 16,
+        "putBytes": 33607608
+      },
+      "point": {
+        "ms": 7.915374999999585,
+        "gets": 5,
+        "getBytes": 10520760,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 11.591166999999587,
+        "gets": 7,
+        "getBytes": 14727696,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 54.658957999999984,
+          "gets": 2,
+          "getBytes": 4206936,
+          "puts": 2,
+          "newObjects": 2,
+          "putBytes": 4206936
+        },
+        "append": {
+          "ms": 20.917750000000524,
+          "gets": 1,
+          "getBytes": 2106888,
+          "puts": 1,
+          "newObjects": 1,
+          "putBytes": 3156904
+        },
+        "insert": {
+          "ms": 55.29387499999939,
+          "gets": 2,
+          "getBytes": 4206936,
+          "puts": 2,
+          "newObjects": 2,
+          "putBytes": 4223344
+        },
+        "resize": {
+          "ms": 55.82341699999961,
+          "gets": 2,
+          "getBytes": 4206936,
+          "puts": 2,
+          "newObjects": 2,
+          "putBytes": 4190568
+        }
+      },
+      "packing": {
+        "objects": 16,
+        "min": 2100048,
+        "median": 2100048,
+        "max": 2106888
+      }
+    },
+    {
+      "dataset": "fixed",
+      "round": 2,
+      "variant": "trie-1280",
+      "pages": 2048,
+      "bytes": 33554432,
+      "build": {
+        "ms": 291.68183300000055,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 16,
+        "newObjects": 16,
+        "putBytes": 33607608
+      },
+      "point": {
+        "ms": 8.035250000000815,
+        "gets": 5,
+        "getBytes": 10520760,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 11.390749999998661,
+        "gets": 7,
+        "getBytes": 14727696,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 54.59558399999878,
+          "gets": 2,
+          "getBytes": 4206936,
+          "puts": 2,
+          "newObjects": 2,
+          "putBytes": 4206936
+        },
+        "append": {
+          "ms": 21.054416999999376,
+          "gets": 1,
+          "getBytes": 2106888,
+          "puts": 1,
+          "newObjects": 1,
+          "putBytes": 3156904
+        },
+        "insert": {
+          "ms": 55.23058300000048,
+          "gets": 2,
+          "getBytes": 4206936,
+          "puts": 2,
+          "newObjects": 2,
+          "putBytes": 4223344
+        },
+        "resize": {
+          "ms": 53.55999999999949,
+          "gets": 2,
+          "getBytes": 4206936,
+          "puts": 2,
+          "newObjects": 2,
+          "putBytes": 4190568
+        }
+      },
+      "packing": {
+        "objects": 16,
+        "min": 2100048,
+        "median": 2100048,
+        "max": 2106888
+      }
+    },
+    {
+      "dataset": "fixed",
+      "round": 2,
+      "variant": "trie-16",
+      "pages": 2048,
+      "bytes": 33554432,
+      "build": {
+        "ms": 316.7256670000006,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 256,
+        "newObjects": 252,
+        "putBytes": 33286376
+      },
+      "point": {
+        "ms": 1.163166000000274,
+        "gets": 5,
+        "getBytes": 973456,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 2.46862499999952,
+        "gets": 7,
+        "getBytes": 1341832,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 389.0799999999999,
+          "gets": 256,
+          "getBytes": 33813064,
+          "puts": 256,
+          "newObjects": 2,
+          "putBytes": 368376
+        },
+        "append": {
+          "ms": 409.33074999999917,
+          "gets": 256,
+          "getBytes": 33813064,
+          "puts": 264,
+          "newObjects": 2,
+          "putBytes": 371544
+        },
+        "insert": {
+          "ms": 410.92633299999943,
+          "gets": 256,
+          "getBytes": 33813064,
+          "puts": 256,
+          "newObjects": 2,
+          "putBytes": 384776
+        },
+        "resize": {
+          "ms": 381.39529199999924,
+          "gets": 256,
+          "getBytes": 33813064,
+          "puts": 256,
+          "newObjects": 2,
+          "putBytes": 352000
+        }
+      },
+      "packing": {
+        "objects": 252,
+        "min": 131672,
+        "median": 131672,
+        "max": 236704
+      }
+    },
+    {
+      "dataset": "fixed",
+      "round": 2,
+      "variant": "prolly-8",
+      "pages": 2048,
+      "bytes": 33554432,
+      "build": {
+        "ms": 300.6967910000003,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 196,
+        "newObjects": 196,
+        "putBytes": 33761648
+      },
+      "point": {
+        "ms": 3.1720409999998083,
+        "gets": 9,
+        "getBytes": 733328,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 4.139375000000655,
+        "gets": 12,
+        "getBytes": 1092568,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 11.83770800000093,
+          "gets": 6,
+          "getBytes": 729736,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 359240
+        },
+        "append": {
+          "ms": 16.092124999999214,
+          "gets": 5,
+          "getBytes": 335608,
+          "puts": 11,
+          "newObjects": 11,
+          "putBytes": 1344704
+        },
+        "insert": {
+          "ms": 10.773999999999432,
+          "gets": 6,
+          "getBytes": 729736,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 375648
+        },
+        "resize": {
+          "ms": 11.447000000000116,
+          "gets": 6,
+          "getBytes": 729736,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 342872
+        }
+      },
+      "packing": {
+        "objects": 196,
+        "min": 1536,
+        "median": 131728,
+        "max": 672976
+      }
+    },
+    {
+      "dataset": "fixed",
+      "round": 2,
+      "variant": "prolly-16",
+      "pages": 2048,
+      "bytes": 33554432,
+      "build": {
+        "ms": 308.49612499999967,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 109,
+        "newObjects": 109,
+        "putBytes": 33684472
+      },
+      "point": {
+        "ms": 2.449749999999767,
+        "gets": 9,
+        "getBytes": 947792,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 3.572041999999783,
+        "gets": 12,
+        "getBytes": 1420384,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 11.275042000001122,
+          "gets": 6,
+          "getBytes": 812984,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 472592
+        },
+        "append": {
+          "ms": 14.979959000000235,
+          "gets": 5,
+          "getBytes": 435256,
+          "puts": 9,
+          "newObjects": 9,
+          "putBytes": 1453768
+        },
+        "insert": {
+          "ms": 10.473167000000103,
+          "gets": 6,
+          "getBytes": 812984,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 488992
+        },
+        "resize": {
+          "ms": 10.101333000000523,
+          "gets": 6,
+          "getBytes": 812984,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 456224
+        }
+      },
+      "packing": {
+        "objects": 109,
+        "min": 1544,
+        "median": 246528,
+        "max": 1050192
+      }
+    },
+    {
+      "dataset": "fixed",
+      "round": 2,
+      "variant": "prolly-32",
+      "pages": 2048,
+      "bytes": 33554432,
+      "build": {
+        "ms": 301.80229099999997,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 62,
+        "newObjects": 62,
+        "putBytes": 33643464
+      },
+      "point": {
+        "ms": 3.1050409999988915,
+        "gets": 9,
+        "getBytes": 1769664,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 4.298166000000492,
+        "gets": 12,
+        "getBytes": 2677120,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 15.556624999999258,
+          "gets": 5,
+          "getBytes": 1418696,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 907456
+        },
+        "append": {
+          "ms": 16.350415999999313,
+          "gets": 4,
+          "getBytes": 581712,
+          "puts": 5,
+          "newObjects": 5,
+          "putBytes": 1613192
+        },
+        "insert": {
+          "ms": 15.659166999999798,
+          "gets": 5,
+          "getBytes": 1418696,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 923856
+        },
+        "resize": {
+          "ms": 15.77850000000035,
+          "gets": 5,
+          "getBytes": 1418696,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 891088
+        }
+      },
+      "packing": {
+        "objects": 62,
+        "min": 1192,
+        "median": 541736,
+        "max": 1050192
+      }
+    },
+    {
+      "dataset": "variable",
+      "round": 0,
+      "variant": "trie-1280",
+      "pages": 2048,
+      "bytes": 16798382,
+      "build": {
+        "ms": 210.65062500000022,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 16,
+        "newObjects": 16,
+        "putBytes": 16852464
+      },
+      "point": {
+        "ms": 4.68133300000045,
+        "gets": 5,
+        "getBytes": 5368872,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 8.995291000001089,
+        "gets": 8,
+        "getBytes": 8550368,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 32.67304200000035,
+          "gets": 2,
+          "getBytes": 2139296,
+          "puts": 2,
+          "newObjects": 2,
+          "putBytes": 2139296
+        },
+        "append": {
+          "ms": 19.55462500000067,
+          "gets": 1,
+          "getBytes": 1080168,
+          "puts": 1,
+          "newObjects": 1,
+          "putBytes": 2130184
+        },
+        "insert": {
+          "ms": 36.70912500000122,
+          "gets": 2,
+          "getBytes": 2139296,
+          "puts": 2,
+          "newObjects": 2,
+          "putBytes": 2154184
+        },
+        "resize": {
+          "ms": 33.16187499999978,
+          "gets": 2,
+          "getBytes": 2139296,
+          "puts": 2,
+          "newObjects": 2,
+          "putBytes": 2124448
+        }
+      },
+      "packing": {
+        "objects": 16,
+        "min": 1028000,
+        "median": 1058040,
+        "max": 1084536
+      }
+    },
+    {
+      "dataset": "variable",
+      "round": 0,
+      "variant": "trie-16",
+      "pages": 2048,
+      "bytes": 16798382,
+      "build": {
+        "ms": 251.0164160000004,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 256,
+        "newObjects": 256,
+        "putBytes": 17044776
+      },
+      "point": {
+        "ms": 0.9999170000010054,
+        "gets": 5,
+        "getBytes": 702144,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 2.9149579999993875,
+        "gets": 9,
+        "getBytes": 1070680,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 307.1090409999997,
+          "gets": 256,
+          "getBytes": 17044776,
+          "puts": 256,
+          "newObjects": 2,
+          "putBytes": 258616
+        },
+        "append": {
+          "ms": 304.47616599999856,
+          "gets": 256,
+          "getBytes": 17044776,
+          "puts": 264,
+          "newObjects": 2,
+          "putBytes": 314368
+        },
+        "insert": {
+          "ms": 299.4859580000011,
+          "gets": 256,
+          "getBytes": 17044776,
+          "puts": 256,
+          "newObjects": 2,
+          "putBytes": 273520
+        },
+        "resize": {
+          "ms": 295.9493330000005,
+          "gets": 256,
+          "getBytes": 17044776,
+          "puts": 256,
+          "newObjects": 2,
+          "putBytes": 243688
+        }
+      },
+      "packing": {
+        "objects": 256,
+        "min": 39120,
+        "median": 66216,
+        "max": 179536
+      }
+    },
+    {
+      "dataset": "variable",
+      "round": 0,
+      "variant": "prolly-8",
+      "pages": 2048,
+      "bytes": 16798382,
+      "build": {
+        "ms": 185.9325000000008,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 196,
+        "newObjects": 196,
+        "putBytes": 16998936
+      },
+      "point": {
+        "ms": 3.616083000000799,
+        "gets": 9,
+        "getBytes": 413248,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 3.7301659999993717,
+        "gets": 13,
+        "getBytes": 668720,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 9.948499999998603,
+          "gets": 6,
+          "getBytes": 406232,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 200312
+        },
+        "append": {
+          "ms": 16.872874999999112,
+          "gets": 5,
+          "getBytes": 208712,
+          "puts": 11,
+          "newObjects": 11,
+          "putBytes": 1218360
+        },
+        "insert": {
+          "ms": 10.164500000000771,
+          "gets": 6,
+          "getBytes": 406232,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 215200
+        },
+        "resize": {
+          "ms": 13.277084000001196,
+          "gets": 6,
+          "getBytes": 406232,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 185464
+        }
+      },
+      "packing": {
+        "objects": 196,
+        "min": 1536,
+        "median": 71488,
+        "max": 344864
+      }
+    },
+    {
+      "dataset": "variable",
+      "round": 0,
+      "variant": "prolly-16",
+      "pages": 2048,
+      "bytes": 16798382,
+      "build": {
+        "ms": 174.43975000000137,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 109,
+        "newObjects": 109,
+        "putBytes": 16927088
+      },
+      "point": {
+        "ms": 1.9914169999992737,
+        "gets": 9,
+        "getBytes": 490464,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 3.028334000000541,
+        "gets": 12,
+        "getBytes": 744120,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 9.883083000000624,
+          "gets": 6,
+          "getBytes": 430000,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 253656
+        },
+        "append": {
+          "ms": 14.639083000000028,
+          "gets": 5,
+          "getBytes": 231216,
+          "puts": 9,
+          "newObjects": 9,
+          "putBytes": 1249928
+        },
+        "insert": {
+          "ms": 9.345957999999882,
+          "gets": 6,
+          "getBytes": 430000,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 268536
+        },
+        "resize": {
+          "ms": 8.562916000000769,
+          "gets": 6,
+          "getBytes": 430000,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 238808
+        }
+      },
+      "packing": {
+        "objects": 109,
+        "min": 1536,
+        "median": 128008,
+        "max": 548680
+      }
+    },
+    {
+      "dataset": "variable",
+      "round": 0,
+      "variant": "prolly-32",
+      "pages": 2048,
+      "bytes": 16798382,
+      "build": {
+        "ms": 171.2662079999991,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 62,
+        "newObjects": 62,
+        "putBytes": 16887624
+      },
+      "point": {
+        "ms": 2.359875000000102,
+        "gets": 9,
+        "getBytes": 947488,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 3.236750000000029,
+        "gets": 12,
+        "getBytes": 1428304,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 10.032250000000204,
+          "gets": 5,
+          "getBytes": 730776,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 480816
+        },
+        "append": {
+          "ms": 13.951665999999022,
+          "gets": 4,
+          "getBytes": 305272,
+          "puts": 5,
+          "newObjects": 5,
+          "putBytes": 1336776
+        },
+        "insert": {
+          "ms": 10.429834000000483,
+          "gets": 5,
+          "getBytes": 730776,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 495696
+        },
+        "resize": {
+          "ms": 10.09637499999917,
+          "gets": 5,
+          "getBytes": 730776,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 465960
+        }
+      },
+      "packing": {
+        "objects": 62,
+        "min": 1192,
+        "median": 275056,
+        "max": 545320
+      }
+    },
+    {
+      "dataset": "variable",
+      "round": 1,
+      "variant": "prolly-32",
+      "pages": 2048,
+      "bytes": 16798382,
+      "build": {
+        "ms": 170.31925000000047,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 62,
+        "newObjects": 62,
+        "putBytes": 16887624
+      },
+      "point": {
+        "ms": 2.3039170000010927,
+        "gets": 9,
+        "getBytes": 947488,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 3.1882500000010623,
+        "gets": 12,
+        "getBytes": 1428304,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 10.031582999999955,
+          "gets": 5,
+          "getBytes": 730776,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 480816
+        },
+        "append": {
+          "ms": 13.901291000000128,
+          "gets": 4,
+          "getBytes": 305272,
+          "puts": 5,
+          "newObjects": 5,
+          "putBytes": 1336776
+        },
+        "insert": {
+          "ms": 10.380040999998528,
+          "gets": 5,
+          "getBytes": 730776,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 495696
+        },
+        "resize": {
+          "ms": 10.170000000000073,
+          "gets": 5,
+          "getBytes": 730776,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 465960
+        }
+      },
+      "packing": {
+        "objects": 62,
+        "min": 1192,
+        "median": 275056,
+        "max": 545320
+      }
+    },
+    {
+      "dataset": "variable",
+      "round": 1,
+      "variant": "prolly-16",
+      "pages": 2048,
+      "bytes": 16798382,
+      "build": {
+        "ms": 177.7786670000005,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 109,
+        "newObjects": 109,
+        "putBytes": 16927088
+      },
+      "point": {
+        "ms": 2.068083000001934,
+        "gets": 9,
+        "getBytes": 490464,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 2.9507080000003043,
+        "gets": 12,
+        "getBytes": 744120,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 8.794874999999593,
+          "gets": 6,
+          "getBytes": 430000,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 253656
+        },
+        "append": {
+          "ms": 14.594540999998571,
+          "gets": 5,
+          "getBytes": 231216,
+          "puts": 9,
+          "newObjects": 9,
+          "putBytes": 1249928
+        },
+        "insert": {
+          "ms": 8.566291999999521,
+          "gets": 6,
+          "getBytes": 430000,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 268536
+        },
+        "resize": {
+          "ms": 8.275166999999783,
+          "gets": 6,
+          "getBytes": 430000,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 238808
+        }
+      },
+      "packing": {
+        "objects": 109,
+        "min": 1536,
+        "median": 128008,
+        "max": 548680
+      }
+    },
+    {
+      "dataset": "variable",
+      "round": 1,
+      "variant": "prolly-8",
+      "pages": 2048,
+      "bytes": 16798382,
+      "build": {
+        "ms": 182.5298330000005,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 196,
+        "newObjects": 196,
+        "putBytes": 16998936
+      },
+      "point": {
+        "ms": 2.890917000000627,
+        "gets": 9,
+        "getBytes": 413248,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 3.879791999999725,
+        "gets": 13,
+        "getBytes": 668720,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 9.752959000001283,
+          "gets": 6,
+          "getBytes": 406232,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 200312
+        },
+        "append": {
+          "ms": 16.812792000000627,
+          "gets": 5,
+          "getBytes": 208712,
+          "puts": 11,
+          "newObjects": 11,
+          "putBytes": 1218360
+        },
+        "insert": {
+          "ms": 10.066208999996888,
+          "gets": 6,
+          "getBytes": 406232,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 215200
+        },
+        "resize": {
+          "ms": 9.724958999999217,
+          "gets": 6,
+          "getBytes": 406232,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 185464
+        }
+      },
+      "packing": {
+        "objects": 196,
+        "min": 1536,
+        "median": 71488,
+        "max": 344864
+      }
+    },
+    {
+      "dataset": "variable",
+      "round": 1,
+      "variant": "trie-16",
+      "pages": 2048,
+      "bytes": 16798382,
+      "build": {
+        "ms": 247.93158400000175,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 256,
+        "newObjects": 256,
+        "putBytes": 17044776
+      },
+      "point": {
+        "ms": 3.476915999999619,
+        "gets": 5,
+        "getBytes": 702144,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 2.2392499999987194,
+        "gets": 9,
+        "getBytes": 1070680,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 294.13191700000243,
+          "gets": 256,
+          "getBytes": 17044776,
+          "puts": 256,
+          "newObjects": 2,
+          "putBytes": 258616
+        },
+        "append": {
+          "ms": 312.45579200000066,
+          "gets": 256,
+          "getBytes": 17044776,
+          "puts": 264,
+          "newObjects": 2,
+          "putBytes": 314368
+        },
+        "insert": {
+          "ms": 291.3062919999975,
+          "gets": 256,
+          "getBytes": 17044776,
+          "puts": 256,
+          "newObjects": 2,
+          "putBytes": 273520
+        },
+        "resize": {
+          "ms": 298.1737919999978,
+          "gets": 256,
+          "getBytes": 17044776,
+          "puts": 256,
+          "newObjects": 2,
+          "putBytes": 243688
+        }
+      },
+      "packing": {
+        "objects": 256,
+        "min": 39120,
+        "median": 66216,
+        "max": 179536
+      }
+    },
+    {
+      "dataset": "variable",
+      "round": 1,
+      "variant": "trie-1280",
+      "pages": 2048,
+      "bytes": 16798382,
+      "build": {
+        "ms": 214.81404199999815,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 16,
+        "newObjects": 16,
+        "putBytes": 16852464
+      },
+      "point": {
+        "ms": 4.35425000000032,
+        "gets": 5,
+        "getBytes": 5368872,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 7.673083999998198,
+        "gets": 8,
+        "getBytes": 8550368,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 33.31695899999977,
+          "gets": 2,
+          "getBytes": 2139296,
+          "puts": 2,
+          "newObjects": 2,
+          "putBytes": 2139296
+        },
+        "append": {
+          "ms": 19.349333999998635,
+          "gets": 1,
+          "getBytes": 1080168,
+          "puts": 1,
+          "newObjects": 1,
+          "putBytes": 2130184
+        },
+        "insert": {
+          "ms": 33.34220899999855,
+          "gets": 2,
+          "getBytes": 2139296,
+          "puts": 2,
+          "newObjects": 2,
+          "putBytes": 2154184
+        },
+        "resize": {
+          "ms": 33.675584000000526,
+          "gets": 2,
+          "getBytes": 2139296,
+          "puts": 2,
+          "newObjects": 2,
+          "putBytes": 2124448
+        }
+      },
+      "packing": {
+        "objects": 16,
+        "min": 1028000,
+        "median": 1058040,
+        "max": 1084536
+      }
+    },
+    {
+      "dataset": "variable",
+      "round": 2,
+      "variant": "trie-1280",
+      "pages": 2048,
+      "bytes": 16798382,
+      "build": {
+        "ms": 208.87195900000006,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 16,
+        "newObjects": 16,
+        "putBytes": 16852464
+      },
+      "point": {
+        "ms": 4.498875000001135,
+        "gets": 5,
+        "getBytes": 5368872,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 7.482416999999259,
+        "gets": 8,
+        "getBytes": 8550368,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 33.089082999998936,
+          "gets": 2,
+          "getBytes": 2139296,
+          "puts": 2,
+          "newObjects": 2,
+          "putBytes": 2139296
+        },
+        "append": {
+          "ms": 19.484291999997367,
+          "gets": 1,
+          "getBytes": 1080168,
+          "puts": 1,
+          "newObjects": 1,
+          "putBytes": 2130184
+        },
+        "insert": {
+          "ms": 33.806375000000116,
+          "gets": 2,
+          "getBytes": 2139296,
+          "puts": 2,
+          "newObjects": 2,
+          "putBytes": 2154184
+        },
+        "resize": {
+          "ms": 32.52600000000166,
+          "gets": 2,
+          "getBytes": 2139296,
+          "puts": 2,
+          "newObjects": 2,
+          "putBytes": 2124448
+        }
+      },
+      "packing": {
+        "objects": 16,
+        "min": 1028000,
+        "median": 1058040,
+        "max": 1084536
+      }
+    },
+    {
+      "dataset": "variable",
+      "round": 2,
+      "variant": "trie-16",
+      "pages": 2048,
+      "bytes": 16798382,
+      "build": {
+        "ms": 248.8542910000033,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 256,
+        "newObjects": 256,
+        "putBytes": 17044776
+      },
+      "point": {
+        "ms": 0.9400830000013229,
+        "gets": 5,
+        "getBytes": 702144,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 2.06604100000186,
+        "gets": 9,
+        "getBytes": 1070680,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 291.1497079999972,
+          "gets": 256,
+          "getBytes": 17044776,
+          "puts": 256,
+          "newObjects": 2,
+          "putBytes": 258616
+        },
+        "append": {
+          "ms": 301.4884579999998,
+          "gets": 256,
+          "getBytes": 17044776,
+          "puts": 264,
+          "newObjects": 2,
+          "putBytes": 314368
+        },
+        "insert": {
+          "ms": 297.48216700000194,
+          "gets": 256,
+          "getBytes": 17044776,
+          "puts": 256,
+          "newObjects": 2,
+          "putBytes": 273520
+        },
+        "resize": {
+          "ms": 292.184957999998,
+          "gets": 256,
+          "getBytes": 17044776,
+          "puts": 256,
+          "newObjects": 2,
+          "putBytes": 243688
+        }
+      },
+      "packing": {
+        "objects": 256,
+        "min": 39120,
+        "median": 66216,
+        "max": 179536
+      }
+    },
+    {
+      "dataset": "variable",
+      "round": 2,
+      "variant": "prolly-8",
+      "pages": 2048,
+      "bytes": 16798382,
+      "build": {
+        "ms": 185.3291250000002,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 196,
+        "newObjects": 196,
+        "putBytes": 16998936
+      },
+      "point": {
+        "ms": 2.7162500000013097,
+        "gets": 9,
+        "getBytes": 413248,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 3.7081250000010186,
+        "gets": 13,
+        "getBytes": 668720,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 9.877040999999736,
+          "gets": 6,
+          "getBytes": 406232,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 200312
+        },
+        "append": {
+          "ms": 18.17933400000038,
+          "gets": 5,
+          "getBytes": 208712,
+          "puts": 11,
+          "newObjects": 11,
+          "putBytes": 1218360
+        },
+        "insert": {
+          "ms": 11.147249999998166,
+          "gets": 6,
+          "getBytes": 406232,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 215200
+        },
+        "resize": {
+          "ms": 10.07183299999815,
+          "gets": 6,
+          "getBytes": 406232,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 185464
+        }
+      },
+      "packing": {
+        "objects": 196,
+        "min": 1536,
+        "median": 71488,
+        "max": 344864
+      }
+    },
+    {
+      "dataset": "variable",
+      "round": 2,
+      "variant": "prolly-16",
+      "pages": 2048,
+      "bytes": 16798382,
+      "build": {
+        "ms": 179.24554200000057,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 109,
+        "newObjects": 109,
+        "putBytes": 16927088
+      },
+      "point": {
+        "ms": 2.731166999998095,
+        "gets": 9,
+        "getBytes": 490464,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 3.045125000000553,
+        "gets": 12,
+        "getBytes": 744120,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 8.449000000000524,
+          "gets": 6,
+          "getBytes": 430000,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 253656
+        },
+        "append": {
+          "ms": 14.42870799999946,
+          "gets": 5,
+          "getBytes": 231216,
+          "puts": 9,
+          "newObjects": 9,
+          "putBytes": 1249928
+        },
+        "insert": {
+          "ms": 8.604749999998603,
+          "gets": 6,
+          "getBytes": 430000,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 268536
+        },
+        "resize": {
+          "ms": 8.249500000001717,
+          "gets": 6,
+          "getBytes": 430000,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 238808
+        }
+      },
+      "packing": {
+        "objects": 109,
+        "min": 1536,
+        "median": 128008,
+        "max": 548680
+      }
+    },
+    {
+      "dataset": "variable",
+      "round": 2,
+      "variant": "prolly-32",
+      "pages": 2048,
+      "bytes": 16798382,
+      "build": {
+        "ms": 170.7199159999982,
+        "gets": 0,
+        "getBytes": 0,
+        "puts": 62,
+        "newObjects": 62,
+        "putBytes": 16887624
+      },
+      "point": {
+        "ms": 2.292208999999275,
+        "gets": 9,
+        "getBytes": 947488,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "ranges": {
+        "ms": 3.3022090000013122,
+        "gets": 12,
+        "getBytes": 1428304,
+        "puts": 0,
+        "newObjects": 0,
+        "putBytes": 0
+      },
+      "updates": {
+        "overwrite": {
+          "ms": 10.05420900000172,
+          "gets": 5,
+          "getBytes": 730776,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 480816
+        },
+        "append": {
+          "ms": 14.181708000000071,
+          "gets": 4,
+          "getBytes": 305272,
+          "puts": 5,
+          "newObjects": 5,
+          "putBytes": 1336776
+        },
+        "insert": {
+          "ms": 10.216707999999926,
+          "gets": 5,
+          "getBytes": 730776,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 495696
+        },
+        "resize": {
+          "ms": 10.45520899999974,
+          "gets": 5,
+          "getBytes": 730776,
+          "puts": 4,
+          "newObjects": 3,
+          "putBytes": 465960
+        }
+      },
+      "packing": {
+        "objects": 62,
+        "min": 1192,
+        "median": 275056,
+        "max": 545320
+      }
+    }
+  ]
+}

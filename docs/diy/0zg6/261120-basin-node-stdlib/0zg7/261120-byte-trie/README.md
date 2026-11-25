@@ -126,6 +126,10 @@ must not contribute to retention *degree*[~][node-degree] or
 *height*[~][node-height], nor be accidentally collected as declared edges.
 Their address may still carry the target's *height*[~][node-height].
 
+Each file block concatenates a content-defined prefix trie and a page-defined suffix
+trie, either of which may be empty. The suffix declares its page size. File digests
+compose both halves in byte order. Page-only builders leave the prefix empty.
+
 Each block's `leading` and `lagging` spines point to stored, non-root page-trie
 nodes on its first/last paths, indexed by *basin-node height*[~][node-height];
 missing heights are null. Each *weak hint*[~][weak-link] carries the incoming key

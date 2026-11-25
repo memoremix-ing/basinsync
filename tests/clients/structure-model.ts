@@ -5,6 +5,13 @@ export function expectedContents(input: any): unknown[][] {
       .sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
   if (input.kind === "vector")
     return [...input.items].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
+  if (input.kind === "mixed") {
+    const prefix = input.content as Uint8Array, size = input.pageSize ?? 4096;
+    const end = input.pages.reduce((n: number, [i,b]: [bigint, Uint8Array]) => Math.max(n, Number(i)*size+b.length), 0);
+    const bytes = new Uint8Array(prefix.length+end); bytes.set(prefix);
+    for (const [i,b] of input.pages) bytes.set(b,prefix.length+Number(i)*size);
+    return [["/mixed",bytes], ...(input.queries??[]).map((at:bigint)=>[`/range/${at}`,bytes.slice(Number(at),Number(at)+33)])];
+  }
   if (input.kind === "pages") {
     const pages = new Map(input.pages);
     return input.queries.map((i: bigint) => [i, pages.get(i) ?? null]);

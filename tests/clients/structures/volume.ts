@@ -1,3 +1,7 @@
+import { trieSequence } from "./trie-sequence";
+import { diffBytes, type ByteSequence } from "./byte-diff";
+import { chunkBytes, type ChunkPolicy } from "./chunking";
+import { readPageBytes } from "./page-range";
 import { resolveOperation } from "./operation";
 import {
   Basin,
@@ -11,6 +15,7 @@ import {
   compare,
   equal,
   sha384,
+  hex,
   link,
   capability,
   object,
@@ -56,6 +61,13 @@ export const sectors: Consumer<[Uint8Array], SectorSummary> =
     },
     { keyIndependent: true },
   );
+/** Byte budget for content-defined chunks; page suffix policy stays independent. */
+export const chunkSectors = composableConsumer({ ...sectors,
+  trieInlineCost: ([bytes]: [Uint8Array]) => bytes.length >= 65536 ? 1280 : Math.max(1, Math.ceil(bytes.length * 1280 / 65536)),
+}, { keyIndependent: true });
+function sourceSummary(source: Reference): SectorSummary {
+  return object<SectorSummary>(source.isMap() ? source.get("6").get(1) : source.get(6).get("1"));
+}
 function path(value: string): string[] {
   check(
     value.isWellFormed() && value.startsWith("/") && !value.includes("\0"),
@@ -354,38 +366,33 @@ async function pageSpine(
   }
   throw Error("page trie nesting limit");
 }
-export async function buildBlock(
-  basin: Basin,
-  input: Iterable<[bigint, Uint8Array]>,
-): Promise<BlockRoot> {
+export function buildBlock(basin: Basin, input: Iterable<[bigint, Uint8Array]>, pageSize = PAGE_SIZE): Promise<BlockRoot> {
+  return buildMixedBlock(basin, new Uint8Array(), input, {}, pageSize);
+}
+export function buildContentBlock(basin: Basin, bytes: Uint8Array, options: Partial<ChunkPolicy> = {}): Promise<BlockRoot> {
+  return buildMixedBlock(basin, bytes, [], options);
+}
+/** The complete file is content-defined prefix bytes followed by a page-defined suffix. */
+export async function buildMixedBlock(basin: Basin, content: Uint8Array, input: Iterable<[bigint, Uint8Array]>, options: Partial<ChunkPolicy> = {}, pageSize = PAGE_SIZE): Promise<BlockRoot> {
+  check(Number.isSafeInteger(pageSize) && pageSize > 0 && pageSize <= 32 * 1024 * 1024, "invalid page size");
+  const chunks: [Uint8Array, [Uint8Array]][] = []; let ordinal = 1n;
+  for (const bytes of chunkBytes([content], options)) chunks.push([utf8(lex(ordinal++)), [bytes]]);
   const pages: [Uint8Array, [Uint8Array]][] = [];
-  for (const [page, data] of input) {
-    check(page >= 0n, "negative page");
-    pages.push([utf8(lex(page)), [data]]);
+  for (const [page, data] of input) { check(page >= 0n && data.length <= pageSize, "invalid page"); pages.push([utf8(lex(page)), [new Uint8Array(data)]]); }
+  const prefix = await Trie.buildNode(basin, chunks, chunkSectors), suffix = await Trie.buildNode(basin, pages, sectors);
+  const leading = await pageSpine(basin, suffix.node, false), lagging = await pageSpine(basin, suffix.node, true);
+  const all = distinct([...prefix.edges, ...suffix.edges]);
+  const edged = (prefix.node[5] as Header).inlined + (suffix.node[5] as Header).inlined > 1280 || all.length > (basin.options.maxDegree ?? 320);
+  const contents: (Node | Edge)[] = [], edges: Edge[] = [];
+  for (const tree of [prefix, suffix]) {
+    if (edged && (tree.node[5] as Header).count > 0n) { const e = await basin.seal(tree.node, tree.edges); contents.push(e); edges.push(e); }
+    else { contents.push(tree.node); edges.push(...tree.edges); }
   }
-  const t = await Trie.buildNode(basin, pages, sectors),
-    leading = await pageSpine(basin, t.node, false),
-    lagging = await pageSpine(basin, t.node, true);
-  const edged = (t.node[5] as Header).inlined > 1280,
-    pagesRoot = edged ? await basin.seal(t.node, t.edges) : t.node,
-    edges = edged ? [pagesRoot as Edge] : t.edges;
-  const node = {
-    0: Symbol.species,
-    1: DOMAIN,
-    2: BLOCK,
-    3: query(
-      edges,
-      basin.options.maxDegree ?? 320,
-      basin.options.maxHeight ?? 128,
-    ),
-    4: 0,
-    5: null,
-    6: [1, null, pagesRoot, leading, lagging],
-  } as Node;
-  return {
-    edge: await basin.seal(node, edges),
-    digest: t.node[6][1].crc64nvme,
-  };
+  const sum = await sectors.combine([prefix.node[6][1], suffix.node[6][1]]);
+  const node = { 0: Symbol.species, 1: DOMAIN, 2: BLOCK,
+    3: query(distinct(edges), basin.options.maxDegree ?? 320, basin.options.maxHeight ?? 128),
+    4: 0, 5: { pageSize }, 6: [2, null, contents, leading, lagging] } as Node;
+  return { edge: await basin.seal(node, distinct(edges)), digest: sum.crc64nvme };
 }
 export type VolumeTransferOptions = { replace?: boolean };
 export type VolumeRemoveOptions = { recursive?: boolean };
@@ -495,7 +502,7 @@ export class Volume {
       path(name);
       check(!files.has(name), "duplicate pathname");
       check(
-        block.edge[2] === BLOCK && block.digest.length === 8 && block.edge[6][0] === 1,
+        block.edge[2] === BLOCK && block.digest.length === 8 && block.edge[6][0] === 2,
         "invalid block descriptor",
       );
       files.set(name, block);
@@ -603,23 +610,23 @@ export class Volume {
   private async openBlock(
     name: string,
     _shortcuts: boolean,
-  ): Promise<{ footer: Reference; file: File }> {
+  ): Promise<{ footer: Reference; file: File; pageSize: number }> {
     const { entry, directory } = await this.directoryEntry(name);
     check(!directory, "not a file");
     const file = object<File>(entry),
       block = await this.basin.load(file[2]);
     validateNode(block, BLOCK);
-    const footer = block.get("6");
+    const footer = block.get("6"), pageSize = Number(block.get("5").get("pageSize").intValue());
+    check(Number.isSafeInteger(pageSize) && pageSize > 0 && pageSize <= 32 * 1024 * 1024, "invalid page size");
     check(
-      footer.length() === 5 && footer.get(0).intValue() === 1,
+      footer.length() === 5 && footer.get(0).intValue() === 2,
       "unsupported block migration",
     );
-    const pages = footer.get(2),
-      sum = object<SectorSummary>(
-        pages.isMap() ? pages.get("6").get(1) : pages.get(6).get("1"),
-      );
+    const contents = footer.get(2);
+    check(contents.isVector() && contents.length() === 2, "invalid block contents");
+    const sum = await sectors.combine([sourceSummary(contents.get(0)), sourceSummary(contents.get(1))]);
     check(equal(sum.crc64nvme, file[1]), "block checksum mismatch");
-    return { footer, file };
+    return { footer, file, pageSize };
   }
   private async pageValue(
     footer: Reference,
@@ -685,7 +692,7 @@ export class Volume {
     const { footer } = await this.openBlock(name, shortcuts);
     const pages = new Trie<[Uint8Array], SectorSummary>(
       this.basin,
-      trieSource(footer.get(2)),
+      trieSource(footer.get(2).get(1)),
       sectors,
     );
     const value = await this.pageValue(
@@ -698,17 +705,43 @@ export class Volume {
     check(value.length === 1 && value[0] instanceof Uint8Array, "invalid page");
     return value[0];
   }
-  async read(
-    name: string,
-    options: { start?: number; length?: number; shortcuts?: boolean } = {},
-  ): Promise<Uint8Array> {
-    const { footer, file } = await this.openBlock(
-      name,
-      options.shortcuts !== false,
-    );
+  /** Dense byte-file view; sparse maps remain available through page(). */
+  async sequence(name: string): Promise<ByteSequence> {
+    const { footer, file, pageSize } = await this.openBlock(name, false);
+    const prefix = trieSequence(this.basin, trieSource(footer.get(2).get(0)), sectors);
+    const suffix = trieSequence(this.basin, trieSource(footer.get(2).get(1)), sectors);
+    const raw = footer.get(2).get(1), h = object<Header>(raw.isMap() ? raw.get("5") : raw.get(5));
+    if (h.count) {
+      check(h.keys && unlex(new TextDecoder().decode(h.keys[0])) === 0n && unlex(new TextDecoder().decode(h.keys[1])) === h.count - 1n, "sparse byte file");
+      const last = await this.pageValue(footer, new Trie(this.basin, trieSource(raw), sectors), utf8(lex(h.count - 1n)), false);
+      check(last && last[0].length > 0 && last[0].length <= pageSize && suffix.root.size === (h.count - 1n) * BigInt(pageSize) + BigInt(last[0].length), "non-dense byte file");
+    }
+    return { root: { size: prefix.root.size + suffix.root.size, identity: `object/${hex(file[2][6].sha384)}`,
+      rank: Math.max(prefix.root.rank, suffix.root.rank) + 1, expand: async () => [prefix.root, suffix.root] },
+      read: (at, n) => { check(at <= BigInt(Number.MAX_SAFE_INTEGER), "file offset limit"); return this.read(name, { start: Number(at), length: n }); } };
+  }
+  async diff(name: string, next: Volume, nextName = name) {
+    return diffBytes(await this.sequence(name), await next.sequence(nextName));
+  }
+  async read(name: string, options: { start?: number; length?: number; shortcuts?: boolean } = {}): Promise<Uint8Array> {
+    const { footer, file, pageSize } = await this.openBlock(name, options.shortcuts !== false);
+    const start = options.start ?? 0, prefix = footer.get(2).get(0), size = sourceSummary(prefix).size;
+    check(Number.isSafeInteger(start) && start >= 0 && size <= BigInt(Number.MAX_SAFE_INTEGER), "invalid file range");
+    if (options.length !== undefined) check(Number.isSafeInteger(options.length) && options.length >= 0 && options.length <= (this.basin.options.maxBytes ?? 64 * 1024 * 1024), "invalid file range");
+    const prefixSize = Number(size), length = options.length ?? (this.basin.options.maxBytes ?? 64 * 1024 * 1024);
+    const take = Math.max(0, Math.min(length, prefixSize - start));
+    const first = take ? await readPageBytes(new Trie(this.basin, trieSource(prefix), sectors), BigInt(start), take) : new Uint8Array();
+    const remaining = length - first.length;
+    const suffix = remaining ? await this.readSuffix(footer, pageSize, { ...options, start: Math.max(0, start - prefixSize), ...(options.length === undefined ? {} : { length: remaining }) }) : new Uint8Array();
+    const out = concat([first, suffix]);
+    check(out.length <= (this.basin.options.maxBytes ?? 64 * 1024 * 1024), "file read byte limit");
+    if (start === 0 && options.length === undefined) check(equal(crc.hash(out), file[1]), "file checksum mismatch");
+    return out;
+  }
+  private async readSuffix(footer: Reference, pageSize: number, options: { start?: number; length?: number; shortcuts?: boolean }): Promise<Uint8Array> {
     const pages = new Trie<[Uint8Array], SectorSummary>(
       this.basin,
-      trieSource(footer.get(2)),
+      trieSource(footer.get(2).get(1)),
       sectors,
     );
     if (options.length !== undefined) {
@@ -723,21 +756,21 @@ export class Volume {
         "invalid file range",
       );
       if (length === 0) return new Uint8Array();
-      const root = footer.get(2);
+      const root = footer.get(2).get(1);
       const header = object<Header>(root.isMap() ? root.get("5") : root.get(5));
       if (!header.keys) return new Uint8Array();
       const highest = unlex(
         new TextDecoder("utf-8", { fatal: true }).decode(header.keys[1]),
       );
-      const first = BigInt(Math.floor(start / PAGE_SIZE)),
-        last = (BigInt(start) + BigInt(length) - 1n) / BigInt(PAGE_SIZE);
+      const first = BigInt(Math.floor(start / pageSize)),
+        last = (BigInt(start) + BigInt(length) - 1n) / BigInt(pageSize);
       if (first > highest) return new Uint8Array();
       const boundedLast = last < highest ? last : highest;
       const out = new Uint8Array(
         Number(
-          (boundedLast + 1n) * BigInt(PAGE_SIZE) - BigInt(start) <
+          (boundedLast + 1n) * BigInt(pageSize) - BigInt(start) <
             BigInt(length)
-            ? (boundedLast + 1n) * BigInt(PAGE_SIZE) - BigInt(start)
+            ? (boundedLast + 1n) * BigInt(pageSize) - BigInt(start)
             : BigInt(length),
         ),
       );
@@ -754,10 +787,10 @@ export class Volume {
             value.length === 1 &&
             value[0] instanceof Uint8Array &&
             value[0].length > 0 &&
-            value[0].length <= PAGE_SIZE,
+            value[0].length <= pageSize,
           "missing/invalid page",
         );
-        const offset = Number(page * BigInt(PAGE_SIZE) - BigInt(start)),
+        const offset = Number(page * BigInt(pageSize) - BigInt(start)),
           from = Math.max(0, -offset),
           to = Math.min(value[0].length, out.length - offset);
         if (to > from)
@@ -773,7 +806,7 @@ export class Volume {
         v.length === 1 &&
           v[0] instanceof Uint8Array &&
           v[0].length > 0 &&
-          v[0].length <= PAGE_SIZE,
+          v[0].length <= pageSize,
         "invalid page",
       );
       const p = unlex(new TextDecoder("utf-8", { fatal: true }).decode(k));
@@ -781,7 +814,7 @@ export class Volume {
       rows.push([p, v[0]]);
     }
     const end = rows.reduce((n, [p, b]) => {
-      const e = p * BigInt(PAGE_SIZE) + BigInt(b.length);
+      const e = p * BigInt(pageSize) + BigInt(b.length);
       return e > n ? e : n;
     }, 0n);
     check(
@@ -789,8 +822,8 @@ export class Volume {
       "file read byte limit",
     );
     const bytes = new Uint8Array(Number(end));
-    for (const [p, b] of rows) bytes.set(b, Number(p) * PAGE_SIZE);
-    check(equal(crc.hash(bytes), file[1]), "file checksum mismatch");
+    for (const [p, b] of rows) bytes.set(b, Number(p) * pageSize);
+    check(equal(crc.hash(bytes), sourceSummary(footer.get(2).get(1)).crc64nvme), "file checksum mismatch");
     const start = options.start ?? 0,
       length = options.length ?? Math.max(0, bytes.length - start);
     check(

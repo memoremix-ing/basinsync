@@ -11,7 +11,9 @@ pub const PATH: &str = ".sync-volume/";
 pub const BLOCK: &str = ".sync-block/";
 pub const PAGE_SIZE: usize = 4096;
 mod checksum;
+mod chunking;
 pub use checksum::Algorithm;
+pub use chunking::{ChunkPolicy, chunks};
 pub struct Sectors;
 impl Consumer for Sectors {
     fn migration(&self) -> u32 {
@@ -475,6 +477,21 @@ pub fn build_block_with_algorithm<S: Storage>(
     inline_pages: usize,
     algorithm: Algorithm,
 ) -> Result<BlockRoot> {
+    build_block_with_page_size(b, input, inline_pages, algorithm, PAGE_SIZE)
+}
+pub fn build_block_with_page_size<S: Storage>(
+    b: &mut Basin<S>,
+    input: Vec<(num_bigint::BigInt, Vec<u8>)>,
+    inline_pages: usize,
+    algorithm: Algorithm,
+    page_size: usize,
+) -> Result<BlockRoot> {
+    ensure!(
+        page_size > 0
+            && page_size <= 32 * 1024 * 1024
+            && input.iter().all(|(_, v)| v.len() <= page_size),
+        "invalid page size/data"
+    );
     let pages = input
         .into_iter()
         .map(|(n, v)| Ok((lex(&n)?.into_bytes(), Array(vec![Blob(v)]))))
@@ -487,39 +504,162 @@ pub fn build_block_with_algorithm<S: Storage>(
             algorithm,
         },
     )?;
-    finish_block(b, t, algorithm)
+    finish_block(b, t, algorithm, page_size)
+}
+struct Chunks;
+impl Consumer for Chunks {
+    fn migration(&self) -> u32 {
+        1
+    }
+    fn empty(&self) -> Value {
+        Sectors.empty()
+    }
+    fn entry(&self, k: &[u8], v: &Value) -> Result<Value> {
+        Sectors.entry(k, v)
+    }
+    fn combine(&self, parts: &[Value]) -> Result<Value> {
+        Sectors.combine(parts)
+    }
+    fn trie_inline_cost(&self) -> Option<fn(&Value) -> Result<usize>> {
+        Some(|v| {
+            let length = v.at(0)?.blob()?.len();
+            Ok(if length >= 65536 {
+                1280
+            } else {
+                (length * 1280).div_ceil(65536).max(1)
+            })
+        })
+    }
+}
+fn source_summary(source: &Value) -> Result<&Value> {
+    if matches!(source, Array(_)) {
+        source.at(6)?.field("1")
+    } else {
+        source.index(6)?.at(1)
+    }
+}
+fn source_edges(source: &Value) -> Result<Vec<Edge>> {
+    if matches!(source, Array(_)) {
+        return Ok(vec![source.clone()]);
+    }
+    let mut out = vec![];
+    let members = source.index(6)?.at(3)?;
+    if !members.is_null() {
+        for member in members.array()? {
+            if let Array(children) = member {
+                for child in children {
+                    if !child.is_null() {
+                        out.extend(source_edges(child)?);
+                    }
+                }
+            }
+        }
+    }
+    basin::distinct(&out)
+}
+pub fn build_mixed_block<S: Storage>(
+    b: &mut Basin<S>,
+    content: &[u8],
+    pages: Vec<(num_bigint::BigInt, Vec<u8>)>,
+    policy: ChunkPolicy,
+) -> Result<BlockRoot> {
+    build_mixed_block_with_page_size(b, content, pages, policy, PAGE_SIZE)
+}
+pub fn build_mixed_block_with_page_size<S: Storage>(
+    b: &mut Basin<S>,
+    content: &[u8],
+    pages: Vec<(num_bigint::BigInt, Vec<u8>)>,
+    policy: ChunkPolicy,
+    page_size: usize,
+) -> Result<BlockRoot> {
+    ensure!(
+        page_size > 0
+            && page_size <= 32 * 1024 * 1024
+            && pages.iter().all(|(_, v)| v.len() <= page_size),
+        "invalid page size/data"
+    );
+    let rows = chunks(content, policy)?
+        .into_iter()
+        .enumerate()
+        .map(|(i, bytes)| Ok((lex(&(i + 1).into())?.into_bytes(), Array(vec![Blob(bytes)]))))
+        .collect::<Result<Vec<_>>>()?;
+    let prefix = trie::build_node(b, rows, &Chunks)?;
+    let rows = pages
+        .into_iter()
+        .map(|(i, bytes)| Ok((lex(&i)?.into_bytes(), Array(vec![Blob(bytes)]))))
+        .collect::<Result<Vec<_>>>()?;
+    let suffix = trie::build_node(b, rows, &Sectors)?;
+    finish_parts(b, prefix.node, suffix, Algorithm::Crc64Nvme, page_size)
+}
+pub fn build_content_block<S: Storage>(
+    b: &mut Basin<S>,
+    bytes: &[u8],
+    policy: ChunkPolicy,
+) -> Result<BlockRoot> {
+    build_mixed_block(b, bytes, vec![], policy)
 }
 fn finish_block<S: Storage>(
     b: &mut Basin<S>,
     t: trie::Built,
     algorithm: Algorithm,
+    page_size: usize,
 ) -> Result<BlockRoot> {
-    let leading = page_spine(b, &t.node, false)?;
-    let lagging = page_spine(b, &t.node, true)?;
-    let digest = algorithm.digest(t.node.index(6)?.at(1)?)?;
-    let edged = t.node.index(5)?.field("inlined")?.number()? > 1280;
-    let source = if edged {
-        b.seal(t.node, &t.edges)?
-    } else {
-        t.node
-    };
-    let edges = if edged { vec![source.clone()] } else { t.edges };
+    let prefix = trie::build_node(b, vec![], &Chunks)?;
+    finish_parts(b, prefix.node, t, algorithm, page_size)
+}
+fn finish_parts<S: Storage>(
+    b: &mut Basin<S>,
+    prefix: Value,
+    suffix: trie::Built,
+    algorithm: Algorithm,
+    page_size: usize,
+) -> Result<BlockRoot> {
+    let leading = page_spine(b, &suffix.node, false)?;
+    let lagging = page_spine(b, &suffix.node, true)?;
+    let sum = Sectors.combine(&[
+        source_summary(&prefix)?.clone(),
+        source_summary(&suffix.node)?.clone(),
+    ])?;
+    let digest = algorithm.digest(&sum)?;
+    let mut sources = vec![prefix, suffix.node];
+    let mut edges = vec![];
+    for source in &sources {
+        edges.extend(source_edges(source)?);
+    }
+    let cost = sources
+        .iter()
+        .map(|source| {
+            if matches!(source, Array(_)) {
+                Ok(0)
+            } else {
+                source.index(5)?.field("inlined")?.number()
+            }
+        })
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .sum::<u32>();
+    if cost > 1280 || basin::distinct(&edges)?.len() > b.max_degree {
+        for source in &mut sources {
+            if matches!(source, Map(_)) && source.index(5)?.field("count")?.big()? > 0.into() {
+                *source = b.seal(source.clone(), &source_edges(source)?)?;
+            }
+        }
+    }
+    let mut edges = vec![];
+    for source in &sources {
+        edges.extend(source_edges(source)?);
+    }
+    let edges = basin::distinct(&edges)?;
     let node = Value::map([
         ("0", Symbol("species".into())),
         ("1", DOMAIN.into()),
         ("2", BLOCK.into()),
         ("3", basin::query(&edges, b.max_degree, b.max_height)?),
         ("4", 0u32.into()),
-        ("5", Null),
+        ("5", Value::map([("pageSize", (page_size as u32).into())])),
         (
             "6",
-            Array(vec![
-                algorithm.migration().into(),
-                Null,
-                source,
-                leading,
-                lagging,
-            ]),
+            Array(vec![2u32.into(), Null, Array(sources), leading, lagging]),
         ),
     ]);
     Ok(BlockRoot {
@@ -550,10 +690,11 @@ pub fn update_block_truncated<S: Storage>(
     }
     let block = View::root(b.load(&old.edge)?).owned()?;
     ensure!(
-        block.index(6)?.at(0)?.number()? == algorithm.migration(),
+        block.index(6)?.at(0)?.number()? == 2,
         "checksum migration mismatch"
     );
-    let source = block.index(6)?.at(2)?.clone();
+    let prefix = block.index(6)?.at(2)?.at(0)?.clone();
+    let source = block.index(6)?.at(2)?.at(1)?.clone();
     let changes = changes
         .into_iter()
         .map(|(n, v)| Ok((lex(&n)?.into_bytes(), v.map(|v| Array(vec![Blob(v)])))))
@@ -572,7 +713,13 @@ pub fn update_block_truncated<S: Storage>(
     if matches!(source, Map(_)) && t.node == source {
         return Ok(old.clone());
     }
-    finish_block(b, t, algorithm)
+    finish_parts(
+        b,
+        prefix,
+        t,
+        algorithm,
+        block.index(5)?.field("pageSize")?.number()? as usize,
+    )
 }
 pub fn block<S: Storage>(b: &mut Basin<S>, root: &Edge, name: &str) -> Result<BlockRoot> {
     let (folder, file) = directory_entry(b, root, name)?;
@@ -584,7 +731,7 @@ pub fn block<S: Storage>(b: &mut Basin<S>, root: &Edge, name: &str) -> Result<Bl
     })
 }
 fn page_root<S: Storage>(basin: &mut Basin<S>, footer: &View) -> Result<View> {
-    let pages = footer.item(2);
+    let pages = footer.item(2).item(1);
     if pages.reader()?.flexbuffer_type() == flexbuffers::FlexBufferType::Map {
         Ok(pages)
     } else {
@@ -615,16 +762,14 @@ pub fn from_blocks<S: Storage>(
     blocks: Vec<(String, BlockRoot)>,
     directories: Vec<String>,
 ) -> Result<Edge> {
-    let migration = blocks.iter().try_fold(1u32, |m, b| {
-        Ok::<_, anyhow::Error>(m.max(b.1.edge.at(6)?.field("0")?.number()?))
-    })?;
+    let migration = 1u32;
     let mut file_map = BTreeMap::new();
     for (name, block) in blocks {
         path(&name)?;
         ensure!(!file_map.contains_key(&name), "duplicate pathname");
         ensure!(
             block.edge.at(2)?.text()? == BLOCK
-                && block.edge.at(6)?.field("0")?.number()? == 1
+                && block.edge.at(6)?.field("0")?.number()? == 2
                 && block.digest.len() == 8,
             "invalid block descriptor"
         );
@@ -708,12 +853,86 @@ fn ready_source<S: Storage>(b: &mut Basin<S>, source: View) -> Result<Option<Vie
     }
 }
 fn sector_summary(footer: &View) -> Result<Value> {
-    let pages = footer.item(2);
-    if pages.reader()?.flexbuffer_type() == flexbuffers::FlexBufferType::Map {
-        pages.field("6").item(1).owned()
+    let contents = footer.item(2).owned()?;
+    ensure!(contents.array()?.len() == 2, "invalid block contents");
+    Sectors.combine(&[
+        source_summary(contents.at(0)?)?.clone(),
+        source_summary(contents.at(1)?)?.clone(),
+    ])
+}
+fn page_size(footer: &View) -> Result<usize> {
+    let n = View::root(footer.bytes.clone())
+        .field("5")
+        .field("pageSize")
+        .owned()?
+        .number()? as usize;
+    ensure!(n > 0 && n <= 32 * 1024 * 1024, "invalid page size");
+    Ok(n)
+}
+fn content_size(footer: &View) -> Result<u64> {
+    Ok(u64::try_from(
+        source_summary(&footer.item(2).item(0).owned()?)?
+            .field("size")?
+            .big()?,
+    )?)
+}
+fn packed_range<S: Storage>(
+    b: &mut Basin<S>,
+    source: View,
+    start: u64,
+    length: usize,
+) -> Result<Vec<u8>> {
+    let root = if source.reader()?.flexbuffer_type() == flexbuffers::FlexBufferType::Map {
+        source
     } else {
-        pages.item(6).field("1").owned()
+        View::root(b.load(&source.owned()?)?)
+    };
+    let at = std::cell::Cell::new(0u64);
+    let error = std::cell::RefCell::new(None);
+    let mut out = vec![];
+    let end = start
+        .checked_add(length as u64)
+        .context("file range overflow")?;
+    trie::visit_inline(
+        b,
+        root,
+        &[],
+        &[],
+        1,
+        &mut |_, sum| {
+            let n = (|| -> Result<u64> { Ok(u64::try_from(sum.field("size")?.big()?)?) })();
+            match n.and_then(|n| at.get().checked_add(n).context("content size overflow")) {
+                Ok(finish) if finish <= start => {
+                    at.set(finish);
+                    false
+                }
+                Ok(_) => at.get() < end,
+                Err(e) => {
+                    *error.borrow_mut() = Some(e);
+                    false
+                }
+            }
+        },
+        &mut |_, v| {
+            let v = v.owned()?;
+            let bytes = v.at(0)?.blob()?;
+            let finish = at
+                .get()
+                .checked_add(bytes.len() as u64)
+                .context("content size overflow")?;
+            let a = start.max(at.get());
+            let z = end.min(finish);
+            if a < z {
+                out.extend_from_slice(&bytes[(a - at.get()) as usize..(z - at.get()) as usize]);
+            }
+            at.set(finish);
+            Ok(at.get() < end)
+        },
+    )?;
+    if let Some(e) = error.into_inner() {
+        return Err(e);
     }
+    Ok(out)
 }
 fn open_block<S: Storage>(
     b: &mut Basin<S>,
@@ -730,10 +949,11 @@ fn open_descriptor<S: Storage>(b: &mut Basin<S>, descriptor: &BlockRoot) -> Resu
     basin::validate_node(block.reader()?, Some(BLOCK))?;
     let f = block.field("6");
     ensure!(
-        f.reader()?.get_vector()?.len() == 5,
+        f.reader()?.get_vector()?.len() == 5 && f.item(0).owned()?.number()? == 2,
         "unsupported block migration"
     );
-    let algorithm = Algorithm::from_migration(f.item(0).owned()?.number()?)?;
+    let algorithm = Algorithm::from_migration(1)?;
+    page_size(&f)?;
     let expected = algorithm.digest(&sector_summary(&f)?)?;
     ensure!(expected == descriptor.digest, "block checksum mismatch");
     Ok(f)
@@ -745,9 +965,23 @@ pub fn read<S: Storage>(
     shortcuts: bool,
 ) -> Result<Vec<u8>> {
     let (footer, expected) = open_block(basin, root, name, shortcuts)?;
+    let size = content_size(&footer)?;
+    ensure!(size <= basin.max_bytes as u64, "file read byte limit");
+    let mut bytes = packed_range(basin, footer.item(2).item(0), 0, size as usize)?;
+    bytes.extend(read_suffix(basin, footer.clone())?);
+    ensure!(
+        bytes.len() <= basin.max_bytes && Algorithm::Crc64Nvme.hash(&bytes) == expected,
+        "file checksum/limit mismatch"
+    );
+    Ok(bytes)
+}
+fn read_suffix<S: Storage>(basin: &mut Basin<S>, footer: View) -> Result<Vec<u8>> {
+    let page_size = page_size(&footer)?;
+    let expected =
+        Algorithm::Crc64Nvme.digest(source_summary(&footer.item(2).item(1).owned()?)?)?;
     let mut pages = vec![];
     let pages_root = page_root(basin, &footer)?;
-    let algorithm = Algorithm::from_migration(footer.item(0).owned()?.number()?)?;
+    let algorithm = Algorithm::from_migration(1)?;
     trie::visit_inline(
         basin,
         pages_root,
@@ -760,7 +994,7 @@ pub fn read<S: Storage>(
             let value = v.owned()?;
             let blob = value.at(0)?.blob()?;
             ensure!(
-                value.array()?.len() == 1 && !blob.is_empty() && blob.len() <= PAGE_SIZE,
+                value.array()?.len() == 1 && !blob.is_empty() && blob.len() <= page_size,
                 "invalid page"
             );
             pages.push((n, blob.to_vec()));
@@ -770,14 +1004,14 @@ pub fn read<S: Storage>(
     let mut end = 0usize;
     for (p, b) in &pages {
         let pos = usize::try_from(p.clone())?
-            .checked_mul(PAGE_SIZE)
+            .checked_mul(page_size)
             .context("file offset overflow")?;
         end = end.max(pos.checked_add(b.len()).context("file length overflow")?);
     }
     ensure!(end <= basin.max_bytes, "file read byte limit");
     let mut bytes = vec![0; end];
     for (p, b) in pages {
-        let at = usize::try_from(p)? * PAGE_SIZE;
+        let at = usize::try_from(p)? * page_size;
         bytes[at..at + b.len()].copy_from_slice(&b);
     }
     ensure!(algorithm.hash(&bytes) == expected, "file checksum mismatch");
@@ -817,7 +1051,7 @@ fn shortcut_page<S: Storage>(
                 return Ok(None);
             }
             let root = View::root(b.load(&e)?);
-            trie::get_inline(b, root, k.to_vec(), footer.item(0).owned()?.number()?)?
+            trie::get_inline(b, root, k.to_vec(), 1)?
                 .map(|v| v.owned())
                 .transpose()
         })();
@@ -833,9 +1067,8 @@ fn page_value<S: Storage>(
     full: Vec<u8>,
     shortcuts: bool,
 ) -> Result<Option<Value>> {
-    if let Some(root) = ready_source(b, f.item(2))?
-        && let Some(value) =
-            trie::get_cached_inline(b, root, full.clone(), f.item(0).owned()?.number()?)?
+    if let Some(root) = ready_source(b, f.item(2).item(1))?
+        && let Some(value) = trie::get_cached_inline(b, root, full.clone(), 1)?
     {
         return value.map(|v| v.owned()).transpose();
     }
@@ -843,7 +1076,7 @@ fn page_value<S: Storage>(
         return Ok(Some(v));
     }
     let root = page_root(b, f)?;
-    trie::get_inline(b, root, full, f.item(0).owned()?.number()?)?
+    trie::get_inline(b, root, full, 1)?
         .map(|v| v.owned())
         .transpose()
 }
@@ -875,12 +1108,41 @@ pub fn read_range<S: Storage>(
     length: usize,
     shortcuts: bool,
 ) -> Result<Vec<u8>> {
-    ensure!(length <= basin.max_bytes, "file read byte limit");
+    ensure!(
+        length <= basin.max_bytes && start.checked_add(length as u64).is_some(),
+        "file range byte limit/overflow"
+    );
     let (footer, _) = open_block(basin, root, name, shortcuts)?;
+    let size = content_size(&footer)?;
+    let take = size.saturating_sub(start).min(length as u64) as usize;
+    let mut out = if take > 0 {
+        packed_range(basin, footer.item(2).item(0), start, take)?
+    } else {
+        vec![]
+    };
+    if out.len() < length {
+        out.extend(read_suffix_range(
+            basin,
+            &footer,
+            start.saturating_sub(size),
+            length - out.len(),
+            shortcuts,
+        )?);
+    }
+    Ok(out)
+}
+fn read_suffix_range<S: Storage>(
+    basin: &mut Basin<S>,
+    footer: &View,
+    start: u64,
+    length: usize,
+    shortcuts: bool,
+) -> Result<Vec<u8>> {
+    let page_size = page_size(footer)?;
     if length == 0 {
         return Ok(vec![]);
     }
-    let source = footer.item(2).owned()?;
+    let source = footer.item(2).item(1).owned()?;
     let header = if matches!(source, Array(_)) {
         source.at(5)?
     } else {
@@ -891,29 +1153,29 @@ pub fn read_range<S: Storage>(
         return Ok(vec![]);
     }
     let highest = unlex(std::str::from_utf8(keys.at(1)?.blob()?)?)?;
-    let first = num_bigint::BigInt::from(start / PAGE_SIZE as u64);
+    let first = num_bigint::BigInt::from(start / page_size as u64);
     if first > highest {
         return Ok(vec![]);
     }
     let end = start
         .checked_add(length as u64)
         .context("file range overflow")?;
-    let last = num_bigint::BigInt::from((end - 1) / PAGE_SIZE as u64).min(highest.clone());
+    let last = num_bigint::BigInt::from((end - 1) / page_size as u64).min(highest.clone());
     let window =
-        ((last.clone() + 1u32) * PAGE_SIZE - num_bigint::BigInt::from(start)).min(length.into());
+        ((last.clone() + 1u32) * page_size - num_bigint::BigInt::from(start)).min(length.into());
     let mut out = vec![0; usize::try_from(window)?];
     let mut actual = out.len();
     let mut page = first;
     while page <= last {
         let full = lex(&page)?.into_bytes();
-        let value = page_value(basin, &footer, full, shortcuts)?.context("missing page")?;
+        let value = page_value(basin, footer, full, shortcuts)?.context("missing page")?;
         ensure!(value.array()?.len() == 1, "invalid page");
         let bytes = value.at(0)?.blob()?;
         ensure!(
-            !bytes.is_empty() && bytes.len() <= PAGE_SIZE,
+            !bytes.is_empty() && bytes.len() <= page_size,
             "invalid page"
         );
-        let offset = &page * PAGE_SIZE - num_bigint::BigInt::from(start);
+        let offset = &page * page_size - num_bigint::BigInt::from(start);
         let offset = i64::try_from(offset)?;
         let from = usize::try_from((-offset).max(0))?;
         let target = usize::try_from(offset.max(0))?;
@@ -1107,6 +1369,7 @@ pub struct PageReader {
     block: Edge,
     owner: std::sync::Mutex<std::sync::Weak<Vec<u8>>>,
     pub count: u64,
+    pub page_size: usize,
 }
 pub struct PagePin {
     _owner: std::sync::Arc<Vec<u8>>,
@@ -1116,7 +1379,11 @@ impl PageReader {
         let _profile = crate::profile::span("volume.file_lookup");
         let descriptor = block(b, root, name)?;
         let footer = open_descriptor(b, &descriptor)?;
-        let pages = footer.item(2);
+        ensure!(
+            content_size(&footer)? == 0,
+            "database block has content-defined prefix"
+        );
+        let pages = footer.item(2).item(1);
         let header = if pages.reader()?.flexbuffer_type() == flexbuffers::FlexBufferType::Map {
             pages.field("5").owned()?
         } else {
@@ -1133,10 +1400,22 @@ impl PageReader {
                 "sparse database page map"
             );
         }
+        let stride = page_size(&footer)?;
+        ensure!(
+            u64::try_from(
+                source_summary(&footer.item(2).item(1).owned()?)?
+                    .field("size")?
+                    .big()?
+            )? == count
+                .checked_mul(stride as u64)
+                .context("database size overflow")?,
+            "non-full database pages"
+        );
         Ok(Self {
             block: descriptor.edge,
             owner: std::sync::Mutex::new(std::sync::Arc::downgrade(&footer.bytes)),
             count,
+            page_size: stride,
         })
     }
     fn footer<S: Storage>(&self, b: &mut Basin<S>) -> Result<View> {
@@ -1264,16 +1543,12 @@ pub fn replace_blocks<S: Storage>(
             trie.node,
         ]))
     }
-    let migration = blocks
-        .iter()
-        .try_fold(root.at(6)?.field("0")?.number()?, |m, b| {
-            Ok::<_, anyhow::Error>(m.max(b.1.edge.at(6)?.field("0")?.number()?))
-        })?;
+    let migration = 1u32;
     let mut descriptor = data(b, root)?.item(2).owned()?;
     for (name, block) in blocks {
         ensure!(
             block.edge.at(2)?.text()? == BLOCK
-                && block.edge.at(6)?.field("0")?.number()? == 1
+                && block.edge.at(6)?.field("0")?.number()? == 2
                 && block.digest.len() == 8,
             "invalid block"
         );

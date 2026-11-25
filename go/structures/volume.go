@@ -375,26 +375,99 @@ func pageSpine(b *Basin, root Node, last bool) []any {
 	require(false, "page trie nesting limit")
 	return nil
 }
-func BuildBlock(b *Basin, input []PageInput) (block BlockRoot, err error) {
+func BuildBlock(b *Basin, input []PageInput) (BlockRoot, error) {
+	return BuildMixedBlock(b, nil, input)
+}
+func BuildContentBlock(b *Basin, content []byte, options ...ChunkPolicy) (BlockRoot, error) {
+	return BuildMixedBlock(b, content, nil, options...)
+}
+func chunkConsumer() Consumer {
+	c := sectorConsumer()
+	c.TrieInlineCost = func(v any) int {
+		length := len(blob(at(v, 0)))
+		if length >= 65536 {
+			return 1280
+		}
+		n := (length*1280 + 65535) / 65536
+		if n < 1 {
+			return 1
+		}
+		if n > 1280 {
+			return 1280
+		}
+		return n
+	}
+	return c
+}
+func sourceSummary(source any) any {
+	if e, ok := source.([]any); ok {
+		return field(e[6], "1")
+	}
+	return at(field(source, "6"), 1)
+}
+func sourceEdges(source any) []Edge {
+	if e, ok := source.([]any); ok {
+		return []Edge{e}
+	}
+	out := []Edge{}
+	members := at(field(source, "6"), 3)
+	if members != nil {
+		for _, m := range array(members) {
+			if children, ok := m.([]any); ok {
+				for _, ch := range children {
+					if ch != nil {
+						out = append(out, sourceEdges(ch)...)
+					}
+				}
+			}
+		}
+	}
+	return distinct(out)
+}
+func BuildMixedBlock(b *Basin, content []byte, input []PageInput, options ...ChunkPolicy) (block BlockRoot, err error) {
+	return BuildMixedBlockWithPageSize(b, content, input, PageSize, options...)
+}
+func BuildMixedBlockWithPageSize(b *Basin, content []byte, input []PageInput, pageSize int, options ...ChunkPolicy) (block BlockRoot, err error) {
 	defer protect(&err)
-	rows := make([]Entry, len(input))
-	for i, p := range input {
-		rows[i] = Entry{[]byte(lex(p.Index)), vector(p.Bytes)}
+	require(pageSize > 0 && pageSize <= 32*1024*1024, "invalid page size")
+	p := DefaultChunkPolicy()
+	require(len(options) <= 1, "too many chunk policies")
+	if len(options) == 1 {
+		p = options[0]
 	}
-	t := checked(BuildNode(b, rows, sectorConsumer()))
-	leading, lagging := pageSpine(b, t.Node, false), pageSpine(b, t.Node, true)
-	sum := blob(field(at(t.Node["6"], 1), "crc64nvme"))
-	var source any = t.Node
-	edges := t.Edges
-	if integer(field(t.Node["5"], "inlined")) > 1280 {
-		source = b.seal(t.Node, t.Edges)
-		edges = []Edge{array(source)}
+	rows := []Entry{}
+	for i, chunk := range checked(ContentChunks(content, p)) {
+		rows = append(rows, Entry{[]byte(lex(big.NewInt(int64(i + 1)))), vector(chunk)})
 	}
-	n := Node{"0": Symbol{Name: "species"}, "1": Domain, "2": BlockPath, "3": query(edges, b.MaxDegree, b.MaxHeight), "4": int64(0), "5": nil, "6": vector(int64(1), nil, source, leading, lagging)}
-	return BlockRoot{b.seal(n, edges), sum}, nil
+	prefix := checked(BuildNode(b, rows, chunkConsumer()))
+	rows = nil
+	for _, page := range input {
+		require(len(page.Bytes) <= pageSize, "page exceeds page size")
+		rows = append(rows, Entry{[]byte(lex(page.Index)), vector(append([]byte{}, page.Bytes...))})
+	}
+	suffix := checked(BuildNode(b, rows, sectorConsumer()))
+	leading, lagging := pageSpine(b, suffix.Node, false), pageSpine(b, suffix.Node, true)
+	sum := checked(sectorConsumer().Combine([]any{sourceSummary(prefix.Node), sourceSummary(suffix.Node)}))
+	sources := []any{prefix.Node, suffix.Node}
+	edges := append(sourceEdges(prefix.Node), sourceEdges(suffix.Node)...)
+	cost := integer(field(prefix.Node["5"], "inlined")) + integer(field(suffix.Node["5"], "inlined"))
+	if cost > 1280 || len(distinct(edges)) > b.MaxDegree {
+		for i, source := range sources {
+			if bigint(field(field(source, "5"), "count")).Sign() > 0 {
+				sources[i] = b.seal(mapping(source), sourceEdges(source))
+			}
+		}
+	}
+	edges = nil
+	for _, source := range sources {
+		edges = append(edges, sourceEdges(source)...)
+	}
+	edges = distinct(edges)
+	n := Node{"0": Symbol{Name: "species"}, "1": Domain, "2": BlockPath, "3": query(edges, b.MaxDegree, b.MaxHeight), "4": int64(0), "5": map[string]any{"pageSize": int64(pageSize)}, "6": vector(int64(2), nil, sources, leading, lagging)}
+	return BlockRoot{b.seal(n, edges), blob(field(sum, "crc64nvme"))}, nil
 }
 func pageRoot(b *Basin, footer Ref) Ref {
-	pages := footer.item(2)
+	pages := footer.item(2).item(1)
 	if pages.typ == 9 {
 		return pages
 	}
@@ -428,7 +501,7 @@ func VolumeFromBlocks(b *Basin, blocks map[string]BlockRoot, directories ...stri
 	for name, block := range blocks {
 		path(name)
 		validateEdge(block.Edge)
-		require(text(block.Edge[2]) == BlockPath && len(block.Digest) == 8 && integer(field(block.Edge[6], "0")) == 1, "invalid block descriptor")
+		require(text(block.Edge[2]) == BlockPath && len(block.Digest) == 8 && integer(field(block.Edge[6], "0")) == 2, "invalid block descriptor")
 		files[name] = struct {
 			edge Edge
 			sum  []byte
@@ -512,11 +585,52 @@ func readySource(b *Basin, source Ref) *Ref {
 	return b.peek(array(source.owned(0)))
 }
 func sectorSummary(footer Ref) any {
-	pages := footer.item(2)
-	if pages.typ == 9 {
-		return pages.get("6").item(1).owned(0)
+	contents := array(footer.item(2).owned(0))
+	require(len(contents) == 2, "invalid block contents")
+	return checked(sectorConsumer().Combine([]any{sourceSummary(contents[0]), sourceSummary(contents[1])}))
+}
+func blockPageSize(footer Ref) int {
+	n := int(integer(rootRef(footer.b).get("5").get("pageSize").owned(0)))
+	require(n > 0 && n <= 32*1024*1024, "invalid page size")
+	return n
+}
+func contentSize(footer Ref) uint64 {
+	n := bigint(field(sourceSummary(footer.item(2).item(0).owned(0)), "size"))
+	require(n.IsUint64(), "invalid content byte size")
+	return n.Uint64()
+}
+func packedRange(b *Basin, source Ref, start uint64, length int) []byte {
+	root := source
+	if source.typ != 9 {
+		root = b.load(array(source.owned(0)))
 	}
-	return pages.item(6).get("1").owned(0)
+	at, end := uint64(0), start+uint64(length)
+	out := []byte{}
+	visitInline(b, root, nil, nil, 1, func(_, sum any) bool {
+		n := bigint(field(sum, "size"))
+		require(n.IsUint64(), "invalid content byte size")
+		if at+n.Uint64() <= start {
+			at += n.Uint64()
+			return false
+		}
+		return at < end
+	}, func(_ []byte, r Ref) (bool, error) {
+		bytes := blob(array(r.owned(0))[0])
+		finish := at + uint64(len(bytes))
+		a, z := start, end
+		if a < at {
+			a = at
+		}
+		if z > finish {
+			z = finish
+		}
+		if a < z {
+			out = append(out, bytes[a-at:z-at]...)
+		}
+		at = finish
+		return at < end, nil
+	})
+	return out
 }
 func openBlock(b *Basin, root Edge, name string, shortcuts bool) (footer Ref, expected []byte, err error) {
 	defer protect(&err)
@@ -525,7 +639,8 @@ func openBlock(b *Basin, root Edge, name string, shortcuts bool) (footer Ref, ex
 	block := b.load(array(file.item(2).owned(0)))
 	validateNode(block, BlockPath)
 	footer = block.get("6")
-	require(footer.len() == 5 && integer(footer.item(0).owned(0)) == 1, "unsupported block migration")
+	blockPageSize(footer)
+	require(footer.len() == 5 && integer(footer.item(0).owned(0)) == 2, "unsupported block migration")
 	sum := blob(field(sectorSummary(footer), "crc64nvme"))
 	require(bytes.Equal(sum, file.item(1).bytes()), "block checksum mismatch")
 	return footer, sum, nil
@@ -536,6 +651,16 @@ func ReadFile(b *Basin, root Edge, name string, shortcuts bool) (data []byte, er
 	if e != nil {
 		return nil, e
 	}
+	size := contentSize(footer)
+	require(size <= uint64(b.MaxBytes), "file read byte limit")
+	data = packedRange(b, footer.item(2).item(0), 0, int(size))
+	data = append(data, checked(readSuffix(b, footer, blockPageSize(footer)))...)
+	require(len(data) <= b.MaxBytes && bytes.Equal(CRC64NVME(data), expected), "file checksum/limit mismatch")
+	return data, nil
+}
+func readSuffix(b *Basin, footer Ref, pageSize int) (data []byte, err error) {
+	defer protect(&err)
+	expected := blob(field(sourceSummary(footer.item(2).item(1).owned(0)), "crc64nvme"))
 
 	type page struct {
 		at   int
@@ -545,12 +670,12 @@ func ReadFile(b *Basin, root Edge, name string, shortcuts bool) (data []byte, er
 	end := 0
 	visitInline(b, pageRoot(b, footer), nil, nil, 1, func(any, any) bool { return true }, func(k []byte, r Ref) (bool, error) {
 		p := unlex(string(k))
-		offset := new(big.Int).Mul(p, big.NewInt(PageSize))
+		offset := new(big.Int).Mul(p, big.NewInt(int64(pageSize)))
 		require(offset.IsInt64() && offset.Sign() >= 0 && offset.Int64() <= int64(b.MaxBytes), "file read byte limit")
 		v := array(r.owned(0))
 		require(len(v) == 1, "invalid page")
 		blob := blob(v[0])
-		require(len(blob) > 0 && len(blob) <= PageSize && offset.Int64()+int64(len(blob)) <= int64(b.MaxBytes), "invalid page")
+		require(len(blob) > 0 && len(blob) <= pageSize && offset.Int64()+int64(len(blob)) <= int64(b.MaxBytes), "invalid page")
 		at := int(offset.Int64())
 		pages = append(pages, page{at, blob})
 		if at+len(blob) > end {
@@ -613,7 +738,7 @@ func shortcutPage(b *Basin, footer Ref, full []byte) (value any, err error) {
 	return nil, nil
 }
 func pageValue(b *Basin, f Ref, full []byte, shortcuts bool) any {
-	if root := readySource(b, f.item(2)); root != nil {
+	if root := readySource(b, f.item(2).item(1)); root != nil {
 		v, ready := lookupInline(b, *root, full, 1, true)
 		if ready {
 			if v == nil {
@@ -658,10 +783,32 @@ func ReadRange(b *Basin, root Edge, name string, start uint64, length int, short
 	if e != nil {
 		return nil, e
 	}
+	size := contentSize(footer)
+	take := uint64(0)
+	if start < size {
+		take = size - start
+	}
+	if take > uint64(length) {
+		take = uint64(length)
+	}
+	if take > 0 {
+		data = packedRange(b, footer.item(2).item(0), start, int(take))
+	}
+	if len(data) < length {
+		offset := uint64(0)
+		if start > size {
+			offset = start - size
+		}
+		data = append(data, checked(readSuffixRange(b, footer, offset, length-len(data), shortcuts, blockPageSize(footer)))...)
+	}
+	return data, nil
+}
+func readSuffixRange(b *Basin, footer Ref, start uint64, length int, shortcuts bool, pageSize int) (data []byte, err error) {
+	defer protect(&err)
 	if length == 0 {
 		return []byte{}, nil
 	}
-	source := footer.item(2).owned(0)
+	source := footer.item(2).item(1).owned(0)
 	var header any
 	if e, ok := source.([]any); ok {
 		header = e[5]
@@ -673,16 +820,16 @@ func ReadRange(b *Basin, root Edge, name string, start uint64, length int, short
 		return []byte{}, nil
 	}
 	highest := unlex(string(blob(at(keys, 1))))
-	first := new(big.Int).SetUint64(start / PageSize)
+	first := new(big.Int).SetUint64(start / uint64(pageSize))
 	if first.Cmp(highest) > 0 {
 		return []byte{}, nil
 	}
-	last := new(big.Int).SetUint64((start + uint64(length) - 1) / PageSize)
+	last := new(big.Int).SetUint64((start + uint64(length) - 1) / uint64(pageSize))
 	if last.Cmp(highest) > 0 {
 		last.Set(highest)
 	}
 	window := new(big.Int).Add(last, big.NewInt(1))
-	window.Mul(window, big.NewInt(PageSize)).Sub(window, new(big.Int).SetUint64(start))
+	window.Mul(window, big.NewInt(int64(pageSize))).Sub(window, new(big.Int).SetUint64(start))
 	if window.Cmp(big.NewInt(int64(length))) > 0 {
 		window.SetInt64(int64(length))
 	}
@@ -696,8 +843,8 @@ func ReadRange(b *Basin, root Edge, name string, start uint64, length int, short
 		values := array(value)
 		require(len(values) == 1, "invalid page")
 		blob := blob(values[0])
-		require(len(blob) > 0 && len(blob) <= PageSize, "invalid page")
-		offset := new(big.Int).Mul(page, big.NewInt(PageSize))
+		require(len(blob) > 0 && len(blob) <= pageSize, "invalid page")
+		offset := new(big.Int).Mul(page, big.NewInt(int64(pageSize)))
 		offset.Sub(offset, new(big.Int).SetUint64(start))
 		require(offset.IsInt64(), "range offset overflow")
 		at := offset.Int64()

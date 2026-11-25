@@ -1,0 +1,4417 @@
+{
+  "runtime": "1.4.5",
+  "size": 8388608,
+  "rounds": 3,
+  "results": [
+    {
+      "dataset": "random",
+      "round": 0,
+      "runAnchors": false,
+      "change": "same",
+      "size": 8388608,
+      "build": {
+        "ms": 307.806291,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 0.02295800000001691,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "diff": {
+        "ms": 0.2814170000000331,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 0,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 1.4697080000000255,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 204.02475000000004,
+        "gets": 232,
+        "bytes": 16975296,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 0,
+      "runAnchors": false,
+      "change": "overwrite",
+      "size": 8388608,
+      "build": {
+        "ms": 307.806291,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 11.708083999999985,
+        "gets": 6,
+        "bytes": 152712,
+        "puts": 3,
+        "newBytes": 133768,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 8.491208000000029,
+        "gets": 6,
+        "bytes": 267536,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 2.959208999999987,
+        "gets": 3,
+        "bytes": 133768,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 203.30233299999998,
+        "gets": 232,
+        "bytes": 16975296,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 0,
+      "runAnchors": false,
+      "change": "append",
+      "size": 8388608,
+      "build": {
+        "ms": 307.806291,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 10.793209000000047,
+        "gets": 6,
+        "bytes": 169352,
+        "puts": 3,
+        "newBytes": 142712,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 1.5335420000000113,
+        "gets": 6,
+        "bytes": 269040,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 16384
+      },
+      "patch": {
+        "ms": 1.4394999999999527,
+        "gets": 3,
+        "bytes": 142712,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 186.83162499999992,
+        "gets": 232,
+        "bytes": 16991680,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 0,
+      "runAnchors": false,
+      "change": "insert",
+      "size": 8388608,
+      "build": {
+        "ms": 307.806291,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 11.079791999999884,
+        "gets": 6,
+        "bytes": 152712,
+        "puts": 3,
+        "newBytes": 133768,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 7.4282499999999345,
+        "gets": 6,
+        "bytes": 267536,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 2.2533330000001115,
+        "gets": 3,
+        "bytes": 133768,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 194.211542,
+        "gets": 232,
+        "bytes": 16975296,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 0,
+      "runAnchors": false,
+      "change": "delete",
+      "size": 8388608,
+      "build": {
+        "ms": 307.806291,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 11.518374999999878,
+        "gets": 6,
+        "bytes": 152712,
+        "puts": 3,
+        "newBytes": 133768,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 7.539625000000115,
+        "gets": 6,
+        "bytes": 267536,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 0.5557079999998678,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 189.16329100000007,
+        "gets": 232,
+        "bytes": 16975296,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 0,
+      "runAnchors": true,
+      "change": "same",
+      "size": 8388608,
+      "build": {
+        "ms": 301.2177919999999,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 0.0015000000000782165,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "diff": {
+        "ms": 0.04475000000002183,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 0,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 0.9185420000001159,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 194.36908399999993,
+        "gets": 232,
+        "bytes": 16975296,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 0,
+      "runAnchors": true,
+      "change": "overwrite",
+      "size": 8388608,
+      "build": {
+        "ms": 301.2177919999999,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 9.983165999999983,
+        "gets": 6,
+        "bytes": 152712,
+        "puts": 3,
+        "newBytes": 133768,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 6.917249999999967,
+        "gets": 6,
+        "bytes": 267536,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 2.946916999999985,
+        "gets": 3,
+        "bytes": 133768,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 189.9480420000002,
+        "gets": 232,
+        "bytes": 16975296,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 0,
+      "runAnchors": true,
+      "change": "append",
+      "size": 8388608,
+      "build": {
+        "ms": 301.2177919999999,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 10.198542000000089,
+        "gets": 6,
+        "bytes": 169352,
+        "puts": 3,
+        "newBytes": 142712,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 1.5740000000000691,
+        "gets": 6,
+        "bytes": 269040,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 16384
+      },
+      "patch": {
+        "ms": 1.5603750000000218,
+        "gets": 3,
+        "bytes": 142712,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 194.5507080000002,
+        "gets": 232,
+        "bytes": 16991680,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 0,
+      "runAnchors": true,
+      "change": "insert",
+      "size": 8388608,
+      "build": {
+        "ms": 301.2177919999999,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 10.401166000000103,
+        "gets": 6,
+        "bytes": 152712,
+        "puts": 3,
+        "newBytes": 133768,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 6.947165999999925,
+        "gets": 6,
+        "bytes": 267536,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 4.268749999999727,
+        "gets": 3,
+        "bytes": 133768,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 190.04983300000004,
+        "gets": 232,
+        "bytes": 16975296,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 0,
+      "runAnchors": true,
+      "change": "delete",
+      "size": 8388608,
+      "build": {
+        "ms": 301.2177919999999,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 9.483874999999898,
+        "gets": 6,
+        "bytes": 152712,
+        "puts": 3,
+        "newBytes": 133768,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 6.625,
+        "gets": 6,
+        "bytes": 267536,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 0.5996660000000702,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 187.78004199999987,
+        "gets": 232,
+        "bytes": 16975296,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 1,
+      "runAnchors": true,
+      "change": "same",
+      "size": 8388608,
+      "build": {
+        "ms": 287.99679100000003,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 0.002541999999721156,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "diff": {
+        "ms": 0.009290999999848282,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 0,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 0.9266250000000582,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 197.52995799999962,
+        "gets": 232,
+        "bytes": 16975296,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 1,
+      "runAnchors": true,
+      "change": "overwrite",
+      "size": 8388608,
+      "build": {
+        "ms": 287.99679100000003,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 14.492666999999983,
+        "gets": 6,
+        "bytes": 152712,
+        "puts": 3,
+        "newBytes": 133768,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 7.469082999999955,
+        "gets": 6,
+        "bytes": 267536,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 2.317500000000109,
+        "gets": 3,
+        "bytes": 133768,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 190.4142499999998,
+        "gets": 232,
+        "bytes": 16975296,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 1,
+      "runAnchors": true,
+      "change": "append",
+      "size": 8388608,
+      "build": {
+        "ms": 287.99679100000003,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 11.001459000000068,
+        "gets": 6,
+        "bytes": 169352,
+        "puts": 3,
+        "newBytes": 142712,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 1.5002910000002885,
+        "gets": 6,
+        "bytes": 269040,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 16384
+      },
+      "patch": {
+        "ms": 1.6099170000002232,
+        "gets": 3,
+        "bytes": 142712,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 187.88533400000006,
+        "gets": 232,
+        "bytes": 16991680,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 1,
+      "runAnchors": true,
+      "change": "insert",
+      "size": 8388608,
+      "build": {
+        "ms": 287.99679100000003,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 10.616833000000042,
+        "gets": 6,
+        "bytes": 152712,
+        "puts": 3,
+        "newBytes": 133768,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 6.557082999999693,
+        "gets": 6,
+        "bytes": 267536,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 2.1749589999999444,
+        "gets": 3,
+        "bytes": 133768,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 186.7297920000001,
+        "gets": 232,
+        "bytes": 16975296,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 1,
+      "runAnchors": true,
+      "change": "delete",
+      "size": 8388608,
+      "build": {
+        "ms": 287.99679100000003,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 10.72708300000022,
+        "gets": 6,
+        "bytes": 152712,
+        "puts": 3,
+        "newBytes": 133768,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 6.736332999999831,
+        "gets": 6,
+        "bytes": 267536,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 0.6717499999999745,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 226.82145799999944,
+        "gets": 232,
+        "bytes": 16975296,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 1,
+      "runAnchors": false,
+      "change": "same",
+      "size": 8388608,
+      "build": {
+        "ms": 288.8911250000001,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 0.002915999999459018,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "diff": {
+        "ms": 0.010583000000224274,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 0,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 0.9026250000006257,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 186.3675830000002,
+        "gets": 232,
+        "bytes": 16975296,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 1,
+      "runAnchors": false,
+      "change": "overwrite",
+      "size": 8388608,
+      "build": {
+        "ms": 288.8911250000001,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 10.828625000000102,
+        "gets": 6,
+        "bytes": 152712,
+        "puts": 3,
+        "newBytes": 133768,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 6.917708999999377,
+        "gets": 6,
+        "bytes": 267536,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 2.514834000000519,
+        "gets": 3,
+        "bytes": 133768,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 187.99829200000022,
+        "gets": 232,
+        "bytes": 16975296,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 1,
+      "runAnchors": false,
+      "change": "append",
+      "size": 8388608,
+      "build": {
+        "ms": 288.8911250000001,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 11.201250000000073,
+        "gets": 6,
+        "bytes": 169352,
+        "puts": 3,
+        "newBytes": 142712,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 1.3159999999998035,
+        "gets": 6,
+        "bytes": 269040,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 16384
+      },
+      "patch": {
+        "ms": 1.4563749999997526,
+        "gets": 3,
+        "bytes": 142712,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 188.5413749999998,
+        "gets": 232,
+        "bytes": 16991680,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 1,
+      "runAnchors": false,
+      "change": "insert",
+      "size": 8388608,
+      "build": {
+        "ms": 288.8911250000001,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 10.623167000000649,
+        "gets": 6,
+        "bytes": 152712,
+        "puts": 3,
+        "newBytes": 133768,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 6.615707999999358,
+        "gets": 6,
+        "bytes": 267536,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 2.3284999999996217,
+        "gets": 3,
+        "bytes": 133768,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 192.99566700000014,
+        "gets": 232,
+        "bytes": 16975296,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 1,
+      "runAnchors": false,
+      "change": "delete",
+      "size": 8388608,
+      "build": {
+        "ms": 288.8911250000001,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 9.75762500000019,
+        "gets": 6,
+        "bytes": 152712,
+        "puts": 3,
+        "newBytes": 133768,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 7.437207999999373,
+        "gets": 6,
+        "bytes": 267536,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 2.015834000000723,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 195.42541700000038,
+        "gets": 232,
+        "bytes": 16975296,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 2,
+      "runAnchors": false,
+      "change": "same",
+      "size": 8388608,
+      "build": {
+        "ms": 288.08129199999985,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 0.003666999999950349,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "diff": {
+        "ms": 0.010125000000698492,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 0,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 1.1893749999999272,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 185.71312500000022,
+        "gets": 232,
+        "bytes": 16975296,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 2,
+      "runAnchors": false,
+      "change": "overwrite",
+      "size": 8388608,
+      "build": {
+        "ms": 288.08129199999985,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 9.450166999999965,
+        "gets": 6,
+        "bytes": 152712,
+        "puts": 3,
+        "newBytes": 133768,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 6.7687919999998485,
+        "gets": 6,
+        "bytes": 267536,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 2.5210839999999735,
+        "gets": 3,
+        "bytes": 133768,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 193.53133400000024,
+        "gets": 232,
+        "bytes": 16975296,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 2,
+      "runAnchors": false,
+      "change": "append",
+      "size": 8388608,
+      "build": {
+        "ms": 288.08129199999985,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 11.379792000000634,
+        "gets": 6,
+        "bytes": 169352,
+        "puts": 3,
+        "newBytes": 142712,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 1.4577089999993404,
+        "gets": 6,
+        "bytes": 269040,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 16384
+      },
+      "patch": {
+        "ms": 2.0056249999997817,
+        "gets": 3,
+        "bytes": 142712,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 191.3179999999993,
+        "gets": 232,
+        "bytes": 16991680,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 2,
+      "runAnchors": false,
+      "change": "insert",
+      "size": 8388608,
+      "build": {
+        "ms": 288.08129199999985,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 8.996916000000056,
+        "gets": 6,
+        "bytes": 152712,
+        "puts": 3,
+        "newBytes": 133768,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 6.9227920000003,
+        "gets": 6,
+        "bytes": 267536,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 3.0269170000001395,
+        "gets": 3,
+        "bytes": 133768,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 189.33379100000002,
+        "gets": 232,
+        "bytes": 16975296,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 2,
+      "runAnchors": false,
+      "change": "delete",
+      "size": 8388608,
+      "build": {
+        "ms": 288.08129199999985,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 9.626709000000119,
+        "gets": 6,
+        "bytes": 152712,
+        "puts": 3,
+        "newBytes": 133768,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 6.558582999999999,
+        "gets": 6,
+        "bytes": 267536,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 0.9288329999999405,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 189.1527500000002,
+        "gets": 232,
+        "bytes": 16975296,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 2,
+      "runAnchors": true,
+      "change": "same",
+      "size": 8388608,
+      "build": {
+        "ms": 294.3658340000002,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 0.0031669999998484855,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "diff": {
+        "ms": 0.01224999999976717,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 0,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 1.2904579999994894,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 191.14166599999953,
+        "gets": 232,
+        "bytes": 16975296,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 2,
+      "runAnchors": true,
+      "change": "overwrite",
+      "size": 8388608,
+      "build": {
+        "ms": 294.3658340000002,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 9.18816599999991,
+        "gets": 6,
+        "bytes": 152712,
+        "puts": 3,
+        "newBytes": 133768,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 7.6056250000001455,
+        "gets": 6,
+        "bytes": 267536,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 2.9334170000001905,
+        "gets": 3,
+        "bytes": 133768,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 190.99270799999977,
+        "gets": 232,
+        "bytes": 16975296,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 2,
+      "runAnchors": true,
+      "change": "append",
+      "size": 8388608,
+      "build": {
+        "ms": 294.3658340000002,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 9.875583000000006,
+        "gets": 6,
+        "bytes": 169352,
+        "puts": 3,
+        "newBytes": 142712,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 1.4686670000000959,
+        "gets": 6,
+        "bytes": 269040,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 16384
+      },
+      "patch": {
+        "ms": 1.924540999999408,
+        "gets": 3,
+        "bytes": 142712,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 188.05470799999966,
+        "gets": 232,
+        "bytes": 16991680,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 2,
+      "runAnchors": true,
+      "change": "insert",
+      "size": 8388608,
+      "build": {
+        "ms": 294.3658340000002,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 9.754750000000058,
+        "gets": 6,
+        "bytes": 152712,
+        "puts": 3,
+        "newBytes": 133768,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 7.385582999999315,
+        "gets": 6,
+        "bytes": 267536,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 2.372624999999971,
+        "gets": 3,
+        "bytes": 133768,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 202.76870899999994,
+        "gets": 232,
+        "bytes": 16975296,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "random",
+      "round": 2,
+      "runAnchors": true,
+      "change": "delete",
+      "size": 8388608,
+      "build": {
+        "ms": 294.3658340000002,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 116,
+        "newBytes": 8487648,
+        "newObjects": 116
+      },
+      "update": {
+        "ms": 12.41966599999978,
+        "gets": 6,
+        "bytes": 152712,
+        "puts": 3,
+        "newBytes": 133768,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 7.1082500000002256,
+        "gets": 6,
+        "bytes": 267536,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 0.7550410000003467,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 190.61712500000067,
+        "gets": 232,
+        "bytes": 16975296,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 0,
+      "runAnchors": false,
+      "change": "same",
+      "size": 8388608,
+      "build": {
+        "ms": 216.60325000000012,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 36,
+        "newBytes": 8420216,
+        "newObjects": 36
+      },
+      "update": {
+        "ms": 0.0032920000012381934,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "diff": {
+        "ms": 0.008291000000099302,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 0,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 1.4130829999994603,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 190.53841599999942,
+        "gets": 72,
+        "bytes": 16840432,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 0,
+      "runAnchors": false,
+      "change": "overwrite",
+      "size": 8388608,
+      "build": {
+        "ms": 216.60325000000012,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 36,
+        "newBytes": 8420216,
+        "newObjects": 36
+      },
+      "update": {
+        "ms": 9.677041000000827,
+        "gets": 5,
+        "bytes": 278128,
+        "puts": 3,
+        "newBytes": 271320,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 4.389624999999796,
+        "gets": 6,
+        "bytes": 542640,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 1.8678749999999127,
+        "gets": 3,
+        "bytes": 271320,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 176.27449999999953,
+        "gets": 72,
+        "bytes": 16840432,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 0,
+      "runAnchors": false,
+      "change": "append",
+      "size": 8388608,
+      "build": {
+        "ms": 216.60325000000012,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 36,
+        "newBytes": 8420216,
+        "newObjects": 36
+      },
+      "update": {
+        "ms": 2.668415999998615,
+        "gets": 4,
+        "bytes": 15480,
+        "puts": 3,
+        "newBytes": 25872,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 1.046542000000045,
+        "gets": 4,
+        "bytes": 17704,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 16384
+      },
+      "patch": {
+        "ms": 1.510707999999795,
+        "gets": 3,
+        "bytes": 25872,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 176.24695800000154,
+        "gets": 73,
+        "bytes": 16857632,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 0,
+      "runAnchors": false,
+      "change": "insert",
+      "size": 8388608,
+      "build": {
+        "ms": 216.60325000000012,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 36,
+        "newBytes": 8420216,
+        "newObjects": 36
+      },
+      "update": {
+        "ms": 117.3020830000005,
+        "gets": 20,
+        "bytes": 4217848,
+        "puts": 20,
+        "newBytes": 4212744,
+        "newObjects": 20
+      },
+      "diff": {
+        "ms": 44.33433299999888,
+        "gets": 38,
+        "bytes": 8423784,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 1.7436670000006416,
+        "gets": 3,
+        "bytes": 265944,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 181.87379099999998,
+        "gets": 74,
+        "bytes": 16842136,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 0,
+      "runAnchors": false,
+      "change": "delete",
+      "size": 8388608,
+      "build": {
+        "ms": 216.60325000000012,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 36,
+        "newBytes": 8420216,
+        "newObjects": 36
+      },
+      "update": {
+        "ms": 111.68766700000015,
+        "gets": 20,
+        "bytes": 4217848,
+        "puts": 19,
+        "newBytes": 4211944,
+        "newObjects": 19
+      },
+      "diff": {
+        "ms": 41.125,
+        "gets": 37,
+        "bytes": 8422984,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 0.6428329999998823,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 174.19195899999977,
+        "gets": 73,
+        "bytes": 16841336,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 0,
+      "runAnchors": true,
+      "change": "same",
+      "size": 8388608,
+      "build": {
+        "ms": 490.20366599999943,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 537,
+        "newBytes": 4364392,
+        "newObjects": 268
+      },
+      "update": {
+        "ms": 0.00370900000052643,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "diff": {
+        "ms": 0.017207999999300228,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 0,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 0.5536249999986467,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 240.00233300000036,
+        "gets": 1074,
+        "bytes": 17655984,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 0,
+      "runAnchors": true,
+      "change": "overwrite",
+      "size": 8388608,
+      "build": {
+        "ms": 490.20366599999943,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 537,
+        "newBytes": 4364392,
+        "newObjects": 268
+      },
+      "update": {
+        "ms": 228.13120900000104,
+        "gets": 272,
+        "bytes": 4431752,
+        "puts": 259,
+        "newBytes": 32912,
+        "newObjects": 4
+      },
+      "diff": {
+        "ms": 3.3670419999998558,
+        "gets": 8,
+        "bytes": 65824,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 2.6466249999994034,
+        "gets": 4,
+        "bytes": 32912,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 239.48400000000038,
+        "gets": 1074,
+        "bytes": 17655984,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 0,
+      "runAnchors": true,
+      "change": "append",
+      "size": 8388608,
+      "build": {
+        "ms": 490.20366599999943,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 537,
+        "newBytes": 4364392,
+        "newObjects": 268
+      },
+      "update": {
+        "ms": 13.830124999998588,
+        "gets": 17,
+        "bytes": 137552,
+        "puts": 5,
+        "newBytes": 30384,
+        "newObjects": 4
+      },
+      "diff": {
+        "ms": 1.55266599999959,
+        "gets": 6,
+        "bytes": 26728,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 16384
+      },
+      "patch": {
+        "ms": 2.5049159999998665,
+        "gets": 4,
+        "bytes": 30384,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 245.39158399999906,
+        "gets": 1075,
+        "bytes": 17673184,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 0,
+      "runAnchors": true,
+      "change": "insert",
+      "size": 8388608,
+      "build": {
+        "ms": 490.20366599999943,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 537,
+        "newBytes": 4364392,
+        "newObjects": 268
+      },
+      "update": {
+        "ms": 158.64991699999882,
+        "gets": 272,
+        "bytes": 4431752,
+        "puts": 259,
+        "newBytes": 32912,
+        "newObjects": 4
+      },
+      "diff": {
+        "ms": 3.6025420000005397,
+        "gets": 8,
+        "bytes": 65824,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 2.3192500000004657,
+        "gets": 4,
+        "bytes": 32912,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 242.6193749999984,
+        "gets": 1074,
+        "bytes": 17655984,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 0,
+      "runAnchors": true,
+      "change": "delete",
+      "size": 8388608,
+      "build": {
+        "ms": 490.20366599999943,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 537,
+        "newBytes": 4364392,
+        "newObjects": 268
+      },
+      "update": {
+        "ms": 146.02295800000138,
+        "gets": 272,
+        "bytes": 4431752,
+        "puts": 258,
+        "newBytes": 48960,
+        "newObjects": 4
+      },
+      "diff": {
+        "ms": 3.414958999999726,
+        "gets": 9,
+        "bytes": 98712,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 1.2854999999999563,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 243.63387499999953,
+        "gets": 1073,
+        "bytes": 17655192,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 1,
+      "runAnchors": true,
+      "change": "same",
+      "size": 8388608,
+      "build": {
+        "ms": 283.2671250000003,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 537,
+        "newBytes": 4364392,
+        "newObjects": 268
+      },
+      "update": {
+        "ms": 0.008416999999099062,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "diff": {
+        "ms": 0.006916000000273925,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 0,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 1.2558329999992566,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 239.4942919999994,
+        "gets": 1074,
+        "bytes": 17655984,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 1,
+      "runAnchors": true,
+      "change": "overwrite",
+      "size": 8388608,
+      "build": {
+        "ms": 283.2671250000003,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 537,
+        "newBytes": 4364392,
+        "newObjects": 268
+      },
+      "update": {
+        "ms": 146.89608399999997,
+        "gets": 272,
+        "bytes": 4431752,
+        "puts": 259,
+        "newBytes": 32912,
+        "newObjects": 4
+      },
+      "diff": {
+        "ms": 3.529832999998689,
+        "gets": 8,
+        "bytes": 65824,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 2.132792000000336,
+        "gets": 4,
+        "bytes": 32912,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 240.5396669999991,
+        "gets": 1074,
+        "bytes": 17655984,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 1,
+      "runAnchors": true,
+      "change": "append",
+      "size": 8388608,
+      "build": {
+        "ms": 283.2671250000003,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 537,
+        "newBytes": 4364392,
+        "newObjects": 268
+      },
+      "update": {
+        "ms": 13.619040999999925,
+        "gets": 17,
+        "bytes": 137552,
+        "puts": 5,
+        "newBytes": 30384,
+        "newObjects": 4
+      },
+      "diff": {
+        "ms": 1.5605839999989257,
+        "gets": 6,
+        "bytes": 26728,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 16384
+      },
+      "patch": {
+        "ms": 1.396999999999025,
+        "gets": 4,
+        "bytes": 30384,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 238.08150000000023,
+        "gets": 1075,
+        "bytes": 17673184,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 1,
+      "runAnchors": true,
+      "change": "insert",
+      "size": 8388608,
+      "build": {
+        "ms": 283.2671250000003,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 537,
+        "newBytes": 4364392,
+        "newObjects": 268
+      },
+      "update": {
+        "ms": 147.1870830000007,
+        "gets": 272,
+        "bytes": 4431752,
+        "puts": 259,
+        "newBytes": 32912,
+        "newObjects": 4
+      },
+      "diff": {
+        "ms": 3.382583999999042,
+        "gets": 8,
+        "bytes": 65824,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 3.1871660000015254,
+        "gets": 4,
+        "bytes": 32912,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 242.9888749999991,
+        "gets": 1074,
+        "bytes": 17655984,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 1,
+      "runAnchors": true,
+      "change": "delete",
+      "size": 8388608,
+      "build": {
+        "ms": 283.2671250000003,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 537,
+        "newBytes": 4364392,
+        "newObjects": 268
+      },
+      "update": {
+        "ms": 159.5254590000004,
+        "gets": 272,
+        "bytes": 4431752,
+        "puts": 258,
+        "newBytes": 48960,
+        "newObjects": 4
+      },
+      "diff": {
+        "ms": 3.6783749999995052,
+        "gets": 9,
+        "bytes": 98712,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 1.2927499999987049,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 247.60579199999847,
+        "gets": 1073,
+        "bytes": 17655192,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 1,
+      "runAnchors": false,
+      "change": "same",
+      "size": 8388608,
+      "build": {
+        "ms": 194.70254199999908,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 36,
+        "newBytes": 8420216,
+        "newObjects": 36
+      },
+      "update": {
+        "ms": 0.0024169999996956903,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "diff": {
+        "ms": 0.006375000000844011,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 0,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 1.1103750000002037,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 174.1932080000006,
+        "gets": 72,
+        "bytes": 16840432,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 1,
+      "runAnchors": false,
+      "change": "overwrite",
+      "size": 8388608,
+      "build": {
+        "ms": 194.70254199999908,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 36,
+        "newBytes": 8420216,
+        "newObjects": 36
+      },
+      "update": {
+        "ms": 8.352209000000585,
+        "gets": 5,
+        "bytes": 278128,
+        "puts": 3,
+        "newBytes": 271320,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 3.8459579999998823,
+        "gets": 6,
+        "bytes": 542640,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 1.9410420000003796,
+        "gets": 3,
+        "bytes": 271320,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 175.7945409999993,
+        "gets": 72,
+        "bytes": 16840432,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 1,
+      "runAnchors": false,
+      "change": "append",
+      "size": 8388608,
+      "build": {
+        "ms": 194.70254199999908,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 36,
+        "newBytes": 8420216,
+        "newObjects": 36
+      },
+      "update": {
+        "ms": 2.000332999999955,
+        "gets": 4,
+        "bytes": 15480,
+        "puts": 3,
+        "newBytes": 25872,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 0.9432080000005953,
+        "gets": 4,
+        "bytes": 17704,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 16384
+      },
+      "patch": {
+        "ms": 1.5012499999993452,
+        "gets": 3,
+        "bytes": 25872,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 174.74120799999946,
+        "gets": 73,
+        "bytes": 16857632,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 1,
+      "runAnchors": false,
+      "change": "insert",
+      "size": 8388608,
+      "build": {
+        "ms": 194.70254199999908,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 36,
+        "newBytes": 8420216,
+        "newObjects": 36
+      },
+      "update": {
+        "ms": 105.17291599999953,
+        "gets": 20,
+        "bytes": 4217848,
+        "puts": 20,
+        "newBytes": 4212744,
+        "newObjects": 20
+      },
+      "diff": {
+        "ms": 41.378334000000905,
+        "gets": 38,
+        "bytes": 8423784,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 2.6311249999998836,
+        "gets": 3,
+        "bytes": 265944,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 174.51337500000045,
+        "gets": 74,
+        "bytes": 16842136,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 1,
+      "runAnchors": false,
+      "change": "delete",
+      "size": 8388608,
+      "build": {
+        "ms": 194.70254199999908,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 36,
+        "newBytes": 8420216,
+        "newObjects": 36
+      },
+      "update": {
+        "ms": 106.53095799999937,
+        "gets": 20,
+        "bytes": 4217848,
+        "puts": 19,
+        "newBytes": 4211944,
+        "newObjects": 19
+      },
+      "diff": {
+        "ms": 43.121917000000394,
+        "gets": 37,
+        "bytes": 8422984,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 0.7747920000001614,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 181.19225000000006,
+        "gets": 73,
+        "bytes": 16841336,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 2,
+      "runAnchors": false,
+      "change": "same",
+      "size": 8388608,
+      "build": {
+        "ms": 190.66812500000015,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 36,
+        "newBytes": 8420216,
+        "newObjects": 36
+      },
+      "update": {
+        "ms": 0.0023330000003625173,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "diff": {
+        "ms": 0.006292000000030384,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 0,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 1.5225829999999405,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 177.67649999999958,
+        "gets": 72,
+        "bytes": 16840432,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 2,
+      "runAnchors": false,
+      "change": "overwrite",
+      "size": 8388608,
+      "build": {
+        "ms": 190.66812500000015,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 36,
+        "newBytes": 8420216,
+        "newObjects": 36
+      },
+      "update": {
+        "ms": 8.69262499999968,
+        "gets": 5,
+        "bytes": 278128,
+        "puts": 3,
+        "newBytes": 271320,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 4.051832999999533,
+        "gets": 6,
+        "bytes": 542640,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 1.5886669999999867,
+        "gets": 3,
+        "bytes": 271320,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 180.55295800000022,
+        "gets": 72,
+        "bytes": 16840432,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 2,
+      "runAnchors": false,
+      "change": "append",
+      "size": 8388608,
+      "build": {
+        "ms": 190.66812500000015,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 36,
+        "newBytes": 8420216,
+        "newObjects": 36
+      },
+      "update": {
+        "ms": 3.381334000001516,
+        "gets": 4,
+        "bytes": 15480,
+        "puts": 3,
+        "newBytes": 25872,
+        "newObjects": 3
+      },
+      "diff": {
+        "ms": 1.383125000000291,
+        "gets": 4,
+        "bytes": 17704,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 16384
+      },
+      "patch": {
+        "ms": 2.7339580000007118,
+        "gets": 3,
+        "bytes": 25872,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 175.0199590000011,
+        "gets": 73,
+        "bytes": 16857632,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 2,
+      "runAnchors": false,
+      "change": "insert",
+      "size": 8388608,
+      "build": {
+        "ms": 190.66812500000015,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 36,
+        "newBytes": 8420216,
+        "newObjects": 36
+      },
+      "update": {
+        "ms": 104.1955420000013,
+        "gets": 20,
+        "bytes": 4217848,
+        "puts": 20,
+        "newBytes": 4212744,
+        "newObjects": 20
+      },
+      "diff": {
+        "ms": 41.72429099999863,
+        "gets": 38,
+        "bytes": 8423784,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 2.2543339999992895,
+        "gets": 3,
+        "bytes": 265944,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 174.4777090000007,
+        "gets": 74,
+        "bytes": 16842136,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 2,
+      "runAnchors": false,
+      "change": "delete",
+      "size": 8388608,
+      "build": {
+        "ms": 190.66812500000015,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 36,
+        "newBytes": 8420216,
+        "newObjects": 36
+      },
+      "update": {
+        "ms": 103.53641699999935,
+        "gets": 20,
+        "bytes": 4217848,
+        "puts": 19,
+        "newBytes": 4211944,
+        "newObjects": 19
+      },
+      "diff": {
+        "ms": 41.2857499999991,
+        "gets": 37,
+        "bytes": 8422984,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 1.348375000001397,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 176.55924999999843,
+        "gets": 73,
+        "bytes": 16841336,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 2,
+      "runAnchors": true,
+      "change": "same",
+      "size": 8388608,
+      "build": {
+        "ms": 238.7887499999997,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 537,
+        "newBytes": 4364392,
+        "newObjects": 268
+      },
+      "update": {
+        "ms": 0.006624999998166459,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "diff": {
+        "ms": 0.0056660000009287614,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 0,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 1.366874999999709,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 250.66600000000108,
+        "gets": 1074,
+        "bytes": 17655984,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 2,
+      "runAnchors": true,
+      "change": "overwrite",
+      "size": 8388608,
+      "build": {
+        "ms": 238.7887499999997,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 537,
+        "newBytes": 4364392,
+        "newObjects": 268
+      },
+      "update": {
+        "ms": 147.4979170000006,
+        "gets": 272,
+        "bytes": 4431752,
+        "puts": 259,
+        "newBytes": 32912,
+        "newObjects": 4
+      },
+      "diff": {
+        "ms": 3.5551249999989523,
+        "gets": 8,
+        "bytes": 65824,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 2.2121659999975236,
+        "gets": 4,
+        "bytes": 32912,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 250.36008299999958,
+        "gets": 1074,
+        "bytes": 17655984,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 2,
+      "runAnchors": true,
+      "change": "append",
+      "size": 8388608,
+      "build": {
+        "ms": 238.7887499999997,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 537,
+        "newBytes": 4364392,
+        "newObjects": 268
+      },
+      "update": {
+        "ms": 13.806749999999738,
+        "gets": 17,
+        "bytes": 137552,
+        "puts": 5,
+        "newBytes": 30384,
+        "newObjects": 4
+      },
+      "diff": {
+        "ms": 1.581833000000188,
+        "gets": 6,
+        "bytes": 26728,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 16384
+      },
+      "patch": {
+        "ms": 2.2325830000008864,
+        "gets": 4,
+        "bytes": 30384,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 248.62062499999956,
+        "gets": 1075,
+        "bytes": 17673184,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 2,
+      "runAnchors": true,
+      "change": "insert",
+      "size": 8388608,
+      "build": {
+        "ms": 238.7887499999997,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 537,
+        "newBytes": 4364392,
+        "newObjects": 268
+      },
+      "update": {
+        "ms": 145.91333299999678,
+        "gets": 272,
+        "bytes": 4431752,
+        "puts": 259,
+        "newBytes": 32912,
+        "newObjects": 4
+      },
+      "diff": {
+        "ms": 3.468541999998706,
+        "gets": 8,
+        "bytes": 65824,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 2.3147920000010345,
+        "gets": 4,
+        "bytes": 32912,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 248.5350839999992,
+        "gets": 1074,
+        "bytes": 17655984,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "page-runs",
+      "round": 2,
+      "runAnchors": true,
+      "change": "delete",
+      "size": 8388608,
+      "build": {
+        "ms": 238.7887499999997,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 537,
+        "newBytes": 4364392,
+        "newObjects": 268
+      },
+      "update": {
+        "ms": 152.7039999999979,
+        "gets": 272,
+        "bytes": 4431752,
+        "puts": 258,
+        "newBytes": 48960,
+        "newObjects": 4
+      },
+      "diff": {
+        "ms": 4.903833000000304,
+        "gets": 9,
+        "bytes": 98712,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 1.3522919999995793,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 270.5350419999995,
+        "gets": 1073,
+        "bytes": 17655192,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 0,
+      "runAnchors": false,
+      "change": "same",
+      "size": 8388608,
+      "build": {
+        "ms": 199.22270800000115,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 0.0030839999999443535,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "diff": {
+        "ms": 0.007583999999042135,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 0,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 1.3481670000001031,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 147.82504100000006,
+        "gets": 4,
+        "bytes": 548640,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 0,
+      "runAnchors": false,
+      "change": "overwrite",
+      "size": 8388608,
+      "build": {
+        "ms": 199.22270800000115,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 7.82420799999818,
+        "gets": 2,
+        "bytes": 274320,
+        "puts": 2,
+        "newBytes": 274352,
+        "newObjects": 2
+      },
+      "diff": {
+        "ms": 5.21191700000054,
+        "gets": 4,
+        "bytes": 548672,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 1.6649579999975685,
+        "gets": 2,
+        "bytes": 274352,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 147.8831250000003,
+        "gets": 5,
+        "bytes": 811320,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 0,
+      "runAnchors": false,
+      "change": "append",
+      "size": 8388608,
+      "build": {
+        "ms": 199.22270800000115,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 1.7660839999989548,
+        "gets": 1,
+        "bytes": 11672,
+        "puts": 2,
+        "newBytes": 28872,
+        "newObjects": 2
+      },
+      "diff": {
+        "ms": 1.2269589999996242,
+        "gets": 2,
+        "bytes": 23704,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 16384
+      },
+      "patch": {
+        "ms": 1.319459000002098,
+        "gets": 2,
+        "bytes": 28872,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 188.70137500000055,
+        "gets": 5,
+        "bytes": 565840,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 0,
+      "runAnchors": false,
+      "change": "insert",
+      "size": 8388608,
+      "build": {
+        "ms": 199.22270800000115,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 105.0449170000029,
+        "gets": 2,
+        "bytes": 274320,
+        "puts": 18,
+        "newBytes": 12512,
+        "newObjects": 2
+      },
+      "diff": {
+        "ms": 44.029583999999886,
+        "gets": 5,
+        "bytes": 549480,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 2.476875000000291,
+        "gets": 2,
+        "bytes": 274712,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 149.33679199999824,
+        "gets": 6,
+        "bytes": 812128,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 0,
+      "runAnchors": false,
+      "change": "delete",
+      "size": 8388608,
+      "build": {
+        "ms": 199.22270800000115,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 101.42974999999933,
+        "gets": 2,
+        "bytes": 274320,
+        "puts": 17,
+        "newBytes": 274352,
+        "newObjects": 2
+      },
+      "diff": {
+        "ms": 4.533625000000029,
+        "gets": 4,
+        "bytes": 548672,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 0.5932079999984126,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 145.31308300000092,
+        "gets": 5,
+        "bytes": 811320,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 0,
+      "runAnchors": true,
+      "change": "same",
+      "size": 8388608,
+      "build": {
+        "ms": 199.98954199999935,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 0.003042000000277767,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "diff": {
+        "ms": 0.005667000001267297,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 0,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 1.6993750000001455,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 152.3840420000015,
+        "gets": 4,
+        "bytes": 548640,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 0,
+      "runAnchors": true,
+      "change": "overwrite",
+      "size": 8388608,
+      "build": {
+        "ms": 199.98954199999935,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 8.283666999999696,
+        "gets": 2,
+        "bytes": 274320,
+        "puts": 2,
+        "newBytes": 274352,
+        "newObjects": 2
+      },
+      "diff": {
+        "ms": 5.580042000001413,
+        "gets": 4,
+        "bytes": 548672,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 1.7631660000006377,
+        "gets": 2,
+        "bytes": 274352,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 149.89333299999998,
+        "gets": 5,
+        "bytes": 811320,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 0,
+      "runAnchors": true,
+      "change": "append",
+      "size": 8388608,
+      "build": {
+        "ms": 199.98954199999935,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 8.91633400000137,
+        "gets": 2,
+        "bytes": 274320,
+        "puts": 3,
+        "newBytes": 28872,
+        "newObjects": 2
+      },
+      "diff": {
+        "ms": 1.2736249999979918,
+        "gets": 2,
+        "bytes": 23704,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 16384
+      },
+      "patch": {
+        "ms": 1.8780839999999444,
+        "gets": 2,
+        "bytes": 28872,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 146.5046250000014,
+        "gets": 5,
+        "bytes": 565840,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 0,
+      "runAnchors": true,
+      "change": "insert",
+      "size": 8388608,
+      "build": {
+        "ms": 199.98954199999935,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 101.734457999999,
+        "gets": 2,
+        "bytes": 274320,
+        "puts": 18,
+        "newBytes": 12512,
+        "newObjects": 2
+      },
+      "diff": {
+        "ms": 43.93845800000054,
+        "gets": 5,
+        "bytes": 549480,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 1.7568339999997988,
+        "gets": 2,
+        "bytes": 274712,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 146.86608299999716,
+        "gets": 6,
+        "bytes": 812128,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 0,
+      "runAnchors": true,
+      "change": "delete",
+      "size": 8388608,
+      "build": {
+        "ms": 199.98954199999935,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 101.61100000000079,
+        "gets": 2,
+        "bytes": 274320,
+        "puts": 17,
+        "newBytes": 274352,
+        "newObjects": 2
+      },
+      "diff": {
+        "ms": 4.645000000000437,
+        "gets": 4,
+        "bytes": 548672,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 0.6744169999983569,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 145.74808300000223,
+        "gets": 5,
+        "bytes": 811320,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 1,
+      "runAnchors": true,
+      "change": "same",
+      "size": 8388608,
+      "build": {
+        "ms": 203.7311660000014,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 0.0025830000013229437,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "diff": {
+        "ms": 0.005499999999301508,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 0,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 0.9923329999983252,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 149.91879199999676,
+        "gets": 4,
+        "bytes": 548640,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 1,
+      "runAnchors": true,
+      "change": "overwrite",
+      "size": 8388608,
+      "build": {
+        "ms": 203.7311660000014,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 9.252583999998024,
+        "gets": 2,
+        "bytes": 274320,
+        "puts": 2,
+        "newBytes": 274352,
+        "newObjects": 2
+      },
+      "diff": {
+        "ms": 5.477875000000495,
+        "gets": 4,
+        "bytes": 548672,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 1.622416999998677,
+        "gets": 2,
+        "bytes": 274352,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 147.97608300000138,
+        "gets": 5,
+        "bytes": 811320,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 1,
+      "runAnchors": true,
+      "change": "append",
+      "size": 8388608,
+      "build": {
+        "ms": 203.7311660000014,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 8.837208999997529,
+        "gets": 2,
+        "bytes": 274320,
+        "puts": 3,
+        "newBytes": 28872,
+        "newObjects": 2
+      },
+      "diff": {
+        "ms": 1.2202089999991586,
+        "gets": 2,
+        "bytes": 23704,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 16384
+      },
+      "patch": {
+        "ms": 1.6814589999994496,
+        "gets": 2,
+        "bytes": 28872,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 146.63133399999788,
+        "gets": 5,
+        "bytes": 565840,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 1,
+      "runAnchors": true,
+      "change": "insert",
+      "size": 8388608,
+      "build": {
+        "ms": 203.7311660000014,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 101.89920799999891,
+        "gets": 2,
+        "bytes": 274320,
+        "puts": 18,
+        "newBytes": 12512,
+        "newObjects": 2
+      },
+      "diff": {
+        "ms": 39.70216699999946,
+        "gets": 5,
+        "bytes": 549480,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 3.693916000000172,
+        "gets": 2,
+        "bytes": 274712,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 147.2833329999994,
+        "gets": 6,
+        "bytes": 812128,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 1,
+      "runAnchors": true,
+      "change": "delete",
+      "size": 8388608,
+      "build": {
+        "ms": 203.7311660000014,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 104.97470799999792,
+        "gets": 2,
+        "bytes": 274320,
+        "puts": 17,
+        "newBytes": 274352,
+        "newObjects": 2
+      },
+      "diff": {
+        "ms": 4.816458000001148,
+        "gets": 4,
+        "bytes": 548672,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 1.1382090000006428,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 151.65070800000103,
+        "gets": 5,
+        "bytes": 811320,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 1,
+      "runAnchors": false,
+      "change": "same",
+      "size": 8388608,
+      "build": {
+        "ms": 198.93354199999885,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 0.0016660000001138542,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "diff": {
+        "ms": 0.004541999998764368,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 0,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 0.5669170000001031,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 145.0302499999998,
+        "gets": 4,
+        "bytes": 548640,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 1,
+      "runAnchors": false,
+      "change": "overwrite",
+      "size": 8388608,
+      "build": {
+        "ms": 198.93354199999885,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 7.564166000000114,
+        "gets": 2,
+        "bytes": 274320,
+        "puts": 2,
+        "newBytes": 274352,
+        "newObjects": 2
+      },
+      "diff": {
+        "ms": 5.046332999998413,
+        "gets": 4,
+        "bytes": 548672,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 2.1016249999993306,
+        "gets": 2,
+        "bytes": 274352,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 146.622374999999,
+        "gets": 5,
+        "bytes": 811320,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 1,
+      "runAnchors": false,
+      "change": "append",
+      "size": 8388608,
+      "build": {
+        "ms": 198.93354199999885,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 2.9421669999974256,
+        "gets": 1,
+        "bytes": 11672,
+        "puts": 2,
+        "newBytes": 28872,
+        "newObjects": 2
+      },
+      "diff": {
+        "ms": 1.199124999999185,
+        "gets": 2,
+        "bytes": 23704,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 16384
+      },
+      "patch": {
+        "ms": 1.375,
+        "gets": 2,
+        "bytes": 28872,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 145.09249999999884,
+        "gets": 5,
+        "bytes": 565840,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 1,
+      "runAnchors": false,
+      "change": "insert",
+      "size": 8388608,
+      "build": {
+        "ms": 198.93354199999885,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 99.26016700000037,
+        "gets": 2,
+        "bytes": 274320,
+        "puts": 18,
+        "newBytes": 12512,
+        "newObjects": 2
+      },
+      "diff": {
+        "ms": 41.764375000002474,
+        "gets": 5,
+        "bytes": 549480,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 2.4100409999991825,
+        "gets": 2,
+        "bytes": 274712,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 150.31104100000084,
+        "gets": 6,
+        "bytes": 812128,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 1,
+      "runAnchors": false,
+      "change": "delete",
+      "size": 8388608,
+      "build": {
+        "ms": 198.93354199999885,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 104.45249999999942,
+        "gets": 2,
+        "bytes": 274320,
+        "puts": 17,
+        "newBytes": 274352,
+        "newObjects": 2
+      },
+      "diff": {
+        "ms": 4.735000000000582,
+        "gets": 4,
+        "bytes": 548672,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 0.9828750000015134,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 149.8754590000026,
+        "gets": 5,
+        "bytes": 811320,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 2,
+      "runAnchors": false,
+      "change": "same",
+      "size": 8388608,
+      "build": {
+        "ms": 207.898459,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 0.002917000001616543,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "diff": {
+        "ms": 0.00633400000151596,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 0,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 1.0791669999998703,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 145.3002919999999,
+        "gets": 4,
+        "bytes": 548640,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 2,
+      "runAnchors": false,
+      "change": "overwrite",
+      "size": 8388608,
+      "build": {
+        "ms": 207.898459,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 7.767166000001453,
+        "gets": 2,
+        "bytes": 274320,
+        "puts": 2,
+        "newBytes": 274352,
+        "newObjects": 2
+      },
+      "diff": {
+        "ms": 5.028791000000638,
+        "gets": 4,
+        "bytes": 548672,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 2.053916000000754,
+        "gets": 2,
+        "bytes": 274352,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 146.82800000000134,
+        "gets": 5,
+        "bytes": 811320,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 2,
+      "runAnchors": false,
+      "change": "append",
+      "size": 8388608,
+      "build": {
+        "ms": 207.898459,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 2.833582999999635,
+        "gets": 1,
+        "bytes": 11672,
+        "puts": 2,
+        "newBytes": 28872,
+        "newObjects": 2
+      },
+      "diff": {
+        "ms": 1.2092919999995502,
+        "gets": 2,
+        "bytes": 23704,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 16384
+      },
+      "patch": {
+        "ms": 1.2470830000020214,
+        "gets": 2,
+        "bytes": 28872,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 145.14862500000163,
+        "gets": 5,
+        "bytes": 565840,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 2,
+      "runAnchors": false,
+      "change": "insert",
+      "size": 8388608,
+      "build": {
+        "ms": 207.898459,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 99.94329199999993,
+        "gets": 2,
+        "bytes": 274320,
+        "puts": 18,
+        "newBytes": 12512,
+        "newObjects": 2
+      },
+      "diff": {
+        "ms": 41.92591700000048,
+        "gets": 5,
+        "bytes": 549480,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 3.4697909999995318,
+        "gets": 2,
+        "bytes": 274712,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 152.55875000000015,
+        "gets": 6,
+        "bytes": 812128,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 2,
+      "runAnchors": false,
+      "change": "delete",
+      "size": 8388608,
+      "build": {
+        "ms": 207.898459,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 102.58095899999898,
+        "gets": 2,
+        "bytes": 274320,
+        "puts": 17,
+        "newBytes": 274352,
+        "newObjects": 2
+      },
+      "diff": {
+        "ms": 4.816042000002199,
+        "gets": 4,
+        "bytes": 548672,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 1.2096249999995052,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 148.7318750000013,
+        "gets": 5,
+        "bytes": 811320,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 2,
+      "runAnchors": true,
+      "change": "same",
+      "size": 8388608,
+      "build": {
+        "ms": 199.25495800000135,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 0.0012920000008307397,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "diff": {
+        "ms": 0.004166000002442161,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 0,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 1.2133329999996931,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 146.38670799999818,
+        "gets": 4,
+        "bytes": 548640,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 2,
+      "runAnchors": true,
+      "change": "overwrite",
+      "size": 8388608,
+      "build": {
+        "ms": 199.25495800000135,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 8.032084000002214,
+        "gets": 2,
+        "bytes": 274320,
+        "puts": 2,
+        "newBytes": 274352,
+        "newObjects": 2
+      },
+      "diff": {
+        "ms": 4.987583000001905,
+        "gets": 4,
+        "bytes": 548672,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 1.5804170000010345,
+        "gets": 2,
+        "bytes": 274352,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 146.08483299999716,
+        "gets": 5,
+        "bytes": 811320,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 2,
+      "runAnchors": true,
+      "change": "append",
+      "size": 8388608,
+      "build": {
+        "ms": 199.25495800000135,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 9.547915999999532,
+        "gets": 2,
+        "bytes": 274320,
+        "puts": 3,
+        "newBytes": 28872,
+        "newObjects": 2
+      },
+      "diff": {
+        "ms": 1.2079579999990528,
+        "gets": 2,
+        "bytes": 23704,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 16384
+      },
+      "patch": {
+        "ms": 1.3060829999994894,
+        "gets": 2,
+        "bytes": 28872,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 146.32129200000054,
+        "gets": 5,
+        "bytes": 565840,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 2,
+      "runAnchors": true,
+      "change": "insert",
+      "size": 8388608,
+      "build": {
+        "ms": 199.25495800000135,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 107.04704199999833,
+        "gets": 2,
+        "bytes": 274320,
+        "puts": 18,
+        "newBytes": 12512,
+        "newObjects": 2
+      },
+      "diff": {
+        "ms": 43.06279200000063,
+        "gets": 5,
+        "bytes": 549480,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 1
+      },
+      "patch": {
+        "ms": 4.342000000000553,
+        "gets": 2,
+        "bytes": 274712,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 151.23262500000055,
+        "gets": 6,
+        "bytes": 812128,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    },
+    {
+      "dataset": "zeros",
+      "round": 2,
+      "runAnchors": true,
+      "change": "delete",
+      "size": 8388608,
+      "build": {
+        "ms": 199.25495800000135,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 33,
+        "newBytes": 274320,
+        "newObjects": 2
+      },
+      "update": {
+        "ms": 102.7781670000004,
+        "gets": 2,
+        "bytes": 274320,
+        "puts": 17,
+        "newBytes": 274352,
+        "newObjects": 2
+      },
+      "diff": {
+        "ms": 4.731082999998762,
+        "gets": 4,
+        "bytes": 548672,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0,
+        "edits": 1,
+        "replacementBytes": 0
+      },
+      "patch": {
+        "ms": 0.5640419999981532,
+        "gets": 0,
+        "bytes": 0,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      },
+      "full": {
+        "ms": 145.6047499999986,
+        "gets": 5,
+        "bytes": 811320,
+        "puts": 0,
+        "newBytes": 0,
+        "newObjects": 0
+      }
+    }
+  ]
+}

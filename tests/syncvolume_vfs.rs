@@ -139,12 +139,14 @@ fn parallel_sibling_publication_drains_failures_and_keeps_prior_root() -> Result
     objects.concurrency = 2;
     objects.delay = Duration::from_millis(2);
     let mut b = Basin::new(objects.clone(), vec![42; 32])?;
-    layout::build_block_with_inline_pages(
+    layout::build_block_with_page_size(
         &mut b,
         (0..64u32)
             .map(|i| (i.into(), vec![i as u8; 16384]))
             .collect(),
         4,
+        Algorithm::Crc64Nvme,
+        16384,
     )?;
     assert_eq!(objects.stats().max_in_flight, 2);
     let before = sample()?.snapshot()?;

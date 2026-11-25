@@ -56,6 +56,23 @@ fn main() -> Result<()> {
                 })
                 .collect::<Result<_>>()?;
             trie::build(&mut basin, rows, &trie::Count(7))?
+        } else if kind == "mixed" {
+            let content = req.field("content")?.blob()?;
+            let pages = req
+                .field("pages")?
+                .array()?
+                .iter()
+                .map(|v| Ok((v.at(0)?.big()?, v.at(1)?.blob()?.to_vec())))
+                .collect::<Result<_>>()?;
+            let size = req.field("pageSize")?.number()? as usize;
+            let block = volume::build_mixed_block_with_page_size(
+                &mut basin,
+                content,
+                pages,
+                volume::ChunkPolicy::default(),
+                size,
+            )?;
+            volume::from_blocks(&mut basin, vec![("/mixed".into(), block)], vec![])?
         } else if kind == "pages" {
             let pages = req
                 .field("pages")?
@@ -63,7 +80,19 @@ fn main() -> Result<()> {
                 .iter()
                 .map(|v| Ok((v.at(0)?.big()?, v.at(1)?.blob()?.to_vec())))
                 .collect::<Result<_>>()?;
-            let block = volume::build_block(&mut basin, pages)?;
+            let size = req
+                .map_ref()?
+                .get("pageSize")
+                .map(Value::number)
+                .transpose()?
+                .unwrap_or(4096) as usize;
+            let block = volume::build_block_with_page_size(
+                &mut basin,
+                pages,
+                1280,
+                volume::Algorithm::Crc64Nvme,
+                size,
+            )?;
             volume::from_blocks(&mut basin, vec![("/sparse".into(), block)], vec![])?
         } else {
             let files = req
@@ -167,6 +196,22 @@ fn main() -> Result<()> {
                     ])
                 })
                 .collect()
+        } else if kind == "mixed" {
+            let mut rows = vec![Array(vec![
+                "/mixed".into(),
+                Blob(volume::read(&mut basin, root, "/mixed", false)?),
+            ])];
+            for q in req.field("queries")?.array()? {
+                let at = u64::try_from(q.big()?)?;
+                basin.clear_cache();
+                rows.push(Array(vec![
+                    format!("/range/{at}").as_str().into(),
+                    Blob(volume::read_range(
+                        &mut basin, root, "/mixed", at, 33, true,
+                    )?),
+                ]));
+            }
+            rows
         } else if kind == "pages" {
             req.field("queries")?
                 .array()?

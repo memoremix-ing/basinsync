@@ -59,12 +59,11 @@ loading, a bounded verified disk object cache, and bounded transfers sharing one
 bandwidth budget. See the *baseline measurements*[~][benchmark], historical
 *checksum comparison*[~][incremental], and *I/O measurements*[~][io]. The *growing-file comparison*[~][growth] isolates ordered edit merging.
 
-Use *CRC64NVME*[~][crc64nvme] consumer migration `1` on the volume, block and page-trie
-nodes; structural schema `0` is unchanged. Its page summary contains `crc64nvme`
-(eight big-endian bytes) and `size` (a bigint byte count). Page values remain
-one-blob vectors; file digest bytes follow the block's migration. Keep
-*SHA-384*[~][sha384] for stored-object integrity.
-TypeScript, Rust and Go share this format and checksum contract vectors.
+Use *CRC64NVME*[~][crc64nvme] consumer migration `1` for volume/page-trie summaries
+and file digests. Block consumer migration `2` holds an empty content-defined prefix
+and a page-defined suffix with `pageSize = 16384`. Page values remain one-blob vectors.
+Keep these version domains independent. TypeScript, Rust and Go share the format
+and checksum contract vectors.
 
 This experiment exposes the VFS and backup/recovery APIs. The server's shallow
 *KernelSpace*[~][kernelspace] reservation, promotion and `commitkernel` protocol
