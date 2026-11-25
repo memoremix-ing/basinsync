@@ -382,3 +382,141 @@ fn failed_group_publication_keeps_the_old_root_and_local_rollback_needs_no_netwo
     assert_eq!(retried.snapshot()?.image()?, speculative.image()?);
     Ok(())
 }
+
+#[test]
+fn incremental_backups_recover_canonical_roots_without_scanning_unmodified_files() -> Result<()> {
+    use basinsync::structures::volume::Algorithm;
+    use basinsync::turso::volume::{Backup, checkpoint_with_algorithm};
+    for algorithm in [Algorithm::Sl2, Algorithm::Crc64Nvme] {
+        for budget in [1, 16, 1280] {
+            let dir = tempfile::tempdir()?;
+            let objects = DiskObjects::new(dir.path())?;
+            let mut b = Basin::new(objects.clone(), vec![42; 32])?;
+            let mut primary = sample()?;
+            let mut kernel = DatabaseFile::create(basinsync::kernel::SCHEMA)?;
+            let original = primary.snapshot()?;
+            let companion = kernel.snapshot()?;
+            let initial = Backup::create(
+                &mut b,
+                vec![
+                    ("/default.turso".into(), original.clone()),
+                    ("/kernel.turso".into(), companion.clone()),
+                ],
+                budget,
+                algorithm,
+            )?;
+            let root = initial.root().clone();
+            // Exercise recovery provenance rather than a retained original connection.
+            let mount = SyncVolume::new(
+                Basin::new(objects.clone(), vec![42; 32])?,
+                root.clone(),
+                LoadMode::LazyPages,
+            );
+            let mut p = mount.open("/default.turso")?;
+            let mut k = mount.open("/kernel.turso")?;
+            p.connection()
+                .execute("UPDATE payload SET body=x'010203' WHERE id=95")?;
+            k.connection()
+                .execute("UPDATE kernel_state SET activity='1' WHERE id=1")?;
+            let target = p.snapshot()?;
+            let target_k = k.snapshot()?;
+            // Future writes must not contaminate the older pinned candidate or its dirty set.
+            p.connection()
+                .execute("UPDATE payload SET body=x'ff' WHERE id=1")?;
+            p.snapshot()?;
+            let files = vec![
+                ("/default.turso".into(), target.clone()),
+                ("/kernel.turso".into(), target_k.clone()),
+            ];
+            let recovered = Backup::from_root(root.clone(), budget, algorithm);
+            objects.reset();
+            let next = recovered.advance(&mut b, files.clone())?;
+            if budget < 1280 {
+                assert!(
+                    objects.stats().get_bytes < original.size() / 2,
+                    "incremental backup read the whole database"
+                );
+            }
+            let fresh = checkpoint_with_algorithm(&mut b, None, files.clone(), budget, algorithm)?;
+            assert_eq!(next.root(), &fresh, "{algorithm:?},budget={budget}");
+            let reload = SyncVolume::new(
+                Basin::new(objects.clone(), vec![42; 32])?,
+                fresh,
+                LoadMode::LazyPages,
+            );
+            let mut restored = reload.open("/default.turso")?;
+            assert_eq!(restored.snapshot()?.image()?, target.image()?);
+            assert_eq!(
+                scalar(&restored, "SELECT length(body) FROM payload WHERE id=1")?,
+                12000
+            );
+            objects.reset();
+            *objects.fail_reads.lock().unwrap() = true;
+            let no_op = next.advance(&mut b, files)?;
+            assert_eq!(next.root(), no_op.root());
+            assert_eq!(objects.stats().puts, 0);
+            *objects.fail_reads.lock().unwrap() = false;
+            // Repeating a failed candidate must reuse immutable objects and preserve its basis.
+            let later = p.snapshot()?;
+            let later_files = vec![("/default.turso".into(), later.clone())];
+            *objects.fail_writes.lock().unwrap() = Some(1);
+            assert!(next.advance(&mut b, later_files.clone()).is_err());
+            *objects.fail_writes.lock().unwrap() = None;
+            let retried = next.advance(&mut b, later_files)?;
+            let full = checkpoint_with_algorithm(
+                &mut b,
+                None,
+                vec![
+                    ("/default.turso".into(), later),
+                    ("/kernel.turso".into(), target_k),
+                ],
+                budget,
+                algorithm,
+            )?;
+            assert_eq!(retried.root(), &full);
+            assert_eq!(original.image()?, primary.snapshot()?.image()?);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn verified_read_cache_can_be_reused_by_the_backup_writer() -> Result<()> {
+    use basinsync::structures::volume::Algorithm;
+    use basinsync::turso::volume::Backup;
+    let dir = tempfile::tempdir()?;
+    let objects = DiskObjects::new(dir.path())?;
+    let mut b = Basin::new(objects.clone(), vec![42; 32])?;
+    let mut db = sample()?;
+    let backup = Backup::create(
+        &mut b,
+        vec![("/default.turso".into(), db.snapshot()?)],
+        16,
+        Algorithm::Crc64Nvme,
+    )?;
+    let mount = SyncVolume::new(
+        Basin::new(objects.clone(), vec![42; 32])?,
+        backup.root().clone(),
+        LoadMode::EagerFile,
+    );
+    let mut db = mount.open("/default.turso")?;
+    db.connection()
+        .execute("UPDATE payload SET body=x'cafe' WHERE id=95")?;
+    let view = db.snapshot()?;
+    let mut writer = mount.cached_basin();
+    objects.reset();
+    *objects.fail_reads.lock().unwrap() = true;
+    let next = backup.advance(&mut writer, vec![("/default.turso".into(), view.clone())])?;
+    // Newly published bodies are also retained without requiring a read-back.
+    writer.load(next.root())?;
+    assert_eq!(objects.stats().gets, 0);
+    *objects.fail_reads.lock().unwrap() = false;
+    let mut recovered = SyncVolume::new(
+        Basin::new(objects, vec![42; 32])?,
+        next.root().clone(),
+        LoadMode::LazyPages,
+    )
+    .open("/default.turso")?;
+    assert_eq!(recovered.snapshot()?.image()?, view.image()?);
+    Ok(())
+}

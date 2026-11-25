@@ -1,0 +1,587 @@
+{
+  "page_bytes": 16384,
+  "trials_per_case": 3,
+  "packing_shapes": "packing-shapes.json",
+  "cases": [
+    {
+      "file": "2048-1280-crc64nvme-full.json",
+      "rows": 2048,
+      "budget": 1280,
+      "summary": "crc64nvme",
+      "incremental": false,
+      "warm_writer": false,
+      "mode": "eager",
+      "latency_ms": 0,
+      "mib_per_sec": 0,
+      "median_backup_ms": 170.22625,
+      "median_time_trial": 1,
+      "io": {
+        "gets": 1,
+        "get_bytes": 1344,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 7
+      }
+    },
+    {
+      "file": "2048-1280-crc64nvme-incremental.json",
+      "rows": 2048,
+      "budget": 1280,
+      "summary": "crc64nvme",
+      "incremental": true,
+      "warm_writer": false,
+      "mode": "eager",
+      "latency_ms": 0,
+      "mib_per_sec": 0,
+      "median_backup_ms": 112.461875,
+      "median_time_trial": 1,
+      "io": {
+        "gets": 4,
+        "get_bytes": 8669016,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 0
+      }
+    },
+    {
+      "file": "2048-1280-sl2-full.json",
+      "rows": 2048,
+      "budget": 1280,
+      "summary": "sl2",
+      "incremental": false,
+      "warm_writer": false,
+      "mode": "eager",
+      "latency_ms": 0,
+      "mib_per_sec": 0,
+      "median_backup_ms": 2824.4234170000004,
+      "median_time_trial": 1,
+      "io": {
+        "gets": 1,
+        "get_bytes": 1456,
+        "puts": 4,
+        "put_bytes": 8669720,
+        "reused": 7
+      }
+    },
+    {
+      "file": "2048-1280-sl2-incremental.json",
+      "rows": 2048,
+      "budget": 1280,
+      "summary": "sl2",
+      "incremental": true,
+      "warm_writer": false,
+      "mode": "eager",
+      "latency_ms": 0,
+      "mib_per_sec": 0,
+      "median_backup_ms": 476.362917,
+      "median_time_trial": 2,
+      "io": {
+        "gets": 4,
+        "get_bytes": 8669720,
+        "puts": 4,
+        "put_bytes": 8669720,
+        "reused": 0
+      }
+    },
+    {
+      "file": "2048-flat.json",
+      "rows": 2048,
+      "budget": 1280,
+      "summary": "sl2",
+      "incremental": true,
+      "warm_writer": false,
+      "mode": "flat",
+      "latency_ms": 0,
+      "mib_per_sec": 0,
+      "median_backup_ms": 115.012833,
+      "median_time_trial": 1,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 2,
+        "put_bytes": 34177024,
+        "reused": 0
+      }
+    },
+    {
+      "file": "256-1-crc64nvme-full.json",
+      "rows": 256,
+      "budget": 1,
+      "summary": "crc64nvme",
+      "incremental": false,
+      "warm_writer": false,
+      "mode": "eager",
+      "latency_ms": 0,
+      "mib_per_sec": 0,
+      "median_backup_ms": 159.607625,
+      "median_time_trial": 1,
+      "io": {
+        "gets": 1,
+        "get_bytes": 1336,
+        "puts": 7,
+        "put_bytes": 192216,
+        "reused": 290
+      }
+    },
+    {
+      "file": "256-1-crc64nvme-incremental.json",
+      "rows": 256,
+      "budget": 1,
+      "summary": "crc64nvme",
+      "incremental": true,
+      "warm_writer": false,
+      "mode": "eager",
+      "latency_ms": 0,
+      "mib_per_sec": 0,
+      "median_backup_ms": 144.072584,
+      "median_time_trial": 1,
+      "io": {
+        "gets": 9,
+        "get_bytes": 225784,
+        "puts": 7,
+        "put_bytes": 192216,
+        "reused": 0
+      }
+    },
+    {
+      "file": "256-1-sl2-full.json",
+      "rows": 256,
+      "budget": 1,
+      "summary": "sl2",
+      "incremental": false,
+      "warm_writer": false,
+      "mode": "eager",
+      "latency_ms": 0,
+      "mib_per_sec": 0,
+      "median_backup_ms": 494.80654200000004,
+      "median_time_trial": 0,
+      "io": {
+        "gets": 1,
+        "get_bytes": 1448,
+        "puts": 7,
+        "put_bytes": 208008,
+        "reused": 290
+      }
+    },
+    {
+      "file": "256-1-sl2-incremental.json",
+      "rows": 256,
+      "budget": 1,
+      "summary": "sl2",
+      "incremental": true,
+      "warm_writer": false,
+      "mode": "eager",
+      "latency_ms": 0,
+      "mib_per_sec": 0,
+      "median_backup_ms": 144.649416,
+      "median_time_trial": 0,
+      "io": {
+        "gets": 9,
+        "get_bytes": 241656,
+        "puts": 7,
+        "put_bytes": 208008,
+        "reused": 0
+      }
+    },
+    {
+      "file": "256-1280-crc64nvme-full.json",
+      "rows": 256,
+      "budget": 1280,
+      "summary": "crc64nvme",
+      "incremental": false,
+      "warm_writer": false,
+      "mode": "eager",
+      "latency_ms": 0,
+      "mib_per_sec": 0,
+      "median_backup_ms": 68.880166,
+      "median_time_trial": 1,
+      "io": {
+        "gets": 1,
+        "get_bytes": 1336,
+        "puts": 3,
+        "put_bytes": 4826128,
+        "reused": 0
+      }
+    },
+    {
+      "file": "256-1280-crc64nvme-incremental.json",
+      "rows": 256,
+      "budget": 1280,
+      "summary": "crc64nvme",
+      "incremental": true,
+      "warm_writer": false,
+      "mode": "eager",
+      "latency_ms": 0,
+      "mib_per_sec": 0,
+      "median_backup_ms": 76.925333,
+      "median_time_trial": 0,
+      "io": {
+        "gets": 3,
+        "get_bytes": 4826128,
+        "puts": 3,
+        "put_bytes": 4826128,
+        "reused": 0
+      }
+    },
+    {
+      "file": "256-1280-sl2-full.json",
+      "rows": 256,
+      "budget": 1280,
+      "summary": "sl2",
+      "incremental": false,
+      "warm_writer": false,
+      "mode": "eager",
+      "latency_ms": 0,
+      "mib_per_sec": 0,
+      "median_backup_ms": 394.71450000000004,
+      "median_time_trial": 0,
+      "io": {
+        "gets": 1,
+        "get_bytes": 1448,
+        "puts": 3,
+        "put_bytes": 4826464,
+        "reused": 0
+      }
+    },
+    {
+      "file": "256-1280-sl2-incremental.json",
+      "rows": 256,
+      "budget": 1280,
+      "summary": "sl2",
+      "incremental": true,
+      "warm_writer": false,
+      "mode": "eager",
+      "latency_ms": 0,
+      "mib_per_sec": 0,
+      "median_backup_ms": 382.434083,
+      "median_time_trial": 1,
+      "io": {
+        "gets": 3,
+        "get_bytes": 4826464,
+        "puts": 3,
+        "put_bytes": 4826464,
+        "reused": 0
+      }
+    },
+    {
+      "file": "256-16-crc64nvme-full.json",
+      "rows": 256,
+      "budget": 16,
+      "summary": "crc64nvme",
+      "incremental": false,
+      "warm_writer": false,
+      "mode": "eager",
+      "latency_ms": 0,
+      "mib_per_sec": 0,
+      "median_backup_ms": 86.64566599999999,
+      "median_time_trial": 2,
+      "io": {
+        "gets": 1,
+        "get_bytes": 1344,
+        "puts": 4,
+        "put_bytes": 799360,
+        "reused": 16
+      }
+    },
+    {
+      "file": "256-16-crc64nvme-incremental.json",
+      "rows": 256,
+      "budget": 16,
+      "summary": "crc64nvme",
+      "incremental": true,
+      "warm_writer": false,
+      "mode": "eager",
+      "latency_ms": 0,
+      "mib_per_sec": 0,
+      "median_backup_ms": 79.989958,
+      "median_time_trial": 2,
+      "io": {
+        "gets": 4,
+        "get_bytes": 799360,
+        "puts": 4,
+        "put_bytes": 799360,
+        "reused": 0
+      }
+    },
+    {
+      "file": "256-16-sl2-full.json",
+      "rows": 256,
+      "budget": 16,
+      "summary": "sl2",
+      "incremental": false,
+      "warm_writer": false,
+      "mode": "eager",
+      "latency_ms": 0,
+      "mib_per_sec": 0,
+      "median_backup_ms": 410.946958,
+      "median_time_trial": 0,
+      "io": {
+        "gets": 1,
+        "get_bytes": 1456,
+        "puts": 4,
+        "put_bytes": 800496,
+        "reused": 16
+      }
+    },
+    {
+      "file": "256-16-sl2-incremental.json",
+      "rows": 256,
+      "budget": 16,
+      "summary": "sl2",
+      "incremental": true,
+      "warm_writer": false,
+      "mode": "eager",
+      "latency_ms": 0,
+      "mib_per_sec": 0,
+      "median_backup_ms": 127.224958,
+      "median_time_trial": 0,
+      "io": {
+        "gets": 4,
+        "get_bytes": 800496,
+        "puts": 4,
+        "put_bytes": 800496,
+        "reused": 0
+      }
+    },
+    {
+      "file": "256-flat.json",
+      "rows": 256,
+      "budget": 1280,
+      "summary": "sl2",
+      "incremental": true,
+      "warm_writer": false,
+      "mode": "flat",
+      "latency_ms": 0,
+      "mib_per_sec": 0,
+      "median_backup_ms": 31.746958,
+      "median_time_trial": 0,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 2,
+        "put_bytes": 4816896,
+        "reused": 0
+      }
+    },
+    {
+      "file": "cache-local-2048.json",
+      "rows": 2048,
+      "budget": 1280,
+      "summary": "crc64nvme",
+      "incremental": true,
+      "warm_writer": true,
+      "mode": "eager",
+      "latency_ms": 0,
+      "mib_per_sec": 0,
+      "median_backup_ms": 107.37554200000001,
+      "median_time_trial": 1,
+      "io": {
+        "gets": 1,
+        "get_bytes": 4199736,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 0
+      }
+    },
+    {
+      "file": "cache-local-256.json",
+      "rows": 256,
+      "budget": 1280,
+      "summary": "crc64nvme",
+      "incremental": true,
+      "warm_writer": true,
+      "mode": "eager",
+      "latency_ms": 0,
+      "mib_per_sec": 0,
+      "median_backup_ms": 67.14475,
+      "median_time_trial": 2,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 3,
+        "put_bytes": 4826128,
+        "reused": 0
+      }
+    },
+    {
+      "file": "cache-wan-full-cold.json",
+      "rows": 2048,
+      "budget": 1280,
+      "summary": "crc64nvme",
+      "incremental": false,
+      "warm_writer": false,
+      "mode": "eager",
+      "latency_ms": 25,
+      "mib_per_sec": 20,
+      "median_backup_ms": 812.825166,
+      "median_time_trial": 1,
+      "io": {
+        "gets": 1,
+        "get_bytes": 1344,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 7
+      }
+    },
+    {
+      "file": "cache-wan-full-warm.json",
+      "rows": 2048,
+      "budget": 1280,
+      "summary": "crc64nvme",
+      "incremental": false,
+      "warm_writer": true,
+      "mode": "eager",
+      "latency_ms": 25,
+      "mib_per_sec": 20,
+      "median_backup_ms": 770.315209,
+      "median_time_trial": 2,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 7
+      }
+    },
+    {
+      "file": "cache-wan-incremental-cold.json",
+      "rows": 2048,
+      "budget": 1280,
+      "summary": "crc64nvme",
+      "incremental": true,
+      "warm_writer": false,
+      "mode": "eager",
+      "latency_ms": 25,
+      "mib_per_sec": 20,
+      "median_backup_ms": 1295.861167,
+      "median_time_trial": 1,
+      "io": {
+        "gets": 4,
+        "get_bytes": 8669016,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 0
+      }
+    },
+    {
+      "file": "cache-wan-incremental-warm.json",
+      "rows": 2048,
+      "budget": 1280,
+      "summary": "crc64nvme",
+      "incremental": true,
+      "warm_writer": true,
+      "mode": "eager",
+      "latency_ms": 25,
+      "mib_per_sec": 20,
+      "median_backup_ms": 951.9073340000001,
+      "median_time_trial": 0,
+      "io": {
+        "gets": 1,
+        "get_bytes": 4199736,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 0
+      }
+    },
+    {
+      "file": "unprepared-2048-1280-crc64nvme-full.json",
+      "rows": 2048,
+      "budget": 1280,
+      "summary": "crc64nvme",
+      "incremental": false,
+      "warm_writer": false,
+      "mode": "eager",
+      "latency_ms": 0,
+      "mib_per_sec": 0,
+      "median_backup_ms": 623.999542,
+      "median_time_trial": 0,
+      "io": {
+        "gets": 1,
+        "get_bytes": 1344,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 7
+      }
+    },
+    {
+      "file": "unprepared-256-1280-crc64nvme-full.json",
+      "rows": 256,
+      "budget": 1280,
+      "summary": "crc64nvme",
+      "incremental": false,
+      "warm_writer": false,
+      "mode": "eager",
+      "latency_ms": 0,
+      "mib_per_sec": 0,
+      "median_backup_ms": 113.49125000000001,
+      "median_time_trial": 1,
+      "io": {
+        "gets": 1,
+        "get_bytes": 1336,
+        "puts": 3,
+        "put_bytes": 4826128,
+        "reused": 0
+      }
+    },
+    {
+      "file": "wan-2048-crc-full.json",
+      "rows": 2048,
+      "budget": 1280,
+      "summary": "crc64nvme",
+      "incremental": false,
+      "warm_writer": false,
+      "mode": "eager",
+      "latency_ms": 25,
+      "mib_per_sec": 20,
+      "median_backup_ms": 804.9072080000001,
+      "median_time_trial": 2,
+      "io": {
+        "gets": 1,
+        "get_bytes": 1344,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 7
+      }
+    },
+    {
+      "file": "wan-2048-crc-incremental.json",
+      "rows": 2048,
+      "budget": 1280,
+      "summary": "crc64nvme",
+      "incremental": true,
+      "warm_writer": false,
+      "mode": "eager",
+      "latency_ms": 25,
+      "mib_per_sec": 20,
+      "median_backup_ms": 1283.390209,
+      "median_time_trial": 0,
+      "io": {
+        "gets": 4,
+        "get_bytes": 8669016,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 0
+      }
+    },
+    {
+      "file": "wan-2048-flat.json",
+      "rows": 2048,
+      "budget": 1280,
+      "summary": "sl2",
+      "incremental": true,
+      "warm_writer": false,
+      "mode": "flat",
+      "latency_ms": 25,
+      "mib_per_sec": 20,
+      "median_backup_ms": 1820.486833,
+      "median_time_trial": 1,
+      "io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 2,
+        "put_bytes": 34177024,
+        "reused": 0
+      }
+    }
+  ]
+}

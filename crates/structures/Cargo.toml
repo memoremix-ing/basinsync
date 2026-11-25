@@ -9,6 +9,7 @@ profile = []
 [dependencies]
 anyhow = "1"
 base64 = "0.22"
+crc-fast = { version = "=1.10.0", default-features = false, features = ["std"] }
 flexbuffers = "25.12.19"
 hmac = "0.12"
 num-bigint = "0.4"

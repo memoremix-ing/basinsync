@@ -2,15 +2,21 @@
 #[path = "../tests/support/volume_store.rs"]
 mod objects;
 use anyhow::{Context, Result, ensure};
+use basinsync::structures::volume::Algorithm;
 use basinsync::{
     structures::{basin::Basin, profile},
     turso::{
         self,
-        volume::{DatabaseFile, LoadMode, SyncVolume, checkpoint},
+        volume::{Backup, DatabaseFile, LoadMode, SyncVolume, checkpoint_with_algorithm},
     },
 };
 use objects::{DiskObjects, Stats};
 use serde::Serialize;
+struct Experiment {
+    algorithm: Algorithm,
+    incremental: bool,
+    warm_writer: bool,
+}
 use std::time::{Duration, Instant};
 #[derive(Serialize)]
 struct Phase {
@@ -52,6 +58,9 @@ struct Sample {
     round: usize,
     rows: usize,
     inline_pages: usize,
+    summary: String,
+    incremental: bool,
+    warm_writer: bool,
     latency_ms: u64,
     mib_per_sec: u64,
     database_bytes: u64,
@@ -72,6 +81,7 @@ fn sample(
     inline_pages: usize,
     latency_ms: u64,
     mib_per_sec: u64,
+    experiment: &Experiment,
 ) -> Result<Sample> {
     let directory = tempfile::tempdir()?;
     let mut store = DiskObjects::new(directory.path())?;
@@ -93,21 +103,22 @@ fn sample(
     let kernel_image = companion.image()?;
     drop(primary);
     drop(kernel);
-    let root = if mode == "flat" {
+    let archive = if mode == "flat" {
         store.write_raw("initial/default.turso", &image)?;
         store.write_raw("initial/kernel.turso", &kernel_image)?;
         None
     } else {
-        Some(checkpoint(
+        Some(Backup::create(
             &mut Basin::new(store.clone(), vec![42; 32])?,
-            None,
             vec![
                 ("/default.turso".into(), original.clone()),
                 ("/kernel.turso".into(), companion.clone()),
             ],
             inline_pages,
+            experiment.algorithm,
         )?)
     };
+    let root = archive.as_ref().map(|b| b.root().clone());
     let initial_backup_bytes = store.stats().put_bytes;
     store.delay = Duration::from_millis(latency_ms);
     store.bytes_per_second = mib_per_sec * 1024 * 1024;
@@ -171,16 +182,28 @@ fn sample(
         Ok((primary.snapshot()?, kernel.snapshot()?))
     })?;
     let (new_root, backup) = measure(&store, || {
-        if let Some(root) = &root {
-            Ok(Some(checkpoint(
-                &mut Basin::new(store.clone(), vec![42; 32])?,
-                Some(root),
-                vec![
-                    ("/default.turso".into(), next.clone()),
-                    ("/kernel.turso".into(), next_kernel.clone()),
-                ],
-                inline_pages,
-            )?))
+        if let Some(previous) = &archive {
+            let files = vec![
+                ("/default.turso".into(), next.clone()),
+                ("/kernel.turso".into(), next_kernel.clone()),
+            ];
+            let mut b = if experiment.warm_writer {
+                mounted.as_ref().unwrap().cached_basin()
+            } else {
+                Basin::new(store.clone(), vec![42; 32])?
+            };
+            b.storage = store.clone();
+            Ok(Some(if experiment.incremental {
+                previous.advance(&mut b, files)?.root().clone()
+            } else {
+                checkpoint_with_algorithm(
+                    &mut b,
+                    Some(previous.root()),
+                    files,
+                    inline_pages,
+                    experiment.algorithm,
+                )?
+            }))
         } else {
             for (name, view) in [("default.turso", &next), ("kernel.turso", &next_kernel)] {
                 let (file, _digest) = {
@@ -224,6 +247,13 @@ fn sample(
         round,
         rows,
         inline_pages,
+        summary: match experiment.algorithm {
+            Algorithm::Sl2 => "sl2",
+            Algorithm::Crc64Nvme => "crc64nvme",
+        }
+        .into(),
+        incremental: experiment.incremental,
+        warm_writer: experiment.warm_writer,
         latency_ms,
         mib_per_sec,
         database_bytes: image.len() as u64,
@@ -253,7 +283,10 @@ fn main() -> Result<()> {
                 "--latency-ms",
                 "--mib-per-sec",
                 "--inline-pages",
-                "--mode"
+                "--mode",
+                "--summary",
+                "--export",
+                "--writer-cache"
             ]
             .contains(&p[0].as_str()),
             "unknown option"
@@ -265,7 +298,26 @@ fn main() -> Result<()> {
     };
     let rows = number("--rows", 256)?;
     let rounds = number("--rounds", 3)?;
-    let inline = number("--inline-pages", 1)?;
+    let inline = number("--inline-pages", 1280)?;
+    let algorithm = match options.get("--summary").copied().unwrap_or("sl2") {
+        "sl2" => Algorithm::Sl2,
+        "crc64nvme" => Algorithm::Crc64Nvme,
+        _ => anyhow::bail!("expected sl2 or crc64nvme"),
+    };
+    let incremental = match options.get("--export").copied().unwrap_or("incremental") {
+        "incremental" => true,
+        "full" => false,
+        _ => anyhow::bail!("expected incremental or full"),
+    };
+    let experiment = Experiment {
+        algorithm,
+        incremental,
+        warm_writer: match options.get("--writer-cache").copied().unwrap_or("cold") {
+            "cold" => false,
+            "warm" => true,
+            _ => anyhow::bail!("expected warm or cold writer cache"),
+        },
+    };
     ensure!(rows > 0 && rounds > 0, "positive rows/rounds required");
     let latency = number("--latency-ms", 0)? as u64;
     let bandwidth = number("--mib-per-sec", 0)? as u64;
@@ -285,7 +337,7 @@ fn main() -> Result<()> {
             modes.reverse();
         }
         for mode in modes {
-            let s = sample(mode, round, rows, inline, latency, bandwidth)
+            let s = sample(mode, round, rows, inline, latency, bandwidth, &experiment)
                 .context(format!("{mode} round {round}"))?;
             eprintln!(
                 "{mode} round {round}: open {:.1} ms, backup {:.1} ms / {} bytes",

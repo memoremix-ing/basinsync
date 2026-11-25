@@ -11,6 +11,8 @@ use std::collections::{BTreeMap, BTreeSet};
 pub const PATH: &str = ".sync-volume/";
 pub const BLOCK: &str = ".sync-block/";
 pub const PAGE_SIZE: usize = 4096;
+mod checksum;
+pub use checksum::Algorithm;
 pub struct Sectors;
 impl Consumer for Sectors {
     fn empty(&self) -> Value {
@@ -468,35 +470,36 @@ pub fn build_block_with_inline_pages<S: Storage>(
     input: Vec<(num_bigint::BigInt, Vec<u8>)>,
     inline_pages: usize,
 ) -> Result<BlockRoot> {
-    struct Pages(usize);
-    impl Consumer for Pages {
-        fn trie_inline_limit(&self) -> usize {
-            self.0
-        }
-        fn empty(&self) -> Value {
-            Sectors.empty()
-        }
-        fn entry(&self, k: &[u8], v: &Value) -> Result<Value> {
-            Sectors.entry(k, v)
-        }
-        fn combine(&self, s: &[Value]) -> Result<Value> {
-            Sectors.combine(s)
-        }
-    }
+    build_block_with_algorithm(b, input, inline_pages, Algorithm::Sl2)
+}
+pub fn build_block_with_algorithm<S: Storage>(
+    b: &mut Basin<S>,
+    input: Vec<(num_bigint::BigInt, Vec<u8>)>,
+    inline_pages: usize,
+    algorithm: Algorithm,
+) -> Result<BlockRoot> {
     let pages = input
         .into_iter()
         .map(|(n, v)| Ok((lex(&n)?.into_bytes(), Array(vec![Blob(v)]))))
         .collect::<Result<Vec<_>>>()?;
-    let t = trie::build_node(b, pages, &Pages(inline_pages))?;
+    let t = trie::build_node(
+        b,
+        pages,
+        &checksum::Pages {
+            inline: inline_pages,
+            algorithm,
+        },
+    )?;
+    finish_block(b, t, algorithm)
+}
+fn finish_block<S: Storage>(
+    b: &mut Basin<S>,
+    t: trie::Built,
+    algorithm: Algorithm,
+) -> Result<BlockRoot> {
     let leading = page_spine(b, &t.node, false)?;
     let lagging = page_spine(b, &t.node, true)?;
-    let digest = t
-        .node
-        .index(6)?
-        .at(1)?
-        .field("brombergSL2")?
-        .blob()?
-        .to_vec();
+    let digest = algorithm.digest(t.node.index(6)?.at(1)?)?;
     let edged = t.node.index(5)?.field("inlined")?.number()? > 1280;
     let source = if edged {
         b.seal(t.node, &t.edges)?
@@ -513,12 +516,74 @@ pub fn build_block_with_inline_pages<S: Storage>(
         ("5", Null),
         (
             "6",
-            Array(vec![0u32.into(), Null, source, leading, lagging]),
+            Array(vec![
+                algorithm.migration().into(),
+                Null,
+                source,
+                leading,
+                lagging,
+            ]),
         ),
     ]);
     Ok(BlockRoot {
         edge: b.seal(node, &edges)?,
         digest,
+    })
+}
+/// Replace/add/remove only the supplied pages, preserving opaque unchanged subtries.
+pub fn update_block<S: Storage>(
+    b: &mut Basin<S>,
+    old: &BlockRoot,
+    changes: Vec<(num_bigint::BigInt, Option<Vec<u8>>)>,
+    inline_pages: usize,
+    algorithm: Algorithm,
+) -> Result<BlockRoot> {
+    update_block_truncated(b, old, changes, None, inline_pages, algorithm)
+}
+pub fn update_block_truncated<S: Storage>(
+    b: &mut Basin<S>,
+    old: &BlockRoot,
+    changes: Vec<(num_bigint::BigInt, Option<Vec<u8>>)>,
+    remove_from: Option<num_bigint::BigInt>,
+    inline_pages: usize,
+    algorithm: Algorithm,
+) -> Result<BlockRoot> {
+    if changes.is_empty() && remove_from.is_none() {
+        return Ok(old.clone());
+    }
+    let block = View::root(b.load(&old.edge)?).owned()?;
+    ensure!(
+        block.index(6)?.at(0)?.number()? == algorithm.migration(),
+        "checksum migration mismatch"
+    );
+    let source = block.index(6)?.at(2)?.clone();
+    let changes = changes
+        .into_iter()
+        .map(|(n, v)| Ok((lex(&n)?.into_bytes(), v.map(|v| Array(vec![Blob(v)])))))
+        .collect::<Result<Vec<_>>>()?;
+    let cutoff = remove_from.map(|n| lex(&n)).transpose()?;
+    let t = trie::update_node_pruned(
+        b,
+        source.clone(),
+        changes,
+        cutoff.as_deref().map(str::as_bytes),
+        &checksum::Pages {
+            inline: inline_pages,
+            algorithm,
+        },
+    )?;
+    if matches!(source, Map(_)) && t.node == source {
+        return Ok(old.clone());
+    }
+    finish_block(b, t, algorithm)
+}
+pub fn block<S: Storage>(b: &mut Basin<S>, root: &Edge, name: &str) -> Result<BlockRoot> {
+    let (folder, file) = directory_entry(b, root, name)?;
+    ensure!(!folder, "not a file");
+    let file = file.owned()?;
+    Ok(BlockRoot {
+        edge: file.at(2)?.clone(),
+        digest: file.at(1)?.blob()?.to_vec(),
     })
 }
 fn page_root<S: Storage>(basin: &mut Basin<S>, footer: &View) -> Result<View> {
@@ -553,12 +618,22 @@ pub fn from_blocks<S: Storage>(
     blocks: Vec<(String, BlockRoot)>,
     directories: Vec<String>,
 ) -> Result<Edge> {
+    let migration = blocks.iter().try_fold(0u32, |m, b| {
+        Ok::<_, anyhow::Error>(m.max(b.1.edge.at(6)?.field("0")?.number()?))
+    })?;
     let mut file_map = BTreeMap::new();
     for (name, block) in blocks {
         path(&name)?;
         ensure!(!file_map.contains_key(&name), "duplicate pathname");
         ensure!(
-            block.edge.at(2)?.text()? == BLOCK && block.digest.len() == 64,
+            block.edge.at(2)?.text()? == BLOCK
+                && matches!(block.edge.at(6)?.field("0")?.number()?, 0 | 1)
+                && block.digest.len()
+                    == if block.edge.at(6)?.field("0")?.number()? == 0 {
+                        64
+                    } else {
+                        8
+                    },
             "invalid block descriptor"
         );
         file_map.insert(name, (block.edge, Blob(block.digest)));
@@ -599,7 +674,7 @@ pub fn from_blocks<S: Storage>(
         ),
         ("4", 0u32.into()),
         ("5", Null),
-        ("6", Array(vec![0u32.into(), Null, descriptor])),
+        ("6", Array(vec![migration.into(), Null, descriptor])),
     ]);
     basin.seal(node, &edges)
 }
@@ -609,7 +684,7 @@ fn data<S: Storage>(basin: &mut Basin<S>, root: &Edge) -> Result<View> {
     let footer = v.field("6");
     ensure!(
         footer.reader()?.get_vector()?.len() == 3
-            && value::item(footer.reader()?, 0)?.get_i64()? == 0,
+            && matches!(value::item(footer.reader()?, 0)?.get_i64()?, 0 | 1),
         "unsupported volume migration"
     );
     Ok(footer)
@@ -664,7 +739,8 @@ fn open_block<S: Storage>(
         f.reader()?.get_vector()?.len() == 5,
         "unsupported block migration"
     );
-    let expected = sector_summary(&f)?.field("brombergSL2")?.blob()?.to_vec();
+    let algorithm = Algorithm::from_migration(f.item(0).owned()?.number()?)?;
+    let expected = algorithm.digest(&sector_summary(&f)?)?;
     ensure!(expected == file.at(1)?.blob()?, "block checksum mismatch");
     Ok((f, expected))
 }
@@ -677,12 +753,13 @@ pub fn read<S: Storage>(
     let (footer, expected) = open_block(basin, root, name, shortcuts)?;
     let mut pages = vec![];
     let pages_root = page_root(basin, &footer)?;
+    let algorithm = Algorithm::from_migration(footer.item(0).owned()?.number()?)?;
     trie::visit_inline(
         basin,
         pages_root,
         &[],
         &[],
-        0,
+        algorithm.migration(),
         &mut |_, _| true,
         &mut |k, v| {
             let n = unlex(std::str::from_utf8(&k)?)?;
@@ -709,7 +786,7 @@ pub fn read<S: Storage>(
         let at = usize::try_from(p)? * PAGE_SIZE;
         bytes[at..at + b.len()].copy_from_slice(&b);
     }
-    ensure!(bromberg::hash(&bytes) == expected, "file checksum mismatch");
+    ensure!(algorithm.hash(&bytes) == expected, "file checksum mismatch");
     Ok(bytes)
 }
 fn shortcut_page<S: Storage>(
@@ -746,7 +823,7 @@ fn shortcut_page<S: Storage>(
                 return Ok(None);
             }
             let root = View::root(b.load(&e)?);
-            trie::get_inline(b, root, k.to_vec(), 0)?
+            trie::get_inline(b, root, k.to_vec(), footer.item(0).owned()?.number()?)?
                 .map(|v| v.owned())
                 .transpose()
         })();
@@ -763,7 +840,8 @@ fn page_value<S: Storage>(
     shortcuts: bool,
 ) -> Result<Option<Value>> {
     if let Some(root) = ready_source(b, f.item(2))?
-        && let Some(value) = trie::get_cached_inline(b, root, full.clone(), 0)?
+        && let Some(value) =
+            trie::get_cached_inline(b, root, full.clone(), f.item(0).owned()?.number()?)?
     {
         return value.map(|v| v.owned()).transpose();
     }
@@ -771,7 +849,7 @@ fn page_value<S: Storage>(
         return Ok(Some(v));
     }
     let root = page_root(b, f)?;
-    trie::get_inline(b, root, full, 0)?
+    trie::get_inline(b, root, full, f.item(0).owned()?.number()?)?
         .map(|v| v.owned())
         .transpose()
 }
@@ -1118,10 +1196,22 @@ pub fn replace_blocks<S: Storage>(
             trie.node,
         ]))
     }
+    let migration = blocks
+        .iter()
+        .try_fold(root.at(6)?.field("0")?.number()?, |m, b| {
+            Ok::<_, anyhow::Error>(m.max(b.1.edge.at(6)?.field("0")?.number()?))
+        })?;
     let mut descriptor = data(b, root)?.item(2).owned()?;
     for (name, block) in blocks {
         ensure!(
-            block.edge.at(2)?.text()? == BLOCK && block.digest.len() == 64,
+            block.edge.at(2)?.text()? == BLOCK
+                && matches!(block.edge.at(6)?.field("0")?.number()?, 0 | 1)
+                && block.digest.len()
+                    == if block.edge.at(6)?.field("0")?.number()? == 0 {
+                        64
+                    } else {
+                        8
+                    },
             "invalid block"
         );
         descriptor = replace(b, descriptor, &path(&name)?, &block)?;
@@ -1135,7 +1225,7 @@ pub fn replace_blocks<S: Storage>(
             ("3", basin::query(&edges, b.max_degree, b.max_height)?),
             ("4", 0u32.into()),
             ("5", Null),
-            ("6", Array(vec![0u32.into(), Null, descriptor])),
+            ("6", Array(vec![migration.into(), Null, descriptor])),
         ]),
         &edges,
     )

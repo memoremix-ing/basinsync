@@ -353,6 +353,7 @@ impl Storage for MemoryStorage {
         Ok(self.capabilities.get(&weak_key(link)?).cloned())
     }
 }
+#[derive(Clone)]
 pub struct Basin<S: Storage> {
     pub storage: S,
     pub seed: Vec<u8>,
@@ -364,6 +365,19 @@ pub struct Basin<S: Storage> {
     cache: BTreeMap<String, Arc<Vec<u8>>>,
 }
 impl<S: Storage> Basin<S> {
+    fn remember(&mut self, k: String, bytes: Arc<Vec<u8>>) {
+        self.cache.remove(&k);
+        if bytes.len() <= self.max_cache_bytes {
+            while !self.cache.is_empty()
+                && (self.cache.len() >= 128
+                    || self.cache.values().map(|v| v.len()).sum::<usize>() + bytes.len()
+                        > self.max_cache_bytes)
+            {
+                self.cache.pop_first();
+            }
+            self.cache.insert(k, bytes);
+        }
+    }
     pub fn new(storage: S, seed: Vec<u8>) -> Result<Self> {
         ensure!(
             seed.len() >= 32,
@@ -415,7 +429,14 @@ impl<S: Storage> Basin<S> {
         ]);
         let pending = PendingEdge(edge);
         let revision = self.storage.put(&pending, &bytes, &refs)?;
-        pending.allocated(&revision)
+        let edge = pending.allocated(&revision)?;
+        let k = format!(
+            "{}/{}",
+            capability(&edge)?,
+            hex(footer(&edge)?.field("sha384")?.blob()?)
+        );
+        self.remember(k, Arc::new(bytes));
+        Ok(edge)
     }
     pub fn load(&mut self, e: &Edge) -> Result<Arc<Vec<u8>>> {
         let _profile = crate::profile::span("basin.load");
@@ -435,18 +456,13 @@ impl<S: Storage> Basin<S> {
                 "basin node digest/length mismatch"
             );
             let bytes = Arc::new(b);
-            if bytes.len() <= self.max_cache_bytes {
-                while !self.cache.is_empty()
-                    && (self.cache.len() >= 128
-                        || self.cache.values().map(|v| v.len()).sum::<usize>() + bytes.len()
-                            > self.max_cache_bytes)
-                {
-                    self.cache.pop_first();
-                }
-                self.cache.insert(k, bytes.clone());
-            }
+            self.remember(k, bytes.clone());
             bytes
         };
+        ensure!(
+            bytes.len() == footer(e)?.field("length")?.number()? as usize,
+            "basin node length mismatch"
+        );
         let r = node_reader(&bytes)?;
         for (k, expected) in [
             ("1", e.at(1)?),

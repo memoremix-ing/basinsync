@@ -87,6 +87,14 @@ pub struct SyncVolume<S: Storage + Send + 'static> {
     files: Mutex<BTreeMap<String, Arc<Pages<S>>>>,
 }
 impl<S: Storage + Send + 'static> SyncVolume<S> {
+    /// Snapshot the already verified, bounded object cache; page sources keep
+    /// their own reader lock, so a writer can read local views without reentrancy.
+    pub fn cached_basin(&self) -> Basin<S>
+    where
+        S: Clone,
+    {
+        self.basin.lock().unwrap().clone()
+    }
     pub fn new(basin: Basin<S>, root: Edge, mode: LoadMode) -> Self {
         Self {
             basin: Arc::new(Mutex::new(basin)),
@@ -114,6 +122,7 @@ impl<S: Storage + Send + 'static> SyncVolume<S> {
                     basin: self.basin.clone(),
                     root: self.root.clone(),
                     name: path.into(),
+                    provenance: provenance(&self.root, path)?,
                     size,
                     cache: Mutex::new(Cache {
                         file,
@@ -142,10 +151,14 @@ struct Pages<S: Storage + Send> {
     basin: Arc<Mutex<Basin<S>>>,
     root: Edge,
     name: String,
+    provenance: String,
     size: u64,
     cache: Mutex<Cache>,
 }
 impl<S: Storage + Send> cow::PageSource for Pages<S> {
+    fn provenance(&self) -> Option<&str> {
+        Some(&self.provenance)
+    }
     fn size(&self) -> u64 {
         self.size
     }
@@ -193,6 +206,15 @@ pub fn checkpoint<S: Storage>(
     files: Vec<(String, Arc<cow::View>)>,
     inline_pages: usize,
 ) -> Result<Edge> {
+    checkpoint_with_algorithm(basin, previous, files, inline_pages, volume::Algorithm::Sl2)
+}
+pub fn checkpoint_with_algorithm<S: Storage>(
+    basin: &mut Basin<S>,
+    previous: Option<&Edge>,
+    files: Vec<(String, Arc<cow::View>)>,
+    inline_pages: usize,
+    algorithm: volume::Algorithm,
+) -> Result<Edge> {
     ensure!(!files.is_empty(), "empty backup group");
     let mut blocks = vec![];
     let mut names = BTreeSet::new();
@@ -212,7 +234,7 @@ pub fn checkpoint<S: Storage>(
         };
         let block = {
             let _profile = profile::span("checkpoint.blocks");
-            volume::build_block_with_inline_pages(basin, pages, inline_pages)?
+            volume::build_block_with_algorithm(basin, pages, inline_pages, algorithm)?
         };
         blocks.push((name, block));
     }
@@ -220,5 +242,137 @@ pub fn checkpoint<S: Storage>(
     match previous {
         Some(root) => volume::replace_blocks(basin, root, blocks),
         None => volume::from_blocks(basin, blocks, vec![]),
+    }
+}
+fn provenance(root: &Edge, path: &str) -> Result<String> {
+    Ok(format!(
+        "{}:{}:{path}",
+        crate::structures::basin::capability(root)?,
+        crate::structures::basin::hex(
+            crate::structures::basin::footer(root)?
+                .field("sha384")?
+                .blob()?
+        )
+    ))
+}
+/// A published root plus local pins for the next incremental backup. Advancing
+/// returns a candidate and never changes the previous durable checkpoint.
+pub struct Backup {
+    root: Edge,
+    files: BTreeMap<String, Arc<cow::View>>,
+    algorithm: volume::Algorithm,
+    inline_pages: usize,
+}
+impl Backup {
+    pub fn root(&self) -> &Edge {
+        &self.root
+    }
+    pub fn create<S: Storage>(
+        b: &mut Basin<S>,
+        files: Vec<(String, Arc<cow::View>)>,
+        inline_pages: usize,
+        algorithm: volume::Algorithm,
+    ) -> Result<Self> {
+        let root = checkpoint_with_algorithm(b, None, files.clone(), inline_pages, algorithm)?;
+        Ok(Self {
+            root,
+            files: files.into_iter().collect(),
+            algorithm,
+            inline_pages,
+        })
+    }
+    /// Resume using the publication's original packing policy. A changed policy
+    /// requires full export; the encoded graph alone does not identify its budget.
+    pub fn from_root(root: Edge, inline_pages: usize, algorithm: volume::Algorithm) -> Self {
+        Self {
+            root,
+            files: BTreeMap::new(),
+            algorithm,
+            inline_pages,
+        }
+    }
+    pub fn advance<S: Storage>(
+        &self,
+        b: &mut Basin<S>,
+        files: Vec<(String, Arc<cow::View>)>,
+    ) -> Result<Self> {
+        ensure!(!files.is_empty(), "empty backup group");
+        let mut next = self.files.clone();
+        let mut blocks = vec![];
+        let mut seen = BTreeSet::new();
+        for (name, view) in files {
+            ensure!(seen.insert(name.clone()), "duplicate backup filename");
+            ensure!(
+                view.size() > 0 && view.size().is_multiple_of(PAGE_SIZE as u64),
+                "invalid Turso file size"
+            );
+            let changed = self
+                .files
+                .get(&name)
+                .and_then(|old| view.changed_since(old))
+                .or_else(|| view.changed_from_source(&provenance(&self.root, &name).ok()?));
+            let block = if let Some(changed) = changed {
+                let count = view.size() / PAGE_SIZE as u64;
+                let old_count = if let Some(old) = self.files.get(&name) {
+                    old.size() / PAGE_SIZE as u64
+                } else {
+                    volume::dense_page_count(b, &self.root, &name)?
+                };
+                let dirty = changed
+                    .into_iter()
+                    .filter(|p| *p < count)
+                    .collect::<Vec<_>>();
+                if dirty.is_empty() && count == old_count {
+                    next.insert(name, view);
+                    continue;
+                }
+                let old = volume::block(b, &self.root, &name)?;
+                let changes = {
+                    let _profile = profile::span("checkpoint.read_pages");
+                    dirty
+                        .into_iter()
+                        .map(|p| Ok((p.into(), Some(view.page(p)?))))
+                        .collect::<Result<Vec<_>>>()?
+                };
+                let _profile = profile::span("checkpoint.blocks");
+                let updated = volume::update_block_truncated(
+                    b,
+                    &old,
+                    changes,
+                    (count < old_count).then(|| count.into()),
+                    self.inline_pages,
+                    self.algorithm,
+                )?;
+                if updated.edge == old.edge && updated.digest == old.digest {
+                    next.insert(name, view);
+                    continue;
+                }
+                updated
+            } else {
+                // Missing provenance is a correctness boundary: rebuild this file.
+                let pages = {
+                    let _profile = profile::span("checkpoint.read_pages");
+                    (0..view.size() / PAGE_SIZE as u64)
+                        .map(|p| Ok((p.into(), view.page(p)?)))
+                        .collect::<Result<Vec<_>>>()?
+                };
+                let _profile = profile::span("checkpoint.blocks");
+                volume::build_block_with_algorithm(b, pages, self.inline_pages, self.algorithm)?
+            };
+            blocks.push((name.clone(), block));
+            next.insert(name, view);
+        }
+        let root = if blocks.is_empty() {
+            self.root.clone()
+        } else {
+            let _profile = profile::span("checkpoint.directories");
+            volume::replace_blocks(b, &self.root, blocks)?
+        };
+        Ok(Self {
+            root,
+            files: next,
+            algorithm: self.algorithm,
+            inline_pages: self.inline_pages,
+        })
     }
 }

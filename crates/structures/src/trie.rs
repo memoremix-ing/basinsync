@@ -9,6 +9,8 @@ use flexbuffers::Reader;
 use num_bigint::BigInt;
 use std::sync::Arc;
 pub const PATH: &str = ".trie-node/";
+mod incremental;
+pub use incremental::{update_node, update_node_pruned};
 pub trait Consumer {
     /// Physical inline-value budget; smaller budgets are strict, including small groups.
     fn trie_inline_limit(&self) -> usize {

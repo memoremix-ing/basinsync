@@ -13,6 +13,9 @@ use turso_core::{
 pub trait PageSource: Send + Sync {
     fn size(&self) -> u64;
     fn read_at(&self, offset: u64, bytes: &mut [u8]) -> std::io::Result<()>;
+    fn provenance(&self) -> Option<&str> {
+        None
+    }
 }
 
 pub(crate) fn data_root() -> Result<std::path::PathBuf> {
@@ -43,6 +46,7 @@ struct History {
     ancestor: Option<Arc<View>>,
     source: Option<Arc<dyn PageSource>>,
     materialized: std::collections::BTreeSet<u64>,
+    first_changed: BTreeMap<u64, u64>,
     #[cfg(test)]
     fail_after: Option<usize>,
 }
@@ -67,6 +71,7 @@ impl Store {
                 ancestor: None,
                 source: None,
                 materialized: Default::default(),
+                first_changed: Default::default(),
                 #[cfg(test)]
                 fail_after: None,
             }),
@@ -291,6 +296,48 @@ impl Drop for View {
     }
 }
 impl View {
+    /// Conservative changed-page set, without reading page bodies. None means unrelated histories.
+    pub fn changed_since(&self, older: &View) -> Option<std::collections::BTreeSet<u64>> {
+        let s = self.store.state.lock().unwrap();
+        let mut pages = if Arc::ptr_eq(&self.store, &older.store) {
+            if older.generation > self.generation {
+                return None;
+            }
+            s.versions
+                .keys()
+                .filter(|(_, g)| *g >= older.generation && *g < self.generation)
+                .map(|(p, _)| *p)
+                .collect::<std::collections::BTreeSet<_>>()
+        } else {
+            s.ancestor.as_ref()?.changed_since(older)?
+        };
+        pages.extend(
+            s.first_changed
+                .iter()
+                .filter(|(_, g)| {
+                    **g < self.generation
+                        && (!Arc::ptr_eq(&self.store, &older.store) || **g >= older.generation)
+                })
+                .map(|(p, _)| *p),
+        );
+        pages.extend(older.size.div_ceil(PAGE_SIZE as u64)..self.size.div_ceil(PAGE_SIZE as u64));
+        Some(pages)
+    }
+    pub fn changed_from_source(&self, provenance: &str) -> Option<std::collections::BTreeSet<u64>> {
+        let s = self.store.state.lock().unwrap();
+        let mut pages = if s.source.as_ref().and_then(|s| s.provenance()) == Some(provenance) {
+            std::collections::BTreeSet::new()
+        } else {
+            s.ancestor.as_ref()?.changed_from_source(provenance)?
+        };
+        pages.extend(
+            s.first_changed
+                .iter()
+                .filter(|(_, g)| **g < self.generation)
+                .map(|(p, _)| *p),
+        );
+        Some(pages)
+    }
     fn read_at(&self, pos: u64, bytes: &mut [u8]) -> std::io::Result<()> {
         let s = self.store.state.lock().unwrap();
         let mut written = 0;
@@ -461,6 +508,10 @@ impl File for CowFile {
             *left -= 1;
         }
         Store::preserve(&mut s, pos, b.len() as u64)?;
+        let generation = s.generation;
+        for p in pos / PAGE_SIZE as u64..(pos + b.len() as u64).div_ceil(PAGE_SIZE as u64) {
+            s.first_changed.entry(p).or_insert(generation);
+        }
         let original_size = self.inner.size()?;
         for page in pos / PAGE_SIZE as u64..(pos + b.len() as u64).div_ceil(PAGE_SIZE as u64) {
             Store::materialize(&mut s, page).map_err(error)?;
@@ -475,6 +526,10 @@ impl File for CowFile {
     fn truncate(&self, len: u64, c: Completion) -> turso_core::Result<Completion> {
         let mut s = self.store.state.lock().unwrap();
         let size = self.inner.size()?;
+        let generation = s.generation;
+        for p in len.min(size) / PAGE_SIZE as u64..len.max(size).div_ceil(PAGE_SIZE as u64) {
+            s.first_changed.entry(p).or_insert(generation);
+        }
         if len < size {
             Store::preserve(&mut s, len, size - len)?;
         }
@@ -595,6 +650,14 @@ mod tests {
         )?;
         store.seal();
         let after = store.pin()?;
+        assert_eq!(
+            middle.changed_since(&before).unwrap(),
+            [0, 1].into_iter().collect()
+        );
+        assert_eq!(
+            after.changed_since(&middle).unwrap(),
+            [1, 2, 3].into_iter().collect()
+        );
         let mut changed = original.clone();
         changed[at..at + 31].fill(99);
         assert_eq!(before.image()?, original);

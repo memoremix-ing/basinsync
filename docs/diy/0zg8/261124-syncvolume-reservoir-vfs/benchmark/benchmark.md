@@ -1,6 +1,7 @@
 [comparison]: <comparison.html>
 [cpu-1]: <cpu-1.json>
 [cpu-16]: <cpu-16.json>
+[incremental]: <incremental.md>
 [kernelspace]: <../../../../glossary/kernelspace.md>
 [profile]: <profile.md>
 [revision]: <../../../../glossary/revision.md>
@@ -13,6 +14,9 @@
 [wan-16]: <wan-16.json>
 
 # SyncVolume VFS measurements
+
+These are the full-rebuild controls. The *incremental/CRC comparison*[~][incremental]
+adds ordinary packing and distinguishes object reuse from incremental construction.
 
 2026-11-24; Apple M2, 24 GiB RAM, macOS 27.0.1/APFS SSD; Rust 1.92.0,
 release build, vendored *Turso*[~][turso] 0.9.0-pre.1. Three trials per case,
@@ -69,7 +73,7 @@ Changed-backup times include both files, hashing, packing and object publication
 
 Full files upload 4,816,896 bytes in two PUTs. One-page packing uploads 208,008
 bytes in seven PUTs; sixteen-page packing uploads 800,496 in four. Each volume
-backup also fetches one directory object (~1.4 KiB). Native export still scans
+backup also fetches one directory object (~1.4 KiB). The full exporter scans
 and repacks every selected page, explaining the local-time penalty despite object
 reuse. Initial stored-body totals are 4,816,896 bytes for full files, 4,599,072
 for one-page packing, and 4,843,208 for sixteen-page packing. Zero-filled data
