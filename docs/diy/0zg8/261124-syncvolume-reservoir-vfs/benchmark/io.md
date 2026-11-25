@@ -1,5 +1,6 @@
 [benchmark]: <benchmark.md>
 [crc64nvme]: <../../../../glossary/crc64nvme.md>
+[diy/0zg9/261125-basin-node-lru-caches]: <../../../0zg9/261125-basin-node-lru-caches/README.md>
 [io-comparison]: <io-comparison.html>
 [io-results]: <io-results.json>
 [packing]: <packing.md>
@@ -9,6 +10,8 @@
 [volume]: <../../../../glossary/volume.md>
 
 # SyncVolume I/O and packing
+
+These measurements precede the *LRU cache policy*[~][diy/0zg9/261125-basin-node-lru-caches].
 
 Explore the *comparison*[~][io-comparison].
 

@@ -396,7 +396,23 @@ export interface Options {
   cacheBytes?: number;
 }
 /** Private, owned metadata snapshot; callers may mutate their descriptors safely. */
-type LoadedNode = { ref: Reference; length: number; descriptor: unknown[] };
+type BoundDescriptor = { length: number; descriptor: unknown[] };
+type LoadedNode = BoundDescriptor & { ref: Reference };
+type PendingNode = BoundDescriptor & { promise: Promise<LoadedNode> };
+function edgeDescriptor(edge: Edge): unknown[] {
+  return [edge[3], edge[5], edge[6][1], edge[6][0], edge[1], edge[2], edge[4]];
+}
+// Consumer summaries may contain symbols and bytes; structuredClone cannot copy
+// every supported symbol, and Buffer.slice() would retain writable aliases.
+function ownedMetadata(v: unknown, depth = 0): any {
+  check(depth < 1024, "value nesting limit");
+  if (v instanceof Uint8Array) return new Uint8Array(v);
+  if (Array.isArray(v)) return v.map(value => ownedMetadata(value, depth + 1));
+  if (v && typeof v === "object") return Object.fromEntries(
+    Object.getOwnPropertyNames(v).map(k => [k, ownedMetadata((v as Record<string, unknown>)[k], depth + 1)]),
+  );
+  return v;
+}
 function sameMetadata(actual: unknown, expected: unknown, depth = 0): boolean {
   check(depth < 1024, "value nesting limit");
   if (actual === expected) return true;
@@ -445,29 +461,24 @@ function descriptor(ref: Reference): unknown[] {
     ref.get("4").intValue(),
   ];
 }
-function checkDescriptor(node: LoadedNode, edge: Edge): Reference {
+function checkBoundDescriptor(node: BoundDescriptor, edge: Edge): void {
   check(node.length === edge[6].length, "basin node digest/length mismatch");
-  const d = node.descriptor;
-  check(
-    sameMetadata(d[0], edge[3]) &&
-      sameMetadata(d[1], edge[5]) &&
-      sameMetadata(d[2], edge[6][1]) &&
-      d[3] === edge[6][0] &&
-      d[4] === edge[1] &&
-      d[5] === edge[2] &&
-      d[6] === edge[4],
-    "edge summary mismatch",
-  );
+  check(sameMetadata(node.descriptor, edgeDescriptor(edge)), "edge summary mismatch");
+}
+function checkDescriptor(node: LoadedNode, edge: Edge): Reference {
+  checkBoundDescriptor(node, edge);
   return node.ref;
 }
 
 export class Basin {
   readonly seed: Uint8Array;
-  private readonly cache = new Map<string, LoadedNode | Promise<LoadedNode>>();
+  private readonly cache = new Map<string, LoadedNode | PendingNode>();
   private costs = new Map<string, number>();
+  private cacheBytes = 0;
   clearCache() {
     this.cache.clear();
     this.costs.clear();
+    this.cacheBytes = 0;
   }
   constructor(
     readonly storage: Storage,
@@ -517,63 +528,80 @@ export class Basin {
     ];
     return allocated(edge, await this.storage.put(edge, bytes, unique));
   }
+  private touch(key: string, node: LoadedNode | PendingNode) {
+    if (this.cache.get(key) !== node) return;
+    this.cache.delete(key);
+    this.cache.set(key, node);
+  }
   /** Inspect a verified ready cache entry without initiating I/O. */
   peek(edge: Edge): Reference | undefined {
     validateEdge(edge);
-    const cached = this.cache.get(
-      `${capability(link(edge))}/${hex(edge[6].sha384)}`,
-    );
-    return cached && !(cached instanceof Promise)
-      ? checkDescriptor(cached, edge)
-      : undefined;
+    const key = `${capability(link(edge))}/${hex(edge[6].sha384)}`;
+    const cached = this.cache.get(key);
+    if (!cached || "promise" in cached) return undefined;
+    const ref = checkDescriptor(cached, edge);
+    this.touch(key, cached);
+    return ref;
   }
   /** Ready cache hits remain synchronous; misses retain integrity verification. */
   private loadMaybe(edge: Edge): Reference | Promise<Reference> {
     validateEdge(edge);
     const k = `${capability(link(edge))}/${hex(edge[6].sha384)}`;
     const cached = this.cache.get(k);
-    if (cached)
-      return cached instanceof Promise
-        ? cached.then((node) => checkDescriptor(node, edge))
-        : checkDescriptor(cached, edge);
-    const pending = (async (): Promise<LoadedNode> => {
+    if (cached) {
+      if ("promise" in cached) {
+        checkBoundDescriptor(cached, edge);
+        this.touch(k, cached);
+        return cached.promise.then((node) => checkDescriptor(node, edge));
+      }
+      const ref = checkDescriptor(cached, edge);
+      this.touch(k, cached);
+      return ref;
+    }
+    const expected = { length: edge[6].length, descriptor: ownedMetadata(edgeDescriptor(edge)) };
+    const digest = new Uint8Array(edge[6].sha384);
+    const promise = (async (): Promise<LoadedNode> => {
       const b = await this.storage.get(edge);
       check(
-        b.length === edge[6].length && equal(await sha384(b), edge[6].sha384),
+        b.length === expected.length && equal(await sha384(b), digest),
         "basin node digest/length mismatch",
       );
       const ref = nodeView(b);
       const node = { ref, length: b.length, descriptor: descriptor(ref) };
-      checkDescriptor(node, edge);
+      check(node.length === expected.length && sameMetadata(node.descriptor, expected.descriptor), "edge summary mismatch");
       return node;
     })();
+    const pending: PendingNode = { ...expected, promise };
     const budget = this.options.cacheBytes ?? 16 * 1024 * 1024;
-    if (edge[6].length <= budget) {
+    if (expected.length <= budget) {
       while (
         this.cache.size &&
         (this.cache.size >= 128 ||
-          [...this.costs.values()].reduce((a, b) => a + b, 0) + edge[6].length >
+          this.cacheBytes + expected.length >
             budget)
       ) {
         const oldest = this.cache.keys().next().value!;
         this.cache.delete(oldest);
+        this.cacheBytes -= this.costs.get(oldest)!;
         this.costs.delete(oldest);
       }
       this.cache.set(k, pending);
-      this.costs.set(k, edge[6].length);
-      pending.then(
+      this.costs.set(k, expected.length);
+      this.cacheBytes += expected.length;
+      promise.then(
         (node) => {
           if (this.cache.get(k) === pending) this.cache.set(k, node);
         },
         () => {
           if (this.cache.get(k) === pending) {
             this.cache.delete(k);
+            this.cacheBytes -= this.costs.get(k)!;
             this.costs.delete(k);
           }
         },
       );
     }
-    return pending.then((node) => checkDescriptor(node, edge));
+    return promise.then((node) => checkDescriptor(node, edge));
   }
   async load(edge: Edge): Promise<Reference> {
     return this.loadMaybe(edge);

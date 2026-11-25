@@ -280,6 +280,19 @@ func (b *Basin) Seal(node Node, edges []Edge) (e Edge, err error) {
 	defer protect(&err)
 	return b.seal(node, edges), nil
 }
+func (b *Basin) touch(key string) {
+	if len(b.cacheOrder) > 0 && b.cacheOrder[len(b.cacheOrder)-1] == key {
+		return
+	}
+	for i, k := range b.cacheOrder {
+		if k == key {
+			copy(b.cacheOrder[i:], b.cacheOrder[i+1:])
+			b.cacheOrder = b.cacheOrder[:len(b.cacheOrder)-1]
+			break
+		}
+	}
+	b.cacheOrder = append(b.cacheOrder, key)
+}
 func (b *Basin) load(e Edge) Ref {
 	validateEdge(e)
 	sha := blob(field(e[6], "sha384"))
@@ -288,18 +301,8 @@ func (b *Basin) load(e Edge) Ref {
 	if !ok {
 		data = checked(b.Storage.Get(e))
 		require(len(data) == int(uint32Value(field(e[6], "length"))) && bytes.Equal(digest(data), sha), "basin node digest/length mismatch")
-		if len(data) <= b.MaxCacheBytes {
-			for len(b.cacheOrder) > 0 && (len(b.cache) >= 128 || b.cacheBytes+len(data) > b.MaxCacheBytes) {
-				old := b.cacheOrder[0]
-				b.cacheOrder = b.cacheOrder[1:]
-				b.cacheBytes -= len(b.cache[old])
-				delete(b.cache, old)
-			}
-			b.cache[k] = data
-			b.cacheOrder = append(b.cacheOrder, k)
-			b.cacheBytes += len(data)
-		}
 	}
+	require(len(data) == int(uint32Value(field(e[6], "length"))), "basin node length mismatch")
 	r := rootRef(unframe(data))
 	validateNode(r, "")
 	for i := 1; i <= 5; i++ {
@@ -307,6 +310,22 @@ func (b *Basin) load(e Edge) Ref {
 	}
 	f := r.get("6")
 	require(f.item(0).matches(field(e[6], "0"), 0) && f.item(1).matches(field(e[6], "1"), 0), "edge summary mismatch")
+	if !ok {
+		if len(data) <= b.MaxCacheBytes {
+			for len(b.cacheOrder) > 0 && (len(b.cache) >= 128 || b.cacheBytes+len(data) > b.MaxCacheBytes) {
+				old := b.cacheOrder[0]
+				copy(b.cacheOrder, b.cacheOrder[1:])
+				b.cacheOrder = b.cacheOrder[:len(b.cacheOrder)-1]
+				b.cacheBytes -= len(b.cache[old])
+				delete(b.cache, old)
+			}
+			b.cache[k] = data
+			b.cacheOrder = append(b.cacheOrder, k)
+			b.cacheBytes += len(data)
+		}
+	} else {
+		b.touch(k)
+	}
 	return r
 }
 func strconvIndex(i int) string                 { return string(rune('0' + i)) }

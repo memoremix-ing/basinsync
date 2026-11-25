@@ -4,7 +4,10 @@ use anyhow::{Context, Result, ensure};
 use hmac::{Hmac, Mac};
 use num_bigint::BigInt;
 use sha2::{Digest, Sha384};
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, VecDeque},
+    sync::Arc,
+};
 pub const DOMAIN: &str = "sync.memoremix.com";
 pub type Edge = Value;
 /// An address cannot be embedded in a parent until storage allocates its revision.
@@ -416,18 +419,34 @@ pub struct Basin<S: Storage> {
     pub max_bytes: usize,
     pub max_cache_bytes: usize,
     cache: BTreeMap<String, Arc<Vec<u8>>>,
+    cache_order: VecDeque<String>,
+    cache_bytes: usize,
 }
 impl<S: Storage> Basin<S> {
+    // At most 128 entries: promotion reuses the existing key without allocation.
+    fn touch(&mut self, key: &str) {
+        if self.cache_order.back().is_some_and(|k| k == key) {
+            return;
+        }
+        let index = self.cache_order.iter().position(|k| k == key).unwrap();
+        let key = self.cache_order.remove(index).unwrap();
+        self.cache_order.push_back(key);
+    }
     fn remember(&mut self, k: String, bytes: Arc<Vec<u8>>) {
-        self.cache.remove(&k);
+        if let Some(old) = self.cache.remove(&k) {
+            self.cache_bytes -= old.len();
+        }
+        self.cache_order.retain(|key| key != &k);
         if bytes.len() <= self.max_cache_bytes {
             while !self.cache.is_empty()
                 && (self.cache.len() >= 128
-                    || self.cache.values().map(|v| v.len()).sum::<usize>() + bytes.len()
-                        > self.max_cache_bytes)
+                    || self.cache_bytes + bytes.len() > self.max_cache_bytes)
             {
-                self.cache.pop_first();
+                let oldest = self.cache_order.pop_front().unwrap();
+                self.cache_bytes -= self.cache.remove(&oldest).unwrap().len();
             }
+            self.cache_bytes += bytes.len();
+            self.cache_order.push_back(k.clone());
             self.cache.insert(k, bytes);
         }
     }
@@ -445,6 +464,8 @@ impl<S: Storage> Basin<S> {
             max_bytes: 64 * 1024 * 1024,
             max_cache_bytes: 16 * 1024 * 1024,
             cache: BTreeMap::new(),
+            cache_order: VecDeque::new(),
+            cache_bytes: 0,
         })
     }
     fn prepare(&self, mut node: Value, edges: &[Edge]) -> Result<PreparedObject> {
@@ -529,13 +550,11 @@ impl<S: Storage> Basin<S> {
             capability(e)?,
             hex(footer(e)?.field("sha384")?.blob()?)
         );
-        let bytes = if let Some(v) = self.cache.get(&k) {
-            v.clone()
-        } else {
-            let b = self.storage.get_verified(e)?.into_bytes(e)?;
-            let bytes = Arc::new(b);
-            self.remember(k, bytes.clone());
-            bytes
+        let cached = self.cache.get(&k).cloned();
+        let missed = cached.is_none();
+        let bytes = match cached {
+            Some(bytes) => bytes,
+            None => Arc::new(self.storage.get_verified(e)?.into_bytes(e)?),
         };
         ensure!(
             bytes.len() == footer(e)?.field("length")?.number()? as usize,
@@ -560,6 +579,11 @@ impl<S: Storage> Basin<S> {
                 && value::matches(value::item(f, 1)?, footer(e)?.field("1")?)?,
             "edge summary mismatch"
         );
+        if missed {
+            self.remember(k, bytes.clone());
+        } else {
+            self.touch(&k);
+        }
         Ok(bytes)
     }
     /// Inspect only the verified local cache; never calls Storage::get.
@@ -578,6 +602,8 @@ impl<S: Storage> Basin<S> {
     }
     pub fn clear_cache(&mut self) {
         self.cache.clear();
+        self.cache_order.clear();
+        self.cache_bytes = 0;
     }
 }
 
