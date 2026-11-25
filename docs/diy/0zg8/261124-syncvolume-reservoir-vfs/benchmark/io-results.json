@@ -1,0 +1,1560 @@
+{
+  "trials": 3,
+  "profiling_enabled": false,
+  "cases": [
+    {
+      "file": "io-2048-local-flat.json",
+      "options": {
+        "--mode": "flat",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 0,
+        "--read-strategy": "lookup",
+        "--concurrency": 1,
+        "--prefetch": 0,
+        "--rounds": 1,
+        "--file-concurrency": 1,
+        "--rows": 2048,
+        "--latency-ms": 0,
+        "--mib-per-sec": 0
+      },
+      "median_backup_ms": 116.06524999999999,
+      "median_open_ms": 15.665958000000002,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 2,
+        "put_bytes": 34177024,
+        "reused": 0,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 1,
+        "get_bytes": 33914880,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    {
+      "file": "io-2048-local-lookup.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 0,
+        "--read-strategy": "lookup",
+        "--concurrency": 1,
+        "--prefetch": 0,
+        "--rounds": 1,
+        "--file-concurrency": 1,
+        "--rows": 2048,
+        "--latency-ms": 0,
+        "--mib-per-sec": 0
+      },
+      "median_backup_ms": 115.247,
+      "median_open_ms": 172.186667,
+      "backup_io": {
+        "gets": 4,
+        "get_bytes": 8669016,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 0,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 10,
+        "get_bytes": 33965688,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    {
+      "file": "io-2048-local-cursor.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 0,
+        "--read-strategy": "cursor",
+        "--concurrency": 1,
+        "--prefetch": 0,
+        "--rounds": 1,
+        "--file-concurrency": 1,
+        "--rows": 2048,
+        "--latency-ms": 0,
+        "--mib-per-sec": 0
+      },
+      "median_backup_ms": 115.789041,
+      "median_open_ms": 142.17612599999998,
+      "backup_io": {
+        "gets": 4,
+        "get_bytes": 8669016,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 0,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 10,
+        "get_bytes": 33965688,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    {
+      "file": "io-2048-local-batched.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 0,
+        "--read-strategy": "batched",
+        "--concurrency": 1,
+        "--prefetch": 0,
+        "--rounds": 1,
+        "--file-concurrency": 1,
+        "--rows": 2048,
+        "--latency-ms": 0,
+        "--mib-per-sec": 0
+      },
+      "median_backup_ms": 114.869292,
+      "median_open_ms": 95.96141700000001,
+      "backup_io": {
+        "gets": 4,
+        "get_bytes": 8669016,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 0,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 10,
+        "get_bytes": 33965688,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    {
+      "file": "io-2048-local-disk.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 1,
+        "--prefetch": 0,
+        "--rounds": 1,
+        "--file-concurrency": 1,
+        "--rows": 2048,
+        "--latency-ms": 0,
+        "--mib-per-sec": 0
+      },
+      "median_backup_ms": 118.119,
+      "median_open_ms": 99.07587500000001,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 0,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 10,
+        "get_bytes": 33965688,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    {
+      "file": "io-2048-local-prefetch.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 1,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 1,
+        "--rows": 2048,
+        "--latency-ms": 0,
+        "--mib-per-sec": 0
+      },
+      "median_backup_ms": 118.27629200000001,
+      "median_open_ms": 132.265624,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 0,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 10,
+        "get_bytes": 33965688,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 2
+      }
+    },
+    {
+      "file": "io-2048-local-parallel.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 2,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 1,
+        "--rows": 2048,
+        "--latency-ms": 0,
+        "--mib-per-sec": 0
+      },
+      "median_backup_ms": 124.486209,
+      "median_open_ms": 132.1245,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 0,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 10,
+        "get_bytes": 33965688,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 2
+      }
+    },
+    {
+      "file": "io-2048-local-full.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "full",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 2,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 1,
+        "--rows": 2048,
+        "--latency-ms": 0,
+        "--mib-per-sec": 0
+      },
+      "median_backup_ms": 192.48679099999998,
+      "median_open_ms": 126.33495899999998,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 7,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 10,
+        "get_bytes": 33965688,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 2
+      }
+    },
+    {
+      "file": "io-2048-local-files.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 2,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 2,
+        "--rows": 2048,
+        "--latency-ms": 0,
+        "--mib-per-sec": 0
+      },
+      "median_backup_ms": 103.945166,
+      "median_open_ms": 134.37904100000003,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 0,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 10,
+        "get_bytes": 33965688,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 2
+      }
+    },
+    {
+      "file": "io-2048-local-full-files.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "full",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 2,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 2,
+        "--rows": 2048,
+        "--latency-ms": 0,
+        "--mib-per-sec": 0
+      },
+      "median_backup_ms": 164.74975,
+      "median_open_ms": 134.039166,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 7,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 10,
+        "get_bytes": 33965688,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 2
+      }
+    },
+    {
+      "file": "io-2048-local-pack16.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 16,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 2,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 2,
+        "--rows": 2048,
+        "--latency-ms": 0,
+        "--mib-per-sec": 0
+      },
+      "median_backup_ms": 91.119459,
+      "median_open_ms": 204.953417,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 4,
+        "put_bytes": 853176,
+        "reused": 0,
+        "max_in_flight": 2
+      },
+      "primary_io": {
+        "gets": 131,
+        "get_bytes": 34074752,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 2
+      }
+    },
+    {
+      "file": "io-2048-local-pack128.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 128,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 2,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 2,
+        "--rows": 2048,
+        "--latency-ms": 0,
+        "--mib-per-sec": 0
+      },
+      "median_backup_ms": 95.174167,
+      "median_open_ms": 201.13104099999998,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 4,
+        "put_bytes": 1212992,
+        "reused": 6,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 129,
+        "get_bytes": 34072816,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 2
+      }
+    },
+    {
+      "file": "io-2048-local-pack256.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 256,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 2,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 2,
+        "--rows": 2048,
+        "--latency-ms": 0,
+        "--mib-per-sec": 0
+      },
+      "median_backup_ms": 104.696417,
+      "median_open_ms": 134.72625100000002,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 0,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 10,
+        "get_bytes": 33965688,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 2
+      }
+    },
+    {
+      "file": "io-2048-wan-flat.json",
+      "options": {
+        "--mode": "flat",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 0,
+        "--read-strategy": "lookup",
+        "--concurrency": 1,
+        "--prefetch": 0,
+        "--rounds": 1,
+        "--file-concurrency": 1,
+        "--rows": 2048,
+        "--latency-ms": 25,
+        "--mib-per-sec": 20
+      },
+      "median_backup_ms": 1840.070708,
+      "median_open_ms": 1728.010875,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 2,
+        "put_bytes": 34177024,
+        "reused": 0,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 1,
+        "get_bytes": 33914880,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    {
+      "file": "io-2048-wan-lookup.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 0,
+        "--read-strategy": "lookup",
+        "--concurrency": 1,
+        "--prefetch": 0,
+        "--rounds": 1,
+        "--file-concurrency": 1,
+        "--rows": 2048,
+        "--latency-ms": 25,
+        "--mib-per-sec": 20
+      },
+      "median_backup_ms": 1314.2555,
+      "median_open_ms": 2441.0023340000002,
+      "backup_io": {
+        "gets": 4,
+        "get_bytes": 8669016,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 0,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 10,
+        "get_bytes": 33965688,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    {
+      "file": "io-2048-wan-cursor.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 0,
+        "--read-strategy": "cursor",
+        "--concurrency": 1,
+        "--prefetch": 0,
+        "--rounds": 1,
+        "--file-concurrency": 1,
+        "--rows": 2048,
+        "--latency-ms": 25,
+        "--mib-per-sec": 20
+      },
+      "median_backup_ms": 1310.37275,
+      "median_open_ms": 2371.5330000000004,
+      "backup_io": {
+        "gets": 4,
+        "get_bytes": 8669016,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 0,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 10,
+        "get_bytes": 33965688,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    {
+      "file": "io-2048-wan-batched.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 0,
+        "--read-strategy": "batched",
+        "--concurrency": 1,
+        "--prefetch": 0,
+        "--rounds": 1,
+        "--file-concurrency": 1,
+        "--rows": 2048,
+        "--latency-ms": 25,
+        "--mib-per-sec": 20
+      },
+      "median_backup_ms": 1303.399875,
+      "median_open_ms": 2245.994875,
+      "backup_io": {
+        "gets": 4,
+        "get_bytes": 8669016,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 0,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 10,
+        "get_bytes": 33965688,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    {
+      "file": "io-2048-wan-disk.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 1,
+        "--prefetch": 0,
+        "--rounds": 1,
+        "--file-concurrency": 1,
+        "--rows": 2048,
+        "--latency-ms": 25,
+        "--mib-per-sec": 20
+      },
+      "median_backup_ms": 723.196458,
+      "median_open_ms": 2270.625625,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 0,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 10,
+        "get_bytes": 33965688,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    {
+      "file": "io-2048-wan-prefetch.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 1,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 1,
+        "--rows": 2048,
+        "--latency-ms": 25,
+        "--mib-per-sec": 20
+      },
+      "median_backup_ms": 717.945208,
+      "median_open_ms": 2093.260584,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 0,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 10,
+        "get_bytes": 33965688,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 2
+      }
+    },
+    {
+      "file": "io-2048-wan-parallel.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 2,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 1,
+        "--rows": 2048,
+        "--latency-ms": 25,
+        "--mib-per-sec": 20
+      },
+      "median_backup_ms": 724.13375,
+      "median_open_ms": 2099.9163750000002,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 0,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 10,
+        "get_bytes": 33965688,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 2
+      }
+    },
+    {
+      "file": "io-2048-wan-full.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "full",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 2,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 1,
+        "--rows": 2048,
+        "--latency-ms": 25,
+        "--mib-per-sec": 20
+      },
+      "median_backup_ms": 789.450917,
+      "median_open_ms": 2098.654459,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 7,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 10,
+        "get_bytes": 33965688,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 2
+      }
+    },
+    {
+      "file": "io-2048-wan-files.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 2,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 2,
+        "--rows": 2048,
+        "--latency-ms": 25,
+        "--mib-per-sec": 20
+      },
+      "median_backup_ms": 638.664875,
+      "median_open_ms": 2100.5427090000003,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 0,
+        "max_in_flight": 2
+      },
+      "primary_io": {
+        "gets": 10,
+        "get_bytes": 33965688,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 2
+      }
+    },
+    {
+      "file": "io-2048-wan-full-files.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "full",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 2,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 2,
+        "--rows": 2048,
+        "--latency-ms": 25,
+        "--mib-per-sec": 20
+      },
+      "median_backup_ms": 708.6028749999999,
+      "median_open_ms": 2091.6101670000003,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 7,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 10,
+        "get_bytes": 33965688,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 2
+      }
+    },
+    {
+      "file": "io-2048-wan-pack16.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 16,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 2,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 2,
+        "--rows": 2048,
+        "--latency-ms": 25,
+        "--mib-per-sec": 20
+      },
+      "median_backup_ms": 226.59,
+      "median_open_ms": 4282.840458000001,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 4,
+        "put_bytes": 853176,
+        "reused": 0,
+        "max_in_flight": 2
+      },
+      "primary_io": {
+        "gets": 131,
+        "get_bytes": 34074752,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 2
+      }
+    },
+    {
+      "file": "io-2048-wan-pack128.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 128,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 2,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 2,
+        "--rows": 2048,
+        "--latency-ms": 25,
+        "--mib-per-sec": 20
+      },
+      "median_backup_ms": 265.23029199999996,
+      "median_open_ms": 4234.69775,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 4,
+        "put_bytes": 1212992,
+        "reused": 6,
+        "max_in_flight": 2
+      },
+      "primary_io": {
+        "gets": 129,
+        "get_bytes": 34072816,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 2
+      }
+    },
+    {
+      "file": "io-2048-wan-pack256.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 256,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 2,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 2,
+        "--rows": 2048,
+        "--latency-ms": 25,
+        "--mib-per-sec": 20
+      },
+      "median_backup_ms": 629.306791,
+      "median_open_ms": 2088.2213340000003,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 4,
+        "put_bytes": 8669016,
+        "reused": 0,
+        "max_in_flight": 2
+      },
+      "primary_io": {
+        "gets": 10,
+        "get_bytes": 33965688,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 2
+      }
+    },
+    {
+      "file": "io-256-local-flat.json",
+      "options": {
+        "--mode": "flat",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 0,
+        "--read-strategy": "lookup",
+        "--concurrency": 1,
+        "--prefetch": 0,
+        "--rounds": 1,
+        "--file-concurrency": 1,
+        "--rows": 256,
+        "--latency-ms": 0,
+        "--mib-per-sec": 0
+      },
+      "median_backup_ms": 33.56225,
+      "median_open_ms": 2.791541,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 2,
+        "put_bytes": 4816896,
+        "reused": 0,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 1,
+        "get_bytes": 4554752,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    {
+      "file": "io-256-local-lookup.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 0,
+        "--read-strategy": "lookup",
+        "--concurrency": 1,
+        "--prefetch": 0,
+        "--rounds": 1,
+        "--file-concurrency": 1,
+        "--rows": 256,
+        "--latency-ms": 0,
+        "--mib-per-sec": 0
+      },
+      "median_backup_ms": 76.0175,
+      "median_open_ms": 23.105999999999998,
+      "backup_io": {
+        "gets": 3,
+        "get_bytes": 4826128,
+        "puts": 3,
+        "put_bytes": 4826128,
+        "reused": 0,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 2,
+        "get_bytes": 4563072,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    {
+      "file": "io-256-local-parallel.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 2,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 1,
+        "--rows": 256,
+        "--latency-ms": 0,
+        "--mib-per-sec": 0
+      },
+      "median_backup_ms": 79.19316599999999,
+      "median_open_ms": 15.737,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 3,
+        "put_bytes": 4826128,
+        "reused": 0,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 2,
+        "get_bytes": 4563072,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    {
+      "file": "io-256-local-files.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 2,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 2,
+        "--rows": 256,
+        "--latency-ms": 0,
+        "--mib-per-sec": 0
+      },
+      "median_backup_ms": 59.355125,
+      "median_open_ms": 15.697792,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 3,
+        "put_bytes": 4826128,
+        "reused": 0,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 2,
+        "get_bytes": 4563072,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    {
+      "file": "io-256-local-pack256.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 256,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 2,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 2,
+        "--rows": 256,
+        "--latency-ms": 0,
+        "--mib-per-sec": 0
+      },
+      "median_backup_ms": 92.533125,
+      "median_open_ms": 30.86825,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 5,
+        "put_bytes": 4466632,
+        "reused": 0,
+        "max_in_flight": 2
+      },
+      "primary_io": {
+        "gets": 5,
+        "get_bytes": 4564888,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 2
+      }
+    },
+    {
+      "file": "io-256-local-pack16.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 16,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 2,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 2,
+        "--rows": 256,
+        "--latency-ms": 0,
+        "--mib-per-sec": 0
+      },
+      "median_backup_ms": 75.393959,
+      "median_open_ms": 62.820874,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 4,
+        "put_bytes": 799360,
+        "reused": 0,
+        "max_in_flight": 2
+      },
+      "primary_io": {
+        "gets": 19,
+        "get_bytes": 4578376,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 2
+      }
+    },
+    {
+      "file": "io-256-wan-flat.json",
+      "options": {
+        "--mode": "flat",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 0,
+        "--read-strategy": "lookup",
+        "--concurrency": 1,
+        "--prefetch": 0,
+        "--rounds": 1,
+        "--file-concurrency": 1,
+        "--rows": 256,
+        "--latency-ms": 25,
+        "--mib-per-sec": 20
+      },
+      "median_backup_ms": 346.630291,
+      "median_open_ms": 312.48475,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 2,
+        "put_bytes": 4816896,
+        "reused": 0,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 1,
+        "get_bytes": 4554752,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    {
+      "file": "io-256-wan-lookup.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 0,
+        "--read-strategy": "lookup",
+        "--concurrency": 1,
+        "--prefetch": 0,
+        "--rounds": 1,
+        "--file-concurrency": 1,
+        "--rows": 256,
+        "--latency-ms": 25,
+        "--mib-per-sec": 20
+      },
+      "median_backup_ms": 780.0129999999999,
+      "median_open_ms": 385.44820899999996,
+      "backup_io": {
+        "gets": 3,
+        "get_bytes": 4826128,
+        "puts": 3,
+        "put_bytes": 4826128,
+        "reused": 0,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 2,
+        "get_bytes": 4563072,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    {
+      "file": "io-256-wan-parallel.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 2,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 1,
+        "--rows": 256,
+        "--latency-ms": 25,
+        "--mib-per-sec": 20
+      },
+      "median_backup_ms": 444.174417,
+      "median_open_ms": 371.326959,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 3,
+        "put_bytes": 4826128,
+        "reused": 0,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 2,
+        "get_bytes": 4563072,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    {
+      "file": "io-256-wan-files.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 2,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 2,
+        "--rows": 256,
+        "--latency-ms": 25,
+        "--mib-per-sec": 20
+      },
+      "median_backup_ms": 371.924792,
+      "median_open_ms": 369.656542,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 3,
+        "put_bytes": 4826128,
+        "reused": 0,
+        "max_in_flight": 2
+      },
+      "primary_io": {
+        "gets": 2,
+        "get_bytes": 4563072,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    {
+      "file": "io-256-wan-pack256.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 256,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 2,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 2,
+        "--rows": 256,
+        "--latency-ms": 25,
+        "--mib-per-sec": 20
+      },
+      "median_backup_ms": 416.015375,
+      "median_open_ms": 456.22724900000003,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 5,
+        "put_bytes": 4466632,
+        "reused": 0,
+        "max_in_flight": 2
+      },
+      "primary_io": {
+        "gets": 5,
+        "get_bytes": 4564888,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 2
+      }
+    },
+    {
+      "file": "io-256-wan-pack16.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 16,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 2,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 2,
+        "--rows": 256,
+        "--latency-ms": 25,
+        "--mib-per-sec": 20
+      },
+      "median_backup_ms": 218.320583,
+      "median_open_ms": 699.565917,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 4,
+        "put_bytes": 799360,
+        "reused": 0,
+        "max_in_flight": 2
+      },
+      "primary_io": {
+        "gets": 19,
+        "get_bytes": 4578376,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 2
+      }
+    },
+    {
+      "file": "io-256-slow-flat.json",
+      "options": {
+        "--mode": "flat",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 0,
+        "--read-strategy": "lookup",
+        "--concurrency": 1,
+        "--prefetch": 0,
+        "--rounds": 1,
+        "--file-concurrency": 1,
+        "--rows": 256,
+        "--latency-ms": 25,
+        "--mib-per-sec": 2
+      },
+      "median_backup_ms": 2421.223292,
+      "median_open_ms": 2382.8440410000003,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 2,
+        "put_bytes": 4816896,
+        "reused": 0,
+        "max_in_flight": 1
+      },
+      "primary_io": {
+        "gets": 1,
+        "get_bytes": 4554752,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    {
+      "file": "io-256-slow-files.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 1280,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 2,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 2,
+        "--rows": 256,
+        "--latency-ms": 25,
+        "--mib-per-sec": 2
+      },
+      "median_backup_ms": 2425.040708,
+      "median_open_ms": 2445.4833750000003,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 3,
+        "put_bytes": 4826128,
+        "reused": 0,
+        "max_in_flight": 2
+      },
+      "primary_io": {
+        "gets": 2,
+        "get_bytes": 4563072,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 1
+      }
+    },
+    {
+      "file": "io-256-slow-pack256.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 256,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 2,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 2,
+        "--rows": 256,
+        "--latency-ms": 25,
+        "--mib-per-sec": 2
+      },
+      "median_backup_ms": 2304.465917,
+      "median_open_ms": 2524.0861239999995,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 5,
+        "put_bytes": 4466632,
+        "reused": 0,
+        "max_in_flight": 2
+      },
+      "primary_io": {
+        "gets": 5,
+        "get_bytes": 4564888,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 2
+      }
+    },
+    {
+      "file": "io-256-slow-pack16.json",
+      "options": {
+        "--mode": "eager",
+        "--summary": "crc64nvme",
+        "--export": "incremental",
+        "--writer-cache": "cold",
+        "--inline-pages": 16,
+        "--disk-cache-mib": 128,
+        "--read-strategy": "batched",
+        "--concurrency": 2,
+        "--prefetch": 2,
+        "--rounds": 1,
+        "--file-concurrency": 2,
+        "--rows": 256,
+        "--latency-ms": 25,
+        "--mib-per-sec": 2
+      },
+      "median_backup_ms": 559.165625,
+      "median_open_ms": 2784.604292,
+      "backup_io": {
+        "gets": 0,
+        "get_bytes": 0,
+        "puts": 4,
+        "put_bytes": 799360,
+        "reused": 0,
+        "max_in_flight": 2
+      },
+      "primary_io": {
+        "gets": 19,
+        "get_bytes": 4578376,
+        "puts": 0,
+        "put_bytes": 0,
+        "reused": 0,
+        "max_in_flight": 2
+      }
+    }
+  ]
+}

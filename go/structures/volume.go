@@ -13,71 +13,20 @@ const VolumePath = ".sync-volume/"
 const BlockPath = ".sync-block/"
 const PageSize = 4096
 
-var slPrime = new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 127), big.NewInt(1))
-
-type slMatrix = [4]*big.Int
-
-func slIdentity() slMatrix { return slMatrix{big.NewInt(1), new(big.Int), new(big.Int), big.NewInt(1)} }
-func slBytes(m slMatrix) []byte {
-	out := make([]byte, 64)
-	for i, n := range m {
-		n.FillBytes(out[i*16 : (i+1)*16])
-	}
-	return out
-}
-func slRead(b []byte) slMatrix {
-	require(len(b) == 64, "invalid SL2 length")
-	var m slMatrix
-	for i := range m {
-		m[i] = new(big.Int).SetBytes(b[i*16 : (i+1)*16])
-		require(m[i].Cmp(slPrime) < 0, "noncanonical SL2 field")
-	}
-	d := new(big.Int).Sub(new(big.Int).Mul(m[0], m[3]), new(big.Int).Mul(m[1], m[2]))
-	require(d.Mod(d, slPrime).Cmp(big.NewInt(1)) == 0, "invalid SL2 determinant")
-	return m
-}
-func slMultiply(a, b slMatrix) slMatrix {
-	dot := func(x, y, z, w *big.Int) *big.Int {
-		n := new(big.Int).Add(new(big.Int).Mul(x, y), new(big.Int).Mul(z, w))
-		return n.Mod(n, slPrime)
-	}
-	return slMatrix{dot(a[0], b[0], a[1], b[2]), dot(a[0], b[1], a[1], b[3]), dot(a[2], b[0], a[3], b[2]), dot(a[2], b[1], a[3], b[3])}
-}
-func Bromberg(input []byte) []byte {
-	m := slIdentity()
-	for _, b := range input {
-		for bit := 7; bit >= 0; bit-- {
-			if (b>>bit)&1 == 1 {
-				m[1].Add(m[1], new(big.Int).Lsh(new(big.Int).Set(m[0]), 1)).Mod(m[1], slPrime)
-				m[3].Add(m[3], new(big.Int).Lsh(new(big.Int).Set(m[2]), 1)).Mod(m[3], slPrime)
-			} else {
-				m[0].Add(m[0], new(big.Int).Lsh(new(big.Int).Set(m[1]), 1)).Mod(m[0], slPrime)
-				m[2].Add(m[2], new(big.Int).Lsh(new(big.Int).Set(m[3]), 1)).Mod(m[2], slPrime)
-			}
-		}
-	}
-	return slBytes(m)
-}
-func combineSL(digests [][]byte) []byte {
-	m := slIdentity()
-	for _, b := range digests {
-		m = slMultiply(m, slRead(b))
-	}
-	return slBytes(m)
-}
 func sectorConsumer() Consumer {
-	return Consumer{Empty: map[string]any{"brombergSL2": slBytes(slIdentity()), "size": new(big.Int)}, Entry: func(_ []byte, v any) (any, error) {
+	return Consumer{Migration: 1, Empty: map[string]any{"crc64nvme": make([]byte, 8), "size": new(big.Int)}, Entry: func(_ []byte, v any) (any, error) {
 		a := array(v)
 		require(len(a) == 1, "invalid page")
-		return map[string]any{"brombergSL2": Bromberg(blob(a[0])), "size": big.NewInt(int64(len(blob(a[0]))))}, nil
-	}, Combine: func(v []any) (any, error) {
-		parts := make([][]byte, len(v))
-		size := new(big.Int)
-		for i, s := range v {
-			parts[i] = blob(field(s, "brombergSL2"))
-			size.Add(size, bigint(field(s, "size")))
+		data := blob(a[0])
+		return map[string]any{"crc64nvme": CRC64NVME(data), "size": big.NewInt(int64(len(data)))}, nil
+	}, Combine: func(parts []any) (any, error) {
+		sum, length := make([]byte, 8), new(big.Int)
+		for _, part := range parts {
+			n := bigint(field(part, "size"))
+			sum = CombineCRC64NVME(sum, blob(field(part, "crc64nvme")), n)
+			length.Add(length, n)
 		}
-		return map[string]any{"brombergSL2": combineSL(parts), "size": size}, nil
+		return map[string]any{"crc64nvme": sum, "size": length}, nil
 	}}
 }
 func lex(n *big.Int) string {
@@ -434,14 +383,14 @@ func BuildBlock(b *Basin, input []PageInput) (block BlockRoot, err error) {
 	}
 	t := checked(BuildNode(b, rows, sectorConsumer()))
 	leading, lagging := pageSpine(b, t.Node, false), pageSpine(b, t.Node, true)
-	sum := blob(field(at(t.Node["6"], 1), "brombergSL2"))
+	sum := blob(field(at(t.Node["6"], 1), "crc64nvme"))
 	var source any = t.Node
 	edges := t.Edges
 	if integer(field(t.Node["5"], "inlined")) > 1280 {
 		source = b.seal(t.Node, t.Edges)
 		edges = []Edge{array(source)}
 	}
-	n := Node{"0": Symbol{Name: "species"}, "1": Domain, "2": BlockPath, "3": query(edges, b.MaxDegree, b.MaxHeight), "4": int64(0), "5": nil, "6": vector(int64(0), nil, source, leading, lagging)}
+	n := Node{"0": Symbol{Name: "species"}, "1": Domain, "2": BlockPath, "3": query(edges, b.MaxDegree, b.MaxHeight), "4": int64(0), "5": nil, "6": vector(int64(1), nil, source, leading, lagging)}
 	return BlockRoot{b.seal(n, edges), sum}, nil
 }
 func pageRoot(b *Basin, footer Ref) Ref {
@@ -479,7 +428,7 @@ func VolumeFromBlocks(b *Basin, blocks map[string]BlockRoot, directories ...stri
 	for name, block := range blocks {
 		path(name)
 		validateEdge(block.Edge)
-		require(text(block.Edge[2]) == BlockPath && len(block.Digest) == 64, "invalid block descriptor")
+		require(text(block.Edge[2]) == BlockPath && len(block.Digest) == 8 && integer(field(block.Edge[6], "0")) == 1, "invalid block descriptor")
 		files[name] = struct {
 			edge Edge
 			sum  []byte
@@ -538,14 +487,14 @@ func VolumeFromBlocks(b *Basin, blocks map[string]BlockRoot, directories ...stri
 		descriptor[4] = e
 		edges = []Edge{e}
 	}
-	node := Node{"0": Symbol{Name: "species"}, "1": Domain, "2": VolumePath, "3": query(edges, b.MaxDegree, b.MaxHeight), "4": int64(0), "5": nil, "6": vector(int64(0), nil, descriptor)}
+	node := Node{"0": Symbol{Name: "species"}, "1": Domain, "2": VolumePath, "3": query(edges, b.MaxDegree, b.MaxHeight), "4": int64(0), "5": nil, "6": vector(int64(1), nil, descriptor)}
 	return b.seal(node, edges), nil
 }
 func volumeData(b *Basin, root Edge) Ref {
 	r := b.load(root)
 	validateNode(r, VolumePath)
 	f := r.get("6")
-	require(f.len() == 3 && integer(f.item(0).owned(0)) == 0, "unsupported volume migration")
+	require(f.len() == 3 && integer(f.item(0).owned(0)) == 1, "unsupported volume migration")
 	return f
 }
 func List(b *Basin, root Edge, name string) (names []string, err error) {
@@ -576,8 +525,8 @@ func openBlock(b *Basin, root Edge, name string, shortcuts bool) (footer Ref, ex
 	block := b.load(array(file.item(2).owned(0)))
 	validateNode(block, BlockPath)
 	footer = block.get("6")
-	require(footer.len() == 5, "unsupported block migration")
-	sum := blob(field(sectorSummary(footer), "brombergSL2"))
+	require(footer.len() == 5 && integer(footer.item(0).owned(0)) == 1, "unsupported block migration")
+	sum := blob(field(sectorSummary(footer), "crc64nvme"))
 	require(bytes.Equal(sum, file.item(1).bytes()), "block checksum mismatch")
 	return footer, sum, nil
 }
@@ -594,7 +543,7 @@ func ReadFile(b *Basin, root Edge, name string, shortcuts bool) (data []byte, er
 	}
 	pages := []page{}
 	end := 0
-	visitInline(b, pageRoot(b, footer), nil, nil, 0, func(any, any) bool { return true }, func(k []byte, r Ref) (bool, error) {
+	visitInline(b, pageRoot(b, footer), nil, nil, 1, func(any, any) bool { return true }, func(k []byte, r Ref) (bool, error) {
 		p := unlex(string(k))
 		offset := new(big.Int).Mul(p, big.NewInt(PageSize))
 		require(offset.IsInt64() && offset.Sign() >= 0 && offset.Int64() <= int64(b.MaxBytes), "file read byte limit")
@@ -613,7 +562,7 @@ func ReadFile(b *Basin, root Edge, name string, shortcuts bool) (data []byte, er
 	for _, p := range pages {
 		copy(data[p.at:], p.data)
 	}
-	require(bytes.Equal(Bromberg(data), expected), "file checksum mismatch")
+	require(bytes.Equal(CRC64NVME(data), expected), "file checksum mismatch")
 	return data, nil
 }
 
@@ -651,7 +600,7 @@ func shortcutPage(b *Basin, footer Ref, full []byte) (value any, err error) {
 			if keys == nil || bytes.Compare(k, blob(at(keys, 0))) < 0 || bytes.Compare(k, blob(at(keys, 1))) > 0 {
 				return nil, nil
 			}
-			r := getInline(b, b.load(edge), k, 0)
+			r := getInline(b, b.load(edge), k, 1)
 			if r == nil {
 				return nil, nil
 			}
@@ -665,7 +614,7 @@ func shortcutPage(b *Basin, footer Ref, full []byte) (value any, err error) {
 }
 func pageValue(b *Basin, f Ref, full []byte, shortcuts bool) any {
 	if root := readySource(b, f.item(2)); root != nil {
-		v, ready := lookupInline(b, *root, full, 0, true)
+		v, ready := lookupInline(b, *root, full, 1, true)
 		if ready {
 			if v == nil {
 				return nil
@@ -679,7 +628,7 @@ func pageValue(b *Basin, f Ref, full []byte, shortcuts bool) any {
 			return v
 		}
 	}
-	v := getInline(b, pageRoot(b, f), full, 0)
+	v := getInline(b, pageRoot(b, f), full, 1)
 	if v == nil {
 		return nil
 	}

@@ -1,0 +1,442 @@
+//! Real Turso, identical SQL and disk COW; only backup layout and loading vary.
+#[path = "../tests/support/volume_store.rs"]
+mod objects;
+use anyhow::{Context, Result, ensure};
+use basinsync::structures::volume::Algorithm;
+use basinsync::{
+    structures::{basin::Basin, profile},
+    turso::{
+        self,
+        volume::{
+            Backup, DatabaseFile, LoadMode, ReadStrategy, SyncVolume, cache::DiskCache,
+            checkpoint_parallel, checkpoint_with_algorithm,
+        },
+    },
+};
+use objects::{DiskObjects, Stats};
+use serde::Serialize;
+struct Experiment {
+    append_rows: usize,
+    algorithm: Algorithm,
+    incremental: bool,
+    warm_writer: bool,
+    disk_cache_bytes: u64,
+    read_strategy: ReadStrategy,
+    concurrency: usize,
+    file_concurrency: usize,
+    prefetch: usize,
+}
+use std::time::{Duration, Instant};
+#[derive(Serialize)]
+struct Phase {
+    ms: f64,
+    io: Stats,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    profile: Option<profile::Report>,
+}
+fn measure<T>(store: &DiskObjects, f: impl FnOnce() -> Result<T>) -> Result<(T, Phase)> {
+    store.reset();
+    profile::start();
+    let t = Instant::now();
+    let result = {
+        let _profile = profile::span("phase");
+        f()?
+    };
+    let ms = t.elapsed().as_secs_f64() * 1000.;
+    let profile = profile::finish();
+    Ok((
+        result,
+        Phase {
+            ms,
+            io: store.stats(),
+            profile: profile::ENABLED.then_some(profile),
+        },
+    ))
+}
+fn scalar(db: &DatabaseFile, sql: &str) -> Result<i64> {
+    let mut result = 0;
+    db.connection().prepare(sql)?.run_with_row_callback(|r| {
+        result = r.get(0)?;
+        Ok(())
+    })?;
+    Ok(result)
+}
+#[derive(Serialize)]
+struct Sample {
+    profiling_enabled: bool,
+    mode: String,
+    round: usize,
+    rows: usize,
+    append_rows: usize,
+    inline_pages: usize,
+    summary: String,
+    incremental: bool,
+    warm_writer: bool,
+    disk_cache_bytes: u64,
+    read_strategy: String,
+    concurrency: usize,
+    file_concurrency: usize,
+    prefetch: usize,
+    latency_ms: u64,
+    mib_per_sec: u64,
+    database_bytes: u64,
+    kernel_bytes: u64,
+    initial_backup_bytes: u64,
+    load_primary: Phase,
+    first_query: Phase,
+    load_kernel: Phase,
+    hydrate_all: Phase,
+    warm_queries: Phase,
+    local_commit: Phase,
+    backup: Phase,
+}
+fn sample(
+    mode: &str,
+    round: usize,
+    rows: usize,
+    inline_pages: usize,
+    latency_ms: u64,
+    mib_per_sec: u64,
+    experiment: &Experiment,
+) -> Result<Sample> {
+    let directory = tempfile::tempdir()?;
+    let mut store = DiskObjects::new(directory.path())?;
+    store.concurrency = experiment.concurrency;
+    store.request_limit = experiment
+        .concurrency
+        .max(experiment.prefetch)
+        .max(experiment.file_concurrency);
+    let cache_directory = directory.path().join("encoded-cache");
+    let mut primary = DatabaseFile::create(turso::SCHEMA)?;
+    primary
+        .connection()
+        .execute("CREATE TABLE payload(id INTEGER PRIMARY KEY,body BLOB)")?;
+    primary.connection().execute("BEGIN CONCURRENT")?;
+    for id in 0..rows {
+        primary
+            .connection()
+            .execute(format!("INSERT INTO payload VALUES({id},zeroblob(12000))"))?;
+    }
+    primary.connection().execute("COMMIT")?;
+    let mut kernel = DatabaseFile::create(basinsync::kernel::SCHEMA)?;
+    let original = primary.snapshot()?;
+    let companion = kernel.snapshot()?;
+    let image = original.image()?;
+    let kernel_image = companion.image()?;
+    drop(primary);
+    drop(kernel);
+    let archive = if mode == "flat" {
+        store.write_raw("initial/default.turso", &image)?;
+        store.write_raw("initial/kernel.turso", &kernel_image)?;
+        None
+    } else {
+        Some(Backup::create(
+            &mut Basin::new(
+                DiskCache::new(store.clone(), &cache_directory, 0)?,
+                vec![42; 32],
+            )?,
+            vec![
+                ("/default.turso".into(), original.clone()),
+                ("/kernel.turso".into(), companion.clone()),
+            ],
+            inline_pages,
+            experiment.algorithm,
+        )?)
+    };
+    let root = archive.as_ref().map(|b| b.root().clone());
+    let initial_backup_bytes = store.stats().put_bytes;
+    store.delay = Duration::from_millis(latency_ms);
+    store.bytes_per_second = mib_per_sec * 1024 * 1024;
+    let mounted = root.as_ref().map(|r| {
+        SyncVolume::new(
+            Basin::new(
+                DiskCache::new(store.clone(), &cache_directory, experiment.disk_cache_bytes)
+                    .unwrap()
+                    .with_prefetch(experiment.prefetch),
+                vec![42; 32],
+            )
+            .unwrap(),
+            r.clone(),
+            mode.parse::<LoadMode>().unwrap(),
+        )
+        .with_read_strategy(experiment.read_strategy)
+    });
+    let (mut primary, load_primary) = measure(&store, || match &mounted {
+        Some(v) => v.open("/default.turso"),
+        None => DatabaseFile::from_image(&store.read_raw("initial/default.turso")?),
+    })?;
+    let (_, first_query) = measure(&store, || {
+        ensure!(
+            scalar(
+                &primary,
+                &format!("SELECT length(body) FROM payload WHERE id={}", rows - 1)
+            )? == 12000,
+            "point query mismatch"
+        );
+        Ok(())
+    })?;
+    let (mut kernel, load_kernel) = measure(&store, || match &mounted {
+        Some(v) => v.open("/kernel.turso"),
+        None => DatabaseFile::from_image(&store.read_raw("initial/kernel.turso")?),
+    })?;
+    // Keep complete-file verification separate from the subsequent warm/backup timings.
+    let (_, hydrate_all) = measure(&store, || {
+        ensure!(
+            primary.snapshot()?.image()? == image && kernel.snapshot()?.image()? == kernel_image,
+            "restored image mismatch"
+        );
+        Ok(())
+    })?;
+    let (_, warm_queries) = measure(&store, || {
+        for n in 0..64 {
+            ensure!(
+                scalar(
+                    &primary,
+                    &format!(
+                        "SELECT length(body) FROM payload WHERE id={}",
+                        (n * 7919) % rows
+                    )
+                )? == 12000,
+                "warm query mismatch"
+            );
+        }
+        Ok(())
+    })?;
+    let ((next, next_kernel), local_commit) = measure(&store, || {
+        primary.connection().execute(format!(
+            "UPDATE payload SET body=x'{}' WHERE id={}",
+            "01".repeat(12000),
+            rows / 2
+        ))?;
+        if experiment.append_rows > 0 {
+            let end = rows
+                .checked_add(experiment.append_rows)
+                .context("row count overflow")?;
+            primary.connection().execute("BEGIN CONCURRENT")?;
+            for id in rows..end {
+                primary
+                    .connection()
+                    .execute(format!("INSERT INTO payload VALUES({id},zeroblob(12000))"))?;
+            }
+            primary.connection().execute("COMMIT")?;
+        }
+        kernel
+            .connection()
+            .execute("UPDATE kernel_state SET activity='1' WHERE id=1")?;
+        Ok((primary.snapshot()?, kernel.snapshot()?))
+    })?;
+    let (new_root, backup) = measure(&store, || {
+        if let Some(previous) = &archive {
+            let files = vec![
+                ("/default.turso".into(), next.clone()),
+                ("/kernel.turso".into(), next_kernel.clone()),
+            ];
+            let mut b = if experiment.warm_writer {
+                mounted.as_ref().unwrap().cached_basin()
+            } else {
+                Basin::new(
+                    DiskCache::new(store.clone(), &cache_directory, experiment.disk_cache_bytes)?,
+                    vec![42; 32],
+                )?
+            };
+            b.storage.origin = store.clone();
+            Ok(Some(if experiment.incremental {
+                previous
+                    .advance_parallel(&mut b, files, experiment.file_concurrency)?
+                    .root()
+                    .clone()
+            } else if experiment.file_concurrency > 1 {
+                checkpoint_parallel(
+                    &mut b,
+                    Some(previous.root()),
+                    files,
+                    inline_pages,
+                    experiment.file_concurrency,
+                )?
+            } else {
+                checkpoint_with_algorithm(
+                    &mut b,
+                    Some(previous.root()),
+                    files,
+                    inline_pages,
+                    experiment.algorithm,
+                )?
+            }))
+        } else {
+            for (name, view) in [("default.turso", &next), ("kernel.turso", &next_kernel)] {
+                let (file, _digest) = {
+                    let _profile = profile::span("flat.export");
+                    view.export()?
+                };
+                store.write_raw(&format!("next/{name}"), &std::fs::read(file.path())?)?;
+            }
+            Ok(None)
+        }
+    })?;
+    store.delay = Duration::ZERO;
+    store.bytes_per_second = 0;
+    // Both old and new bytes are independently checked after publication.
+    ensure!(
+        original.image()? == image && companion.image()? == kernel_image,
+        "backup altered an old generation"
+    );
+    if let Some(root) = new_root {
+        let mount = SyncVolume::new(
+            Basin::new(store.clone(), vec![42; 32])?,
+            root,
+            LoadMode::LazyPages,
+        );
+        let mut p = mount.open("/default.turso")?;
+        let mut k = mount.open("/kernel.turso")?;
+        ensure!(
+            p.snapshot()?.image()? == next.image()?
+                && k.snapshot()?.image()? == next_kernel.image()?,
+            "incremental backup mismatch"
+        );
+    } else {
+        ensure!(
+            store.read_raw("next/default.turso")? == next.image()?
+                && store.read_raw("next/kernel.turso")? == next_kernel.image()?,
+            "flat backup mismatch"
+        );
+    }
+    Ok(Sample {
+        profiling_enabled: profile::ENABLED,
+        mode: mode.into(),
+        round,
+        rows,
+        append_rows: experiment.append_rows,
+        inline_pages,
+        summary: match experiment.algorithm {
+            Algorithm::Crc64Nvme => "crc64nvme",
+        }
+        .into(),
+        incremental: experiment.incremental,
+        warm_writer: experiment.warm_writer,
+        disk_cache_bytes: experiment.disk_cache_bytes,
+        read_strategy: format!("{:?}", experiment.read_strategy).to_lowercase(),
+        concurrency: experiment.concurrency,
+        file_concurrency: experiment.file_concurrency,
+        prefetch: experiment.prefetch,
+        latency_ms,
+        mib_per_sec,
+        database_bytes: image.len() as u64,
+        kernel_bytes: kernel_image.len() as u64,
+        initial_backup_bytes,
+        load_primary,
+        first_query,
+        load_kernel,
+        hydrate_all,
+        warm_queries,
+        local_commit,
+        backup,
+    })
+}
+fn main() -> Result<()> {
+    let args = std::env::args().skip(1).collect::<Vec<_>>();
+    ensure!(
+        args.len().is_multiple_of(2),
+        "expected --name value options"
+    );
+    let mut options = std::collections::BTreeMap::new();
+    for p in args.chunks_exact(2) {
+        ensure!(
+            [
+                "--rows",
+                "--append-rows",
+                "--rounds",
+                "--latency-ms",
+                "--mib-per-sec",
+                "--inline-pages",
+                "--mode",
+                "--summary",
+                "--export",
+                "--disk-cache-mib",
+                "--read-strategy",
+                "--concurrency",
+                "--file-concurrency",
+                "--prefetch",
+                "--writer-cache"
+            ]
+            .contains(&p[0].as_str()),
+            "unknown option"
+        );
+        options.insert(p[0].as_str(), p[1].as_str());
+    }
+    let number = |name, default| -> Result<usize> {
+        Ok(options.get(name).map_or(Ok(default), |s| s.parse())?)
+    };
+    let rows = number("--rows", 256)?;
+    let rounds = number("--rounds", 3)?;
+    let inline = number("--inline-pages", 1280)?;
+    let algorithm = match options.get("--summary").copied().unwrap_or("crc64nvme") {
+        "crc64nvme" => Algorithm::Crc64Nvme,
+        _ => anyhow::bail!("expected crc64nvme"),
+    };
+    let incremental = match options.get("--export").copied().unwrap_or("incremental") {
+        "incremental" => true,
+        "full" => false,
+        _ => anyhow::bail!("expected incremental or full"),
+    };
+    let experiment = Experiment {
+        append_rows: number("--append-rows", 0)?,
+        disk_cache_bytes: u64::try_from(number("--disk-cache-mib", 128)?)?
+            .checked_mul(1024 * 1024)
+            .context("cache size overflow")?,
+        concurrency: number("--concurrency", 2)?,
+        file_concurrency: number("--file-concurrency", 2)?,
+        prefetch: number("--prefetch", 2)?,
+        read_strategy: match options.get("--read-strategy").copied().unwrap_or("batched") {
+            "lookup" => ReadStrategy::Lookup,
+            "cursor" => ReadStrategy::Cursor,
+            "batched" => ReadStrategy::Batched,
+            _ => anyhow::bail!("expected lookup, cursor or batched"),
+        },
+        algorithm,
+        incremental,
+        warm_writer: match options.get("--writer-cache").copied().unwrap_or("cold") {
+            "cold" => false,
+            "warm" => true,
+            _ => anyhow::bail!("expected warm or cold writer cache"),
+        },
+    };
+    ensure!(
+        (1..=32).contains(&experiment.file_concurrency),
+        "invalid file concurrency"
+    );
+    ensure!(experiment.prefetch <= 32, "invalid prefetch slots");
+    ensure!(
+        (1..=32).contains(&experiment.concurrency),
+        "invalid concurrency"
+    );
+    ensure!(rows > 0 && rounds > 0, "positive rows/rounds required");
+    let latency = number("--latency-ms", 0)? as u64;
+    let bandwidth = number("--mib-per-sec", 0)? as u64;
+    let mode = options.get("--mode").copied().unwrap_or("all");
+    ensure!(
+        ["all", "flat", "lazy", "eager"].contains(&mode),
+        "invalid mode"
+    );
+    let mut samples = vec![];
+    for round in 0..rounds {
+        let mut modes = if mode == "all" {
+            vec!["flat", "lazy", "eager"]
+        } else {
+            vec![mode]
+        };
+        if round % 2 == 1 {
+            modes.reverse();
+        }
+        for mode in modes {
+            let s = sample(mode, round, rows, inline, latency, bandwidth, &experiment)
+                .context(format!("{mode} round {round}"))?;
+            eprintln!(
+                "{mode} round {round}: open {:.1} ms, backup {:.1} ms / {} bytes",
+                s.load_primary.ms, s.backup.ms, s.backup.io.put_bytes
+            );
+            samples.push(s);
+        }
+    }
+    println!("{}", serde_json::to_string_pretty(&samples)?);
+    Ok(())
+}

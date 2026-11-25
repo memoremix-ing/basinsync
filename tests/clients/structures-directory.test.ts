@@ -66,7 +66,7 @@ test("volume updates read metadata but no unchanged file or sector bodies", asyn
   storage.get = async (e) => {
     if (
       e[2] === ".sync-block/" ||
-      (e[2] === ".trie-node/" && (e[6][1] as any)?.brombergSL2)
+      (e[2] === ".trie-node/" && (e[6][1] as any)?.crc64nvme)
     )
       throw Error("unchanged body fetched");
     return get(e);

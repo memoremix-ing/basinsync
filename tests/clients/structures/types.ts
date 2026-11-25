@@ -142,7 +142,7 @@ export type TrieNest<
 
 interface SyncVolume_S0 extends BasinNode_S0<
   "sync.memoremix.com", ".sync-volume/", null,
-  { 0: [summary: null, root: SyncDirectory_M0] }
+  { 1: [summary: null, root: SyncDirectory_M0] }
 > {}
 
 type SyncDirectory_M0 = [
@@ -154,13 +154,13 @@ type SyncDirectory_M0 = [
 ];
 
 type SyncDirectoryContents_M0 = TrieNode_S0<{
-  0: { Summary: null; Value: SyncDirectory_M0 | SyncFile_M0 };
+  0: { Summary: null; Value: SyncDirectory_M0 | SyncFile_M1 };
 }>;
 
-type SyncFile_M0 = [
+type SyncFile_M1 = [
   folder: false,
-  brombergSL2: Uint8Array,
-  edge: BasinEdge_S0<SyncBlock_M0>,
+  crc64nvme: Uint8Array,
+  edge: BasinEdge_S0<SyncBlock_M1>,
 ];
 
 type SyncLink_M0<LazyT extends BasinNode_S0<string, string>> = {
@@ -171,12 +171,12 @@ type SyncLink_M0<LazyT extends BasinNode_S0<string, string>> = {
   [Symbol.unscopables]?: LazyT;
 };
 
-interface SyncBlock_M0 extends BasinNode_S0<
+interface SyncBlock_M1 extends BasinNode_S0<
   "sync.memoremix.com", ".sync-block/", null,
   {
-    0: [
+    1: [
       summary: null,
-      pages: SyncSector_M0 | BasinEdge_S0<SyncSector_M0>,
+      pages: SyncSector_M1 | BasinEdge_S0<SyncSector_M1>,
       leading: Array<null | SyncPageLink_M0>,
       lagging: Array<null | SyncPageLink_M0>,
     ];
@@ -186,13 +186,13 @@ interface SyncBlock_M0 extends BasinNode_S0<
 type SyncPageLink_M0 = {
   prefix: Uint8Array; // absolute key prefix removed before traversing the target
   sha384: Uint8Array; // SHA-384 of the complete target basin-node EnvBuf
-  link: SyncLink_M0<SyncSector_M0>;
+  link: SyncLink_M0<SyncSector_M1>;
 };
 
-export type SyncSector_M0 = TrieNode_S0<{
-  0: {
+export type SyncSector_M1 = TrieNode_S0<{
+  1: {
     Summary: {
-      brombergSL2: Uint8Array; // homomorphic checksum over the blobs in the page range
+      crc64nvme: Uint8Array; // eight-byte big-endian checksum over page bytes
       size: bigint; // sum of blob bytes, excluding keys and envelopes
     };
 

@@ -238,6 +238,7 @@ impl Serialize for Value {
     }
 }
 pub fn encode(value: &Value) -> Result<Vec<u8>> {
+    let _profile = crate::profile::span("flexbuffers.encode");
     let mut bytes = flexbuffers::to_vec(value)?;
     let base = bytes.as_ptr() as usize;
     let mut patches = Vec::new();
@@ -280,6 +281,7 @@ pub fn encode(value: &Value) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 pub fn read(r: Reader<&[u8]>) -> Result<Value> {
+    let _profile = crate::profile::span("flexbuffers.decode");
     fn inner(r: Reader<&[u8]>, depth: usize) -> Result<Value> {
         ensure!(depth < 1024, "value nesting limit");
         Ok(match r.flexbuffer_type() {

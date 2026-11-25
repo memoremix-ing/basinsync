@@ -30,29 +30,29 @@ import {
 } from "./trie";
 import { encode, toReference, Reference } from "../flexbuffer";
 import { encode as lex, decode as unlex } from "../lexidecimal";
-import * as sl2 from "./bromberg";
+import * as crc from "./crc64nvme";
 export const VOLUME = ".sync-volume/",
   BLOCK = ".sync-block/",
   PAGE_SIZE = 4096;
 export type Directory = [true, Uint8Array, Record<string, Directory | File>];
 export type File = [false, Uint8Array, Edge];
-export type SectorSummary = { brombergSL2: Uint8Array; size: bigint };
+export type SectorSummary = { crc64nvme: Uint8Array; size: bigint };
 export const sectors: Consumer<[Uint8Array], SectorSummary> =
   composableConsumer<[Uint8Array], SectorSummary>(
     {
-      migration: 0,
-      empty: { brombergSL2: sl2.bytes(sl2.identity()), size: 0n },
+      migration: 1,
+      empty: { crc64nvme: new Uint8Array(8), size: 0n },
       entry: (_k, v) => {
         check(
           Array.isArray(v) && v.length === 1 && v[0] instanceof Uint8Array,
           "invalid page",
         );
-        return { brombergSL2: sl2.hash(v[0]), size: BigInt(v[0].length) };
+        return { crc64nvme: crc.hash(v[0]), size: BigInt(v[0].length) };
       },
-      combine: (s) => ({
-        brombergSL2: sl2.combine(s.map((v) => v.brombergSL2)),
-        size: s.reduce((n, v) => n + v.size, 0n),
-      }),
+      combine: (parts) => parts.reduce((a, b) => ({
+        crc64nvme: crc.combine(a.crc64nvme, b.crc64nvme, b.size),
+        size: a.size + b.size,
+      }), { crc64nvme: new Uint8Array(8), size: 0n }),
     },
     { keyIndependent: true },
   );
@@ -380,11 +380,11 @@ export async function buildBlock(
     ),
     4: 0,
     5: null,
-    6: [0, null, pagesRoot, leading, lagging],
+    6: [1, null, pagesRoot, leading, lagging],
   } as Node;
   return {
     edge: await basin.seal(node, edges),
-    digest: t.node[6][1].brombergSL2,
+    digest: t.node[6][1].crc64nvme,
   };
 }
 export type VolumeTransferOptions = { replace?: boolean };
@@ -456,7 +456,7 @@ async function sealVolume(basin: Basin, root: Directory): Promise<Volume> {
     ),
     4: 0,
     5: null,
-    6: [0, null, descriptor],
+    6: [1, null, descriptor],
   } as Node;
   return new Volume(basin, await basin.seal(node, edges));
 }
@@ -466,7 +466,7 @@ export class Volume {
     readonly root: Edge,
   ) {
     check(
-      root[1] === DOMAIN && root[2] === VOLUME && root[6][0] === 0,
+      root[1] === DOMAIN && root[2] === VOLUME && root[6][0] === 1,
       "unsupported volume",
     );
   }
@@ -495,7 +495,7 @@ export class Volume {
       path(name);
       check(!files.has(name), "duplicate pathname");
       check(
-        block.edge[2] === BLOCK && block.digest.length === 64,
+        block.edge[2] === BLOCK && block.digest.length === 8 && block.edge[6][0] === 1,
         "invalid block descriptor",
       );
       files.set(name, block);
@@ -546,7 +546,7 @@ export class Volume {
     const r = await this.basin.load(this.root);
     validateNode(r, VOLUME);
     check(
-      r.get("6").length() === 3 && r.get("6").get(0).intValue() === 0,
+      r.get("6").length() === 3 && r.get("6").get(0).intValue() === 1,
       "unsupported volume migration",
     );
     return r.get("6");
@@ -577,7 +577,7 @@ export class Volume {
     name = "/",
   ): Promise<
     | { kind: "directory"; sha384: Uint8Array }
-    | { kind: "file"; brombergSL2: Uint8Array; edge: Edge }
+    | { kind: "file"; crc64nvme: Uint8Array; edge: Edge }
   > {
     const { entry, directory } = await this.directoryEntry(name);
     if (directory)
@@ -586,7 +586,7 @@ export class Volume {
         sha384: object<Uint8Array>(entry.get(1)),
       };
     const f = object<File>(entry);
-    return { kind: "file", brombergSL2: f[1], edge: f[2] };
+    return { kind: "file", crc64nvme: f[1], edge: f[2] };
   }
   async list(name = "/"): Promise<string[]> {
     const { entry, directory } = await this.directoryEntry(name);
@@ -611,14 +611,14 @@ export class Volume {
     validateNode(block, BLOCK);
     const footer = block.get("6");
     check(
-      footer.length() === 5 && footer.get(0).intValue() === 0,
+      footer.length() === 5 && footer.get(0).intValue() === 1,
       "unsupported block migration",
     );
     const pages = footer.get(2),
       sum = object<SectorSummary>(
         pages.isMap() ? pages.get("6").get(1) : pages.get(6).get("1"),
       );
-    check(equal(sum.brombergSL2, file[1]), "block checksum mismatch");
+    check(equal(sum.crc64nvme, file[1]), "block checksum mismatch");
     return { footer, file };
   }
   private async pageValue(
@@ -790,7 +790,7 @@ export class Volume {
     );
     const bytes = new Uint8Array(Number(end));
     for (const [p, b] of rows) bytes.set(b, Number(p) * PAGE_SIZE);
-    check(equal(sl2.hash(bytes), file[1]), "file checksum mismatch");
+    check(equal(crc.hash(bytes), file[1]), "file checksum mismatch");
     const start = options.start ?? 0,
       length = options.length ?? Math.max(0, bytes.length - start);
     check(

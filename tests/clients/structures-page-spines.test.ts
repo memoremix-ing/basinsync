@@ -105,7 +105,7 @@ test("directory tuples retain file blocks through contents tries", async () => {
   ).toBe(false);
   expect(await volume.stat("/d/file")).toEqual({
     kind: "file",
-    brombergSL2: block.digest,
+    crc64nvme: block.digest,
     edge: block.edge,
   });
 });

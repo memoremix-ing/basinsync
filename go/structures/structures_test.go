@@ -12,10 +12,10 @@ import (
 )
 
 type structureCases struct {
-	Sl2 []struct {
+	CRC []struct {
 		Message string
 		Digest  string
-	} `json:"sl2"`
+	} `json:"crc64nvme"`
 	TrieCounts    []int `json:"trieCounts"`
 	OrderedCounts []int `json:"orderedCounts"`
 }
@@ -51,14 +51,17 @@ func rows(n int) []Entry {
 	}
 	return v
 }
-func TestCodecAndPublishedSL2(t *testing.T) {
-	for _, v := range structureVectors(t).Sl2 {
-		if hex.EncodeToString(Bromberg([]byte(v.Message))) != v.Digest {
-			t.Fatal("independent SL2 vector", v.Message)
+func TestCodecAndPublishedCRC64NVME(t *testing.T) {
+	for _, v := range structureVectors(t).CRC {
+		data := []byte(v.Message)
+		if hex.EncodeToString(CRC64NVME(data)) != v.Digest {
+			t.Fatal("independent CRC64NVME vector", v.Message)
 		}
-	}
-	if !bytes.Equal(combineSL([][]byte{Bromberg([]byte("hello, ")), Bromberg([]byte("world!"))}), Bromberg([]byte("hello, world!"))) {
-		t.Fatal("composition")
+		for i := 0; i <= len(data); i++ {
+			if !bytes.Equal(CombineCRC64NVME(CRC64NVME(data[:i]), CRC64NVME(data[i:]), big.NewInt(int64(len(data)-i))), CRC64NVME(data)) {
+				t.Fatal("composition", i)
+			}
+		}
 	}
 	values := []any{nil, true, int64(-123), 0.5, "", []byte{}, new(big.Int).Lsh(big.NewInt(1), 1000), new(big.Int).Neg(new(big.Int).Lsh(big.NewInt(1), 1000)), Symbol{Name: "match"}, Symbol{Name: "x", Global: true}, vector(true, false), vector("a", "b"), map[string]any{"\uffff": int64(1), "\U00010000": int64(2)}}
 	for _, value := range values {

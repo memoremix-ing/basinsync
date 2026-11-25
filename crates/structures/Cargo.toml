@@ -4,9 +4,12 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.92"
 license = "Apache-2.0"
+[features]
+profile = []
 [dependencies]
 anyhow = "1"
 base64 = "0.22"
+crc-fast = { version = "=1.10.0", default-features = false, features = ["std"] }
 flexbuffers = "25.12.19"
 hmac = "0.12"
 num-bigint = "0.4"

@@ -43,7 +43,7 @@ test("Volume mv/cp/rm coordinate hashes, empty directories and retained block id
   storage.get = async (e) => {
     if (
       e[2] === ".sync-block/" ||
-      (e[2] === ".trie-node/" && (e[6][1] as any)?.brombergSL2)
+      (e[2] === ".trie-node/" && (e[6][1] as any)?.crc64nvme)
     )
       throw Error("unexpected file-body fetch");
     fetched.push(e[2]);

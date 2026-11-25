@@ -1,6 +1,6 @@
 import { vectors } from "./vectors";
 import { objectKeys } from "./object-keys";
-const shared = vectors<{sl2: {message: string; digest: string}[]; trieCounts: number[]; orderedCounts: number[]}>("structures");
+const shared = vectors<{crc64nvme: {message: string; digest: string}[]; trieCounts: number[]; orderedCounts: number[]}>("structures");
 import { test, expect } from "bun:test";
 import {
   Basin,
@@ -23,7 +23,7 @@ import {
 } from "./structures/core";
 import { Trie, plain, Consumer } from "./structures/trie";
 import { Volume, PAGE_SIZE } from "./structures/volume";
-import * as sl2 from "./structures/bromberg";
+import * as crc from "./structures/crc64nvme";
 const seed = new Uint8Array(32).fill(42);
 const entries = (n: number): [Uint8Array, unknown][] =>
   Array.from({ length: n }, (_, i) => [
@@ -36,12 +36,18 @@ const sum: Consumer<unknown, bigint> = {
   entry: () => 1n,
   combine: (parts) => parts.reduce((a, b) => a + b, 0n),
 };
-test("SL2 independent published vector and concatenation", () => {
-  for (const {message, digest} of shared.sl2)
-    expect(hex(sl2.hash(utf8(message)))).toBe(digest);
-  expect(
-    sl2.combine([sl2.hash(utf8("hello, ")), sl2.hash(utf8("world!"))]),
-  ).toEqual(sl2.hash(utf8("hello, world!")));
+test("CRC64NVME independent vectors, empty inputs and every concatenation split", () => {
+  for (const {message, digest} of shared.crc64nvme) {
+    const bytes = utf8(message);
+    expect(hex(crc.hash(bytes))).toBe(digest);
+    for (let i = 0; i <= bytes.length; i++)
+      expect(crc.combine(crc.hash(bytes.subarray(0, i)), crc.hash(bytes.subarray(i)), BigInt(bytes.length-i))).toEqual(crc.hash(bytes));
+  }
+  const bytes = Uint8Array.from({length: 256}, (_, i) => i);
+  for (let i = 0; i <= bytes.length; i++)
+    expect(crc.combine(crc.hash(bytes.subarray(0, i)), crc.hash(bytes.subarray(i)), BigInt(bytes.length-i))).toEqual(crc.hash(bytes));
+  expect(() => crc.combine(new Uint8Array(7), new Uint8Array(8), 0n)).toThrow();
+  expect(() => crc.combine(new Uint8Array(8), new Uint8Array(8), -1n)).toThrow();
 });
 test("canonical groups, suffixes, edge boundaries, empty keys and null values", async () => {
   for (const count of shared.trieCounts) {

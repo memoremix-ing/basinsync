@@ -3,7 +3,7 @@ export * from "./core";
 export * from "./trie";
 export * from "./volume";
 export * from "./basinsync";
-export * as bromberg from "./bromberg";
+export * as crc64nvme from "./crc64nvme";
 export * from "./vector";
 export * from "./btree";
 export * from "./operation";

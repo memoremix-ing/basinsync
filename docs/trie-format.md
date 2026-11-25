@@ -1,4 +1,4 @@
-[bromberg-sl2]: <glossary/bromberg-sl2.md>
+[crc64nvme]: <glossary/crc64nvme.md>
 [envbuf]: <glossary/envbuf.md>
 [lexidecimal]: <glossary/lexidecimal.md>
 [node-degree]: <glossary/node-degree.md>
@@ -19,8 +19,8 @@ suffixes after consumed bytes. A high-nibble group retains its next byte; a
 low-nibble branch consumes that whole byte. Arrays use nibble indices and omit
 trailing null slots.
 
-Up to 255 entries stay in one group. On overflow, keep only a prefix-ending
-entry there; partition the rest by high nibble, retaining groups of at most 255,
+With default packing, up to 255 entries stay in one group. On overflow, keep only
+a prefix-ending entry there; partition the rest by high nibble, retaining groups of at most 255,
 then by low nibble into recursive trie nodes. If prospective inline values exceed
 1280, replace every nested node with a *basin edge*[~][strong-edge]. If value edges
 would exceed the configured *degree*[~][node-degree], also expand high-nibble
@@ -33,10 +33,10 @@ Relocatable consumer summaries must be independent of ancestor prefixes; structu
 counts and content-only checksums qualify, while hashes of absolute keys do not.
 Reversed-key bounds, when useful, belong in consumer-defined footer summaries.
 Replicate headers and summaries across *basin edges*[~][strong-edge] for pruning.
-Volume format 0 uses 4096-byte pages for its file convenience API. Raw page maps accept arbitrary-size blobs and sparse nonnegative
-*Lexidecimal*[~][lexidecimal] page numbers, including empty blobs. Sector summaries compose *BrombergSL2*[~][bromberg-sl2]
-checksums over stored blobs in page order; empty content uses the identity
-matrix. This summary excludes page addresses; node digests identify the complete
+Volume schema 0, consumer migration 1, uses 4096-byte pages for its file convenience API. Raw page maps accept arbitrary-size blobs and sparse nonnegative
+*Lexidecimal*[~][lexidecimal] page numbers, including empty blobs. Sector summaries compose *CRC64NVME*[~][crc64nvme]
+checksums over stored blobs in page order, carrying eight big-endian bytes and a
+bigint byte count; empty content has checksum and length zero. This summary excludes page addresses; node digests identify the complete
 structure. Directory digests hash entries
 in UTF-8 basename order:
 
