@@ -6,6 +6,7 @@
     {"bigint": "-16", "wire": [2, 126, 15, 2, 48, 1]},
     {"bigint": "-257", "wire": [3, 126, 1, 0, 3, 48, 1]},
     {"wellKnownSymbol": "species", "wire": [8, 35, 115, 112, 101, 99, 105, 101, 115, 8, 48, 1]},
+    {"wellKnownSymbol": "match", "wire": [6, 35, 109, 97, 116, 99, 104, 6, 48, 1]},
     {"globalSymbol": "", "wire": [1, 36, 1, 48, 1]}
   ],
   "invalid": [
@@ -16,5 +17,5 @@
     [2, 36, 255, 2, 48, 1],
     [2, 0, 120, 0, 0, 1, 4, 49, 1]
   ],
-  "unsupportedWellKnownSymbols": ["dispose", "constructor", "__proto__", "match"]
+  "unsupportedWellKnownSymbols": ["dispose", "constructor", "__proto__", "matchAll"]
 }

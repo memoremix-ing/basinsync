@@ -1,0 +1,329 @@
+{
+  "runtime": "1.4.5",
+  "method": "cold Basin cache per case; one-byte pages; in-memory zero-I/O capability resolver; warm repeat of same read; counters only",
+  "sources": {
+    "clients/volume-shortcut-trace.ts": "34c09105dddc7ca7c7e5a74dc28f960edccb9f96fae07f769c1a23473483ee56830172fbdb3bcb3ef019c12fa602873f",
+    "clients/structures/bromberg.ts": "9c9ca8a775aaf0a8178a2fdceaaf7a384b01eb8bfb7d123b664abfa36004615ca06f786163cdd92b430a5695a5a60fa7",
+    "clients/structures/trie.ts": "8d8e90af5cd2a375ebb3af14a94a599ca29cd9206df4eb4e05dda4bb809d6f28e4cb8f64a6f0247a6074a8e1130797cf",
+    "clients/structures/cow-values.ts": "1df61d120026a66beb4cf177f01f7ff4d48ee9ed62df2863337cdda44b55581aff2d4a40f9131bb45633b2a74a1ac68c",
+    "clients/structures/vector-bitmap.ts": "336394962af8e2a5dfddfe23ba1cd7972331b5b4ef81f85e55bc1214214031bc0530bbb2ba9c2fa3aef8dc396d95fd13",
+    "clients/structures/logical-vector.ts": "f0051ed9f192ecfebb9fc20b68e8ccdd56ab06f5e43986808f14eb726677291e576bd4e44c1c42dd4804ea624139ad23",
+    "clients/structures/cow-proxy.ts": "7d01322ba2acb6c1be6bd145679b94612941e59c254d93d143ed404f404ca3084dee5854b309124c8a586325b3e9fb81",
+    "clients/structures/logical-trie.ts": "e24bf1f665d357d7dd9e62630c2379872c8d38b1ace00d7b4bf7026160532cb11060e5bbbf4465e4c4019766e43b8187",
+    "clients/structures/volume.ts": "0e0846e27c6f83b4e4c54cad27efec767e8889397092cdb07454777bf9c81cf41b290141c62b60805c32d1b8d40fc0a4",
+    "clients/structures/operation.ts": "a9aabb03bdabe8bc7a559a142160a99a2384234732d47cde6ef6997eb461aa120c5ec4d4eafb0d44e4b15082b63e99ed",
+    "clients/structures/btree.ts": "c27899e74d5fc26b75766dbd82226abb5dc855581e7d33638ae3498b731a16a2a3dc0c191d2c51c9a2e48a0521419c20",
+    "clients/structures/types.ts": "7910fec58e0570380dab790bfe40c1581701109de1fd04f019466b77f153a2e50df20b1f8a7c33751bd3557c5abcc520",
+    "clients/structures/core.ts": "76b7841f142557b64cf1439295dc25e09d51935f616ea50def8a1b33d599a75055ecd15c504d8501f6f92d410a2a5051",
+    "clients/structures/trie-view.ts": "6b84efdfb8b702dabe56b05514c28eb51ff42a420277c57b14bad332c2e7627f3736f487ba446a25250f0279e2af12e8",
+    "clients/structures/cow.ts": "36c3b21b19da2d8bf33982af3012f5ab8803f873b960a9c7adb3356bc4f6f66c56702584b4dbe8bcbb2a99e390cae5da",
+    "clients/structures/index.ts": "2bdf2843f300a3df0e2c96ed84b7c759bf97f98c5e9a43a1b4471f683a06fcb5eb15e466d267f582b324f341c51763f0",
+    "clients/structures/vector.ts": "25db862cc6a015842d552fe91508f8f93b6848e6782bdd7a860c430536485db00a572907286f88d762b9af7d6175370f",
+    "clients/structures/packed.ts": "7de4402f81301cfdfa058a148c536fa7538d41c3ed8f163dde3b2fc042668c63ffc34f0e74e3dfbfe3efcc02b4e689df",
+    "clients/structures/basinsync.ts": "6b51a0bbd4a418818290b9e06642a7350384b424979ffde93854fe700c7c8f3e516129f327b1e147eb9d0d8a18c1db9d",
+    "clients/flexbuffer.ts": "5b653f93b7fd4c02cfc697cbcda15486c8f8dddc490e67470d33f679a0f3af5d6f2403fd91cde8f63d5749aeac88abd3"
+  },
+  "samples": [
+    {
+      "fixture": "pages",
+      "n": 20000,
+      "page": 0,
+      "shortcuts": false,
+      "gets": 2,
+      "bytes": 36904,
+      "resolves": 0,
+      "bySpecies": {
+        ".sync-volume/": 1,
+        ".sync-block/": 1
+      },
+      "warmGets": 0,
+      "warmBytes": 0,
+      "warmResolves": 0
+    },
+    {
+      "fixture": "pages",
+      "n": 20000,
+      "page": 0,
+      "shortcuts": true,
+      "gets": 2,
+      "bytes": 36904,
+      "resolves": 1,
+      "bySpecies": {
+        ".sync-volume/": 1,
+        ".sync-block/": 1
+      },
+      "warmGets": 0,
+      "warmBytes": 0,
+      "warmResolves": 1
+    },
+    {
+      "fixture": "pages",
+      "n": 20000,
+      "page": 10000,
+      "shortcuts": false,
+      "gets": 3,
+      "bytes": 40968,
+      "resolves": 0,
+      "bySpecies": {
+        ".sync-volume/": 1,
+        ".sync-block/": 1,
+        ".trie-node/": 1
+      },
+      "warmGets": 0,
+      "warmBytes": 0,
+      "warmResolves": 0
+    },
+    {
+      "fixture": "pages",
+      "n": 20000,
+      "page": 10000,
+      "shortcuts": true,
+      "gets": 3,
+      "bytes": 40968,
+      "resolves": 2,
+      "bySpecies": {
+        ".sync-volume/": 1,
+        ".sync-block/": 1,
+        ".trie-node/": 1
+      },
+      "warmGets": 0,
+      "warmBytes": 0,
+      "warmResolves": 2
+    },
+    {
+      "fixture": "pages",
+      "n": 20000,
+      "page": 19999,
+      "shortcuts": false,
+      "gets": 3,
+      "bytes": 37712,
+      "resolves": 0,
+      "bySpecies": {
+        ".sync-volume/": 1,
+        ".sync-block/": 1,
+        ".trie-node/": 1
+      },
+      "warmGets": 0,
+      "warmBytes": 0,
+      "warmResolves": 0
+    },
+    {
+      "fixture": "pages",
+      "n": 20000,
+      "page": 19999,
+      "shortcuts": true,
+      "gets": 3,
+      "bytes": 37712,
+      "resolves": 2,
+      "bySpecies": {
+        ".sync-volume/": 1,
+        ".sync-block/": 1,
+        ".trie-node/": 1
+      },
+      "warmGets": 0,
+      "warmBytes": 0,
+      "warmResolves": 2
+    },
+    {
+      "fixture": "pages",
+      "n": 350000,
+      "page": 0,
+      "shortcuts": false,
+      "gets": 2,
+      "bytes": 568928,
+      "resolves": 0,
+      "bySpecies": {
+        ".sync-volume/": 1,
+        ".sync-block/": 1
+      },
+      "warmGets": 0,
+      "warmBytes": 0,
+      "warmResolves": 0
+    },
+    {
+      "fixture": "pages",
+      "n": 350000,
+      "page": 0,
+      "shortcuts": true,
+      "gets": 6,
+      "bytes": 606224,
+      "resolves": 1,
+      "bySpecies": {
+        ".sync-volume/": 1,
+        ".sync-block/": 1,
+        ".vector-node/": 4
+      },
+      "warmGets": 0,
+      "warmBytes": 0,
+      "warmResolves": 1
+    },
+    {
+      "fixture": "pages",
+      "n": 350000,
+      "page": 175000,
+      "shortcuts": false,
+      "gets": 3,
+      "bytes": 572992,
+      "resolves": 0,
+      "bySpecies": {
+        ".sync-volume/": 1,
+        ".sync-block/": 1,
+        ".trie-node/": 1
+      },
+      "warmGets": 0,
+      "warmBytes": 0,
+      "warmResolves": 0
+    },
+    {
+      "fixture": "pages",
+      "n": 350000,
+      "page": 175000,
+      "shortcuts": true,
+      "gets": 6,
+      "bytes": 601336,
+      "resolves": 2,
+      "bySpecies": {
+        ".sync-volume/": 1,
+        ".sync-block/": 1,
+        ".vector-node/": 3,
+        ".trie-node/": 1
+      },
+      "warmGets": 0,
+      "warmBytes": 0,
+      "warmResolves": 2
+    },
+    {
+      "fixture": "pages",
+      "n": 350000,
+      "page": 349999,
+      "shortcuts": false,
+      "gets": 3,
+      "bytes": 569976,
+      "resolves": 0,
+      "bySpecies": {
+        ".sync-volume/": 1,
+        ".sync-block/": 1,
+        ".trie-node/": 1
+      },
+      "warmGets": 0,
+      "warmBytes": 0,
+      "warmResolves": 0
+    },
+    {
+      "fixture": "pages",
+      "n": 350000,
+      "page": 349999,
+      "shortcuts": true,
+      "gets": 7,
+      "bytes": 604888,
+      "resolves": 2,
+      "bySpecies": {
+        ".sync-volume/": 1,
+        ".sync-block/": 1,
+        ".vector-node/": 4,
+        ".trie-node/": 1
+      },
+      "warmGets": 0,
+      "warmBytes": 0,
+      "warmResolves": 2
+    },
+    {
+      "fixture": "files",
+      "n": 5000,
+      "file": 0,
+      "shortcuts": false,
+      "gets": 3,
+      "bytes": 1074672,
+      "resolves": 0,
+      "bySpecies": {
+        ".sync-volume/": 1,
+        ".trie-node/": 1,
+        ".sync-block/": 1
+      },
+      "warmGets": 0,
+      "warmBytes": 0,
+      "warmResolves": 0
+    },
+    {
+      "fixture": "files",
+      "n": 5000,
+      "file": 0,
+      "shortcuts": true,
+      "gets": 2,
+      "bytes": 1024728,
+      "resolves": 1,
+      "bySpecies": {
+        ".sync-volume/": 1,
+        ".sync-block/": 1
+      },
+      "warmGets": 0,
+      "warmBytes": 0,
+      "warmResolves": 1
+    },
+    {
+      "fixture": "files",
+      "n": 5000,
+      "file": 2500,
+      "shortcuts": false,
+      "gets": 3,
+      "bytes": 1074672,
+      "resolves": 0,
+      "bySpecies": {
+        ".sync-volume/": 1,
+        ".trie-node/": 1,
+        ".sync-block/": 1
+      },
+      "warmGets": 0,
+      "warmBytes": 0,
+      "warmResolves": 0
+    },
+    {
+      "fixture": "files",
+      "n": 5000,
+      "file": 2500,
+      "shortcuts": true,
+      "gets": 2,
+      "bytes": 1024728,
+      "resolves": 1,
+      "bySpecies": {
+        ".sync-volume/": 1,
+        ".sync-block/": 1
+      },
+      "warmGets": 0,
+      "warmBytes": 0,
+      "warmResolves": 1
+    },
+    {
+      "fixture": "files",
+      "n": 5000,
+      "file": 4999,
+      "shortcuts": false,
+      "gets": 2,
+      "bytes": 1024728,
+      "resolves": 0,
+      "bySpecies": {
+        ".sync-volume/": 1,
+        ".sync-block/": 1
+      },
+      "warmGets": 0,
+      "warmBytes": 0,
+      "warmResolves": 0
+    },
+    {
+      "fixture": "files",
+      "n": 5000,
+      "file": 4999,
+      "shortcuts": true,
+      "gets": 2,
+      "bytes": 1024728,
+      "resolves": 1,
+      "bySpecies": {
+        ".sync-volume/": 1,
+        ".sync-block/": 1
+      },
+      "warmGets": 0,
+      "warmBytes": 0,
+      "warmResolves": 1
+    }
+  ]
+}

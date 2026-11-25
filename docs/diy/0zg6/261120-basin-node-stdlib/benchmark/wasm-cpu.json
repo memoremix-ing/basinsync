@@ -1,0 +1,201 @@
+{
+  "rustc": "rustc 1.92.0 (ded5c06cf 2025-12-08)",
+  "node": "v26.13.1",
+  "native_target": "aarch64-apple-darwin",
+  "wasm_target": "wasm32-wasip1",
+  "profile": "release",
+  "native": {
+    "lookups": 20000,
+    "method": "5 alternating trials; synchronous null-free count aggregation, memory storage, build includes packing+crypto+puts, warmed stored readers, returned values owned; no logical edits",
+    "n": 20000,
+    "samples": [
+      {
+        "build_ms": 33.795834,
+        "kind": "trie",
+        "reads_ms": 326.939541,
+        "trial": 0
+      },
+      {
+        "build_ms": 14.975208,
+        "kind": "vector",
+        "reads_ms": 383.478667,
+        "trial": 0
+      },
+      {
+        "build_ms": 6.884458,
+        "kind": "btree",
+        "reads_ms": 409.37,
+        "trial": 0
+      },
+      {
+        "build_ms": 6.787999999999999,
+        "kind": "btree",
+        "reads_ms": 381.454708,
+        "trial": 1
+      },
+      {
+        "build_ms": 15.021792000000001,
+        "kind": "vector",
+        "reads_ms": 397.922917,
+        "trial": 1
+      },
+      {
+        "build_ms": 12.653917,
+        "kind": "trie",
+        "reads_ms": 323.565667,
+        "trial": 1
+      },
+      {
+        "build_ms": 12.274040999999999,
+        "kind": "trie",
+        "reads_ms": 325.362792,
+        "trial": 2
+      },
+      {
+        "build_ms": 15.551832999999998,
+        "kind": "vector",
+        "reads_ms": 384.74912500000005,
+        "trial": 2
+      },
+      {
+        "build_ms": 6.7599160000000005,
+        "kind": "btree",
+        "reads_ms": 427.14425,
+        "trial": 2
+      },
+      {
+        "build_ms": 7.3891670000000005,
+        "kind": "btree",
+        "reads_ms": 470.585375,
+        "trial": 3
+      },
+      {
+        "build_ms": 15.43275,
+        "kind": "vector",
+        "reads_ms": 401.62825000000004,
+        "trial": 3
+      },
+      {
+        "build_ms": 13.019291,
+        "kind": "trie",
+        "reads_ms": 373.897709,
+        "trial": 3
+      },
+      {
+        "build_ms": 12.847707999999999,
+        "kind": "trie",
+        "reads_ms": 325.985916,
+        "trial": 4
+      },
+      {
+        "build_ms": 15.078541000000001,
+        "kind": "vector",
+        "reads_ms": 388.863792,
+        "trial": 4
+      },
+      {
+        "build_ms": 6.940875,
+        "kind": "btree",
+        "reads_ms": 383.51,
+        "trial": 4
+      }
+    ]
+  },
+  "wasm": {
+    "lookups": 20000,
+    "method": "5 alternating trials; synchronous null-free count aggregation, memory storage, build includes packing+crypto+puts, warmed stored readers, returned values owned; no logical edits",
+    "n": 20000,
+    "samples": [
+      {
+        "build_ms": 26.203332999999997,
+        "kind": "trie",
+        "reads_ms": 405.167709,
+        "trial": 0
+      },
+      {
+        "build_ms": 22.453208,
+        "kind": "vector",
+        "reads_ms": 484.64375,
+        "trial": 0
+      },
+      {
+        "build_ms": 9.6605,
+        "kind": "btree",
+        "reads_ms": 485.503583,
+        "trial": 0
+      },
+      {
+        "build_ms": 8.31175,
+        "kind": "btree",
+        "reads_ms": 486.881334,
+        "trial": 1
+      },
+      {
+        "build_ms": 19.494833,
+        "kind": "vector",
+        "reads_ms": 483.479292,
+        "trial": 1
+      },
+      {
+        "build_ms": 14.814333000000001,
+        "kind": "trie",
+        "reads_ms": 409.96058400000004,
+        "trial": 1
+      },
+      {
+        "build_ms": 14.775792,
+        "kind": "trie",
+        "reads_ms": 397.133167,
+        "trial": 2
+      },
+      {
+        "build_ms": 19.523417000000002,
+        "kind": "vector",
+        "reads_ms": 482.412334,
+        "trial": 2
+      },
+      {
+        "build_ms": 8.133209,
+        "kind": "btree",
+        "reads_ms": 473.173792,
+        "trial": 2
+      },
+      {
+        "build_ms": 7.8485,
+        "kind": "btree",
+        "reads_ms": 481.05979199999996,
+        "trial": 3
+      },
+      {
+        "build_ms": 19.23675,
+        "kind": "vector",
+        "reads_ms": 482.407458,
+        "trial": 3
+      },
+      {
+        "build_ms": 14.581625,
+        "kind": "trie",
+        "reads_ms": 396.615041,
+        "trial": 3
+      },
+      {
+        "build_ms": 14.015875000000001,
+        "kind": "trie",
+        "reads_ms": 395.95425,
+        "trial": 4
+      },
+      {
+        "build_ms": 18.980957999999998,
+        "kind": "vector",
+        "reads_ms": 485.786584,
+        "trial": 4
+      },
+      {
+        "build_ms": 7.806417000000001,
+        "kind": "btree",
+        "reads_ms": 485.25845899999996,
+        "trial": 4
+      }
+    ]
+  }
+}

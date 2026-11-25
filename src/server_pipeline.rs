@@ -638,6 +638,7 @@ fn prepare(
     let mut replies = Vec::new();
     for queued in requests {
         let Commit {
+            revisions,
             flow,
             mut marker,
             viewpoint,
@@ -651,6 +652,8 @@ fn prepare(
             Err(Failure::Mismatch(ViewpointMismatch {
                 next: Position { viewpoint: next },
             }))
+        } else if revisions.iter().any(|(id, revision)| matches!(proofs.get(id), Some(Ok(child)) if &child.revision != revision)) {
+            Err(Failure::new(StatusCode::UNPROCESSABLE_ENTITY, "child_revision", "child allocation differs from the referenced revision"))
         } else if let Some(error) = stager.check_children(&marker.edges, &proofs)? {
             Err(Failure::new(
                 StatusCode::UNPROCESSABLE_ENTITY,

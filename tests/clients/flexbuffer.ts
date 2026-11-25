@@ -172,13 +172,14 @@ function packedType(valueType: ValueType, bitWidth: number): ValueType {
 }
 
 // https://github.com/google/flatbuffers/blob/8a09f3fb0bff86ccc8cce4290b03d498fa59318a/ts/flexbuffers/flexbuffers-util.ts
-const decoder = new TextDecoder();
+const decoder = new TextDecoder("utf-8", { fatal: true });
 function fromUTF8Array(data: Uint8Array): string {
   return decoder.decode(data);
 }
 
 const encoder = new TextEncoder();
 function toUTF8Array(str: string): Uint8Array {
+  if (!str.isWellFormed()) throw new Error("Invalid Unicode scalar string");
   return encoder.encode(str);
 }
 
@@ -914,7 +915,13 @@ class Builder {
       }
       this.end();
     } else if (typeof value === "object") {
-      const properties = Object.getOwnPropertyNames(value).sort();
+      const properties = Object.getOwnPropertyNames(value).sort((a, b) => {
+        const left = toUTF8Array(a), right = toUTF8Array(b);
+        for (let i = 0; i < Math.min(left.length, right.length); i++) {
+          if (left[i] !== right[i]) return left[i] - right[i];
+        }
+        return left.length - right.length;
+      });
       this.startMap(true);
       for (let i = 0; i < properties.length; i++) {
         const key = properties[i];
@@ -940,6 +947,7 @@ class Builder {
   }
 
   addKey(key: string): void {
+    if (key.includes("\0")) throw new Error("NUL in FlexBuffers map key");
     this.$integrityCheckOnKeyAddition();
     this.$writeKey(key);
   }
@@ -1142,6 +1150,18 @@ function indirect(dataView: DataView, offset: number, width: number): number {
   return offset - step;
 }
 
+// Bound both cardinality and key length; cached bytes stay private and immutable.
+const lookupKeys = new Map<string, Uint8Array>();
+function lookupKey(key: string): Uint8Array {
+  if (key.length > 64) return toUTF8Array(key);
+  let bytes=lookupKeys.get(key);
+  if (!bytes) {
+    bytes=toUTF8Array(key);
+    if(lookupKeys.size === 128) lookupKeys.delete(lookupKeys.keys().next().value!);
+    lookupKeys.set(key,bytes);
+  }
+  return bytes;
+}
 function keyIndex(
   key: string,
   dataView: DataView,
@@ -1150,7 +1170,7 @@ function keyIndex(
   byteWidth: number,
   length: number,
 ): number | null {
-  const input = toUTF8Array(key);
+  const input = lookupKey(key);
   const keysVectorOffset = indirect(dataView, offset, parentWidth) -
     byteWidth * 3;
   const bitWidth = fromByteWidth(byteWidth);
@@ -1288,28 +1308,7 @@ class Reference {
     this.byteWidth = 1 << (packedType & 3);
     this.valueType = packedType >> 2 as never;
 
-    this.blobValue = blobValue;
-    this.bigintValue = bigintValue;
-    this.boolValue = boolValue;
-    this.floatValue = floatValue;
-    this.get = get;
-    this.intValue = intValue;
-    this.isBlob = isBlob;
-    this.isBigint = isBigint;
-    this.isBool = isBool;
-    this.isFloat = isFloat;
-    this.isInt = isInt;
-    this.isMap = isMap;
-    this.isNull = isNull;
-    this.isNumber = isNumber;
-    this.isString = isString;
-    this.isSymbol = isSymbol;
-    this.isVector = isVector;
-    this.length = sizeof;
-    this.numericValue = numericValue;
-    this.stringValue = stringValue;
-    this.symbolValue = symbolValue;
-    this.toObject = parse;
+
   }
 
   isNull(): boolean {
@@ -1342,6 +1341,9 @@ class Reference {
     if (this.valueType !== VT_VECTOR_UINT || this.length() === 0) return false;
     const discriminator = this.get(0).intValue();
     return discriminator === 0x23 || discriminator === 0x24;
+  }
+  isExtension(): boolean {
+    return this.valueType === VT_VECTOR_UINT;
   }
   isVector(): boolean {
     return isAVector(this.valueType);

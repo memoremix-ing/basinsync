@@ -1,0 +1,104 @@
+{
+  "runtime": "1.4.5",
+  "n": 20000,
+  "method": "5 alternating trials; synchronous null summaries; memory storage; 100k warm reads; 10k persistent replacements; export includes crypto, serialization and memory puts",
+  "results": [
+    {
+      "trial": 0,
+      "variant": "original",
+      "buildMs": 31.179792,
+      "asyncMs": 1956.0956669999998
+    },
+    {
+      "trial": 0,
+      "variant": "await-only",
+      "buildMs": 20.61391700000013,
+      "asyncMs": 1974.3926250000004
+    },
+    {
+      "trial": 0,
+      "variant": "new",
+      "buildMs": 23.70995800000037,
+      "asyncMs": 156.55425000000014,
+      "readyMs": 140.29849999999988
+    },
+    {
+      "trial": 1,
+      "variant": "new",
+      "buildMs": 17.745208000000275,
+      "asyncMs": 151.86200000000008,
+      "readyMs": 141.06054100000074
+    },
+    {
+      "trial": 1,
+      "variant": "await-only",
+      "buildMs": 16.829499999999825,
+      "asyncMs": 1921.2260419999993
+    },
+    {
+      "trial": 1,
+      "variant": "original",
+      "buildMs": 16.881333000000268,
+      "asyncMs": 2028.8717499999993
+    },
+    {
+      "trial": 2,
+      "variant": "original",
+      "buildMs": 19.692583000000013,
+      "asyncMs": 1971.0763750000006
+    },
+    {
+      "trial": 2,
+      "variant": "await-only",
+      "buildMs": 16.42512500000157,
+      "asyncMs": 1964.5027090000003
+    },
+    {
+      "trial": 2,
+      "variant": "new",
+      "buildMs": 20.28954199999862,
+      "asyncMs": 156.22783399999935,
+      "readyMs": 138.72854199999892
+    },
+    {
+      "trial": 3,
+      "variant": "new",
+      "buildMs": 15.8068749999984,
+      "asyncMs": 162.79187499999898,
+      "readyMs": 155.89791700000023
+    },
+    {
+      "trial": 3,
+      "variant": "await-only",
+      "buildMs": 16.273708999999144,
+      "asyncMs": 2056.4115420000016
+    },
+    {
+      "trial": 3,
+      "variant": "original",
+      "buildMs": 20.77850000000035,
+      "asyncMs": 1987.9755839999998
+    },
+    {
+      "trial": 4,
+      "variant": "original",
+      "buildMs": 17.32341699999961,
+      "asyncMs": 2010.8427909999991
+    },
+    {
+      "trial": 4,
+      "variant": "await-only",
+      "buildMs": 19.41454199999862,
+      "asyncMs": 1987.5332500000004
+    },
+    {
+      "trial": 4,
+      "variant": "new",
+      "buildMs": 17.236042000000452,
+      "asyncMs": 155.1767919999984,
+      "readyMs": 138.63662499999919
+    }
+  ],
+  "editsMs": 7.877792000002955,
+  "wholeMapMs": 1228.8595000000023
+}

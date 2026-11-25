@@ -1,0 +1,112 @@
+{
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.8078.70 Safari/537.36",
+  "n": 20000,
+  "method": "5 alternating browser trials; keys precomputed bytes, vector indexes converted to bigint inside loops; 10k persistent replacements, 100k reads; excludes storage/aggregation/crypto/export",
+  "samples": [
+    {
+      "trial": 0,
+      "kind": "trie",
+      "buildMs": 12.900000095367432,
+      "editsMs": 13.099999904632568,
+      "readsMs": 33.69999980926514
+    },
+    {
+      "trial": 0,
+      "kind": "vector",
+      "buildMs": 5.8999998569488525,
+      "editsMs": 7.200000047683716,
+      "readsMs": 25
+    },
+    {
+      "trial": 0,
+      "kind": "btree",
+      "buildMs": 11.200000047683716,
+      "editsMs": 9.799999952316284,
+      "readsMs": 29.199999809265137
+    },
+    {
+      "trial": 1,
+      "kind": "btree",
+      "buildMs": 8,
+      "editsMs": 5.800000190734863,
+      "readsMs": 28.899999856948853
+    },
+    {
+      "trial": 1,
+      "kind": "vector",
+      "buildMs": 5.299999952316284,
+      "editsMs": 4,
+      "readsMs": 21.5
+    },
+    {
+      "trial": 1,
+      "kind": "trie",
+      "buildMs": 8.100000143051147,
+      "editsMs": 7.5,
+      "readsMs": 27.700000047683716
+    },
+    {
+      "trial": 2,
+      "kind": "trie",
+      "buildMs": 10.599999904632568,
+      "editsMs": 8.299999952316284,
+      "readsMs": 31.40000009536743
+    },
+    {
+      "trial": 2,
+      "kind": "vector",
+      "buildMs": 6.200000047683716,
+      "editsMs": 3.1999998092651367,
+      "readsMs": 21.90000009536743
+    },
+    {
+      "trial": 2,
+      "kind": "btree",
+      "buildMs": 10.700000047683716,
+      "editsMs": 5.400000095367432,
+      "readsMs": 27.799999952316284
+    },
+    {
+      "trial": 3,
+      "kind": "btree",
+      "buildMs": 7.900000095367432,
+      "editsMs": 4.8999998569488525,
+      "readsMs": 27.200000047683716
+    },
+    {
+      "trial": 3,
+      "kind": "vector",
+      "buildMs": 3,
+      "editsMs": 3.1000001430511475,
+      "readsMs": 19.399999856948853
+    },
+    {
+      "trial": 3,
+      "kind": "trie",
+      "buildMs": 6.6000001430511475,
+      "editsMs": 8.5,
+      "readsMs": 32.59999990463257
+    },
+    {
+      "trial": 4,
+      "kind": "trie",
+      "buildMs": 6.5,
+      "editsMs": 8.400000095367432,
+      "readsMs": 29.799999952316284
+    },
+    {
+      "trial": 4,
+      "kind": "vector",
+      "buildMs": 2.799999952316284,
+      "editsMs": 3.0999999046325684,
+      "readsMs": 19.800000190734863
+    },
+    {
+      "trial": 4,
+      "kind": "btree",
+      "buildMs": 7.799999952316284,
+      "editsMs": 5,
+      "readsMs": 27.5
+    }
+  ]
+}

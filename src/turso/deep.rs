@@ -38,6 +38,7 @@ impl World {
     }
     fn request(flow: &str, nodes: Vec<heap::Node>) -> heap::Request {
         heap::Request {
+            revisions: Default::default(),
             flow: flow.into(),
             viewpoint: Viewpoint::zero(),
             nodes: nodes.into_iter().map(Ok).collect(),
@@ -456,5 +457,42 @@ fn marker_graphs_mark_in_bounded_postorder_and_survive_staging_sweeps() -> Resul
     assert_eq!(work.ready, vec![empty.clone()]);
     assert!(work.marking.marked.is_empty());
     assert!(w.db().marking_task(&empty)?);
+    Ok(())
+}
+
+#[test]
+fn client_revision_pins_reject_new_and_matching_parent_reservations() -> Result<()> {
+    let mut world = World::new();
+    let leaf = node(0, 90, &[]);
+    let parent = node(1, 91, &[&leaf]);
+    world.reserve("leaf", vec![leaf.clone()])?;
+    let revision = world.db().heap_node(&leaf.id)?.unwrap().revision;
+    let mut request = World::request("parent", vec![parent.clone()]);
+    request.revisions.insert(
+        0,
+        BTreeMap::from([(
+            leaf.id.clone(),
+            "00000000-0000-4000-8000-000000000001".into(),
+        )]),
+    );
+    world.inspect(&mut request)?;
+    let (prepared, outcome) = world.writer.prepare_heap(&request)?;
+    assert!(prepared.is_none());
+    assert_eq!(outcome.errors[&0].code, "child_revision");
+    request
+        .revisions
+        .get_mut(&0)
+        .unwrap()
+        .insert(leaf.id.clone(), revision.clone());
+    let (prepared, outcome) = world.writer.prepare_heap(&request)?;
+    assert!(outcome.errors.is_empty());
+    world.apply(prepared.unwrap())?;
+    request.revisions.get_mut(&0).unwrap().insert(
+        leaf.id.clone(),
+        "00000000-0000-4000-8000-000000000001".into(),
+    );
+    let (prepared, outcome) = world.writer.prepare_heap(&request)?;
+    assert!(prepared.is_none());
+    assert_eq!(outcome.errors[&0].code, "child_revision");
     Ok(())
 }

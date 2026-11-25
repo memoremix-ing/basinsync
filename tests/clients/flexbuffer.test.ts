@@ -69,3 +69,7 @@ test("keeps blobs exact and map keys prototype-safe", () => {
   const object = { ["__proto__"]: { value: 1n }, constructor: Symbol.species };
   expect(toObject<typeof object>(encode(object))).toEqual(object);
 });
+
+test("orders map keys by UTF-8 bytes and rejects nonportable map text",()=>{
+ const value={"\uffff":1,"\u{10000}":2};expect(toObject<typeof value>(encode(value))).toEqual(value);expect(toReference(encode(value)).get("\u{10000}").intValue()).toBe(2);expect(()=>encode({["bad\0key"]:1})).toThrow();expect(()=>encode("\ud800")).toThrow();
+});

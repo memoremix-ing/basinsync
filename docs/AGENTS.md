@@ -26,6 +26,8 @@ tutorial's `benchmark/` folder.
 Use `Datashed` for the tenancy domain and `Basin` for the data-state `Reservoir`.
 Use *UserSpace*[~][userspace] for client-driven `Flow` state and *KernelSpace*[~][kernelspace]
 for server-driven `Basin`/`Jet` state; *Heap*[~][heap] is their common node-storage concept.
+Use basin node/edge for stored DAG elements, distinguishing trie nodes and other
+logical structures; avoid heap node/edge, which can suggest a priority queue.
 Call concatenated *EnvBufs*[~][envbuf] a feed and their enclosed
 bytes a message (`message_length`), distinguishing that count from S3 `Content-Length`.
 Call skippable format `110` envelopes *margins*[~][margin]; reserve padding for alignment filler inside envelopes.

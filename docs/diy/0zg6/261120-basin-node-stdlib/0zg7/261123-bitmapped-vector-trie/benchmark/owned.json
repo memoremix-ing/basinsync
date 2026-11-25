@@ -1,0 +1,608 @@
+{
+  "runtime": "1.4.5",
+  "n": 100000,
+  "edits": 16384,
+  "method": "5 alternating trials; fixed-size persistent replacements, 8 neighboring slots per burst; snapshot per batch; no crypto/aggregation/storage/export",
+  "samples": [
+    {
+      "trial": 0,
+      "bits": 5,
+      "batch": 1,
+      "mode": "persistent",
+      "ms": 30.591290999999984
+    },
+    {
+      "trial": 0,
+      "bits": 5,
+      "batch": 1,
+      "mode": "owned",
+      "ms": 17.03441700000002,
+      "metrics": {
+        "copiedNodes": 65536,
+        "slotsCopied": 1628880,
+        "writes": 65536,
+        "snapshots": 16384
+      }
+    },
+    {
+      "trial": 0,
+      "bits": 5,
+      "batch": 64,
+      "mode": "persistent",
+      "ms": 9.634582999999992
+    },
+    {
+      "trial": 0,
+      "bits": 5,
+      "batch": 64,
+      "mode": "owned",
+      "ms": 6.163833000000011,
+      "metrics": {
+        "copiedNodes": 1080,
+        "slotsCopied": 27250,
+        "writes": 65536,
+        "snapshots": 256
+      }
+    },
+    {
+      "trial": 0,
+      "bits": 5,
+      "batch": 1024,
+      "mode": "persistent",
+      "ms": 8.312584000000015
+    },
+    {
+      "trial": 0,
+      "bits": 5,
+      "batch": 1024,
+      "mode": "owned",
+      "ms": 5.0492089999999905,
+      "metrics": {
+        "copiedNodes": 67,
+        "slotsCopied": 1696,
+        "writes": 65536,
+        "snapshots": 16
+      }
+    },
+    {
+      "trial": 1,
+      "bits": 5,
+      "batch": 1,
+      "mode": "owned",
+      "ms": 13.911625000000015,
+      "metrics": {
+        "copiedNodes": 65536,
+        "slotsCopied": 1628880,
+        "writes": 65536,
+        "snapshots": 16384
+      }
+    },
+    {
+      "trial": 1,
+      "bits": 5,
+      "batch": 1,
+      "mode": "persistent",
+      "ms": 10.162583000000012
+    },
+    {
+      "trial": 1,
+      "bits": 5,
+      "batch": 64,
+      "mode": "owned",
+      "ms": 4.6996249999999975,
+      "metrics": {
+        "copiedNodes": 1080,
+        "slotsCopied": 27250,
+        "writes": 65536,
+        "snapshots": 256
+      }
+    },
+    {
+      "trial": 1,
+      "bits": 5,
+      "batch": 64,
+      "mode": "persistent",
+      "ms": 8.33937499999999
+    },
+    {
+      "trial": 1,
+      "bits": 5,
+      "batch": 1024,
+      "mode": "owned",
+      "ms": 4.401207999999997,
+      "metrics": {
+        "copiedNodes": 67,
+        "slotsCopied": 1696,
+        "writes": 65536,
+        "snapshots": 16
+      }
+    },
+    {
+      "trial": 1,
+      "bits": 5,
+      "batch": 1024,
+      "mode": "persistent",
+      "ms": 7.858582999999982
+    },
+    {
+      "trial": 2,
+      "bits": 5,
+      "batch": 1,
+      "mode": "persistent",
+      "ms": 9.615749999999991
+    },
+    {
+      "trial": 2,
+      "bits": 5,
+      "batch": 1,
+      "mode": "owned",
+      "ms": 14.516291999999993,
+      "metrics": {
+        "copiedNodes": 65536,
+        "slotsCopied": 1628880,
+        "writes": 65536,
+        "snapshots": 16384
+      }
+    },
+    {
+      "trial": 2,
+      "bits": 5,
+      "batch": 64,
+      "mode": "persistent",
+      "ms": 9.273084000000011
+    },
+    {
+      "trial": 2,
+      "bits": 5,
+      "batch": 64,
+      "mode": "owned",
+      "ms": 4.763792000000024,
+      "metrics": {
+        "copiedNodes": 1080,
+        "slotsCopied": 27250,
+        "writes": 65536,
+        "snapshots": 256
+      }
+    },
+    {
+      "trial": 2,
+      "bits": 5,
+      "batch": 1024,
+      "mode": "persistent",
+      "ms": 8.493875000000003
+    },
+    {
+      "trial": 2,
+      "bits": 5,
+      "batch": 1024,
+      "mode": "owned",
+      "ms": 4.952958999999964,
+      "metrics": {
+        "copiedNodes": 67,
+        "slotsCopied": 1696,
+        "writes": 65536,
+        "snapshots": 16
+      }
+    },
+    {
+      "trial": 3,
+      "bits": 5,
+      "batch": 1,
+      "mode": "owned",
+      "ms": 13.40741700000001,
+      "metrics": {
+        "copiedNodes": 65536,
+        "slotsCopied": 1628880,
+        "writes": 65536,
+        "snapshots": 16384
+      }
+    },
+    {
+      "trial": 3,
+      "bits": 5,
+      "batch": 1,
+      "mode": "persistent",
+      "ms": 11.247208
+    },
+    {
+      "trial": 3,
+      "bits": 5,
+      "batch": 64,
+      "mode": "owned",
+      "ms": 4.7692499999999995,
+      "metrics": {
+        "copiedNodes": 1080,
+        "slotsCopied": 27250,
+        "writes": 65536,
+        "snapshots": 256
+      }
+    },
+    {
+      "trial": 3,
+      "bits": 5,
+      "batch": 64,
+      "mode": "persistent",
+      "ms": 9.38741699999997
+    },
+    {
+      "trial": 3,
+      "bits": 5,
+      "batch": 1024,
+      "mode": "owned",
+      "ms": 4.406416999999976,
+      "metrics": {
+        "copiedNodes": 67,
+        "slotsCopied": 1696,
+        "writes": 65536,
+        "snapshots": 16
+      }
+    },
+    {
+      "trial": 3,
+      "bits": 5,
+      "batch": 1024,
+      "mode": "persistent",
+      "ms": 8.993791999999985
+    },
+    {
+      "trial": 4,
+      "bits": 5,
+      "batch": 1,
+      "mode": "persistent",
+      "ms": 10.285582999999974
+    },
+    {
+      "trial": 4,
+      "bits": 5,
+      "batch": 1,
+      "mode": "owned",
+      "ms": 15.051166999999964,
+      "metrics": {
+        "copiedNodes": 65536,
+        "slotsCopied": 1628880,
+        "writes": 65536,
+        "snapshots": 16384
+      }
+    },
+    {
+      "trial": 4,
+      "bits": 5,
+      "batch": 64,
+      "mode": "persistent",
+      "ms": 9.847000000000037
+    },
+    {
+      "trial": 4,
+      "bits": 5,
+      "batch": 64,
+      "mode": "owned",
+      "ms": 5.601541999999995,
+      "metrics": {
+        "copiedNodes": 1080,
+        "slotsCopied": 27250,
+        "writes": 65536,
+        "snapshots": 256
+      }
+    },
+    {
+      "trial": 4,
+      "bits": 5,
+      "batch": 1024,
+      "mode": "persistent",
+      "ms": 9.249458000000004
+    },
+    {
+      "trial": 4,
+      "bits": 5,
+      "batch": 1024,
+      "mode": "owned",
+      "ms": 4.392832999999996,
+      "metrics": {
+        "copiedNodes": 67,
+        "slotsCopied": 1696,
+        "writes": 65536,
+        "snapshots": 16
+      }
+    },
+    {
+      "trial": 0,
+      "bits": 7,
+      "batch": 1,
+      "mode": "persistent",
+      "ms": 29.68395800000002
+    },
+    {
+      "trial": 0,
+      "bits": 7,
+      "batch": 1,
+      "mode": "owned",
+      "ms": 30.311249999999973,
+      "metrics": {
+        "copiedNodes": 49152,
+        "slotsCopied": 4277030,
+        "writes": 49152,
+        "snapshots": 16384
+      }
+    },
+    {
+      "trial": 0,
+      "bits": 7,
+      "batch": 64,
+      "mode": "persistent",
+      "ms": 24.902667000000008
+    },
+    {
+      "trial": 0,
+      "bits": 7,
+      "batch": 64,
+      "mode": "owned",
+      "ms": 19.677750000000003,
+      "metrics": {
+        "copiedNodes": 783,
+        "slotsCopied": 68792,
+        "writes": 49152,
+        "snapshots": 256
+      }
+    },
+    {
+      "trial": 0,
+      "bits": 7,
+      "batch": 1024,
+      "mode": "persistent",
+      "ms": 26.02079200000003
+    },
+    {
+      "trial": 0,
+      "bits": 7,
+      "batch": 1024,
+      "mode": "owned",
+      "ms": 21.218624999999975,
+      "metrics": {
+        "copiedNodes": 48,
+        "slotsCopied": 4208,
+        "writes": 49152,
+        "snapshots": 16
+      }
+    },
+    {
+      "trial": 1,
+      "bits": 7,
+      "batch": 1,
+      "mode": "owned",
+      "ms": 28.985957999999982,
+      "metrics": {
+        "copiedNodes": 49152,
+        "slotsCopied": 4277030,
+        "writes": 49152,
+        "snapshots": 16384
+      }
+    },
+    {
+      "trial": 1,
+      "bits": 7,
+      "batch": 1,
+      "mode": "persistent",
+      "ms": 27.767333000000008
+    },
+    {
+      "trial": 1,
+      "bits": 7,
+      "batch": 64,
+      "mode": "owned",
+      "ms": 19.923999999999978,
+      "metrics": {
+        "copiedNodes": 783,
+        "slotsCopied": 68792,
+        "writes": 49152,
+        "snapshots": 256
+      }
+    },
+    {
+      "trial": 1,
+      "bits": 7,
+      "batch": 64,
+      "mode": "persistent",
+      "ms": 24.63791600000002
+    },
+    {
+      "trial": 1,
+      "bits": 7,
+      "batch": 1024,
+      "mode": "owned",
+      "ms": 21.14895899999999,
+      "metrics": {
+        "copiedNodes": 48,
+        "slotsCopied": 4208,
+        "writes": 49152,
+        "snapshots": 16
+      }
+    },
+    {
+      "trial": 1,
+      "bits": 7,
+      "batch": 1024,
+      "mode": "persistent",
+      "ms": 25.604791999999975
+    },
+    {
+      "trial": 2,
+      "bits": 7,
+      "batch": 1,
+      "mode": "persistent",
+      "ms": 25.849000000000046
+    },
+    {
+      "trial": 2,
+      "bits": 7,
+      "batch": 1,
+      "mode": "owned",
+      "ms": 30.401541000000066,
+      "metrics": {
+        "copiedNodes": 49152,
+        "slotsCopied": 4277030,
+        "writes": 49152,
+        "snapshots": 16384
+      }
+    },
+    {
+      "trial": 2,
+      "bits": 7,
+      "batch": 64,
+      "mode": "persistent",
+      "ms": 26.832625000000007
+    },
+    {
+      "trial": 2,
+      "bits": 7,
+      "batch": 64,
+      "mode": "owned",
+      "ms": 20.15229099999999,
+      "metrics": {
+        "copiedNodes": 783,
+        "slotsCopied": 68792,
+        "writes": 49152,
+        "snapshots": 256
+      }
+    },
+    {
+      "trial": 2,
+      "bits": 7,
+      "batch": 1024,
+      "mode": "persistent",
+      "ms": 26.885917000000063
+    },
+    {
+      "trial": 2,
+      "bits": 7,
+      "batch": 1024,
+      "mode": "owned",
+      "ms": 21.15604200000007,
+      "metrics": {
+        "copiedNodes": 48,
+        "slotsCopied": 4208,
+        "writes": 49152,
+        "snapshots": 16
+      }
+    },
+    {
+      "trial": 3,
+      "bits": 7,
+      "batch": 1,
+      "mode": "owned",
+      "ms": 29.327583000000004,
+      "metrics": {
+        "copiedNodes": 49152,
+        "slotsCopied": 4277030,
+        "writes": 49152,
+        "snapshots": 16384
+      }
+    },
+    {
+      "trial": 3,
+      "bits": 7,
+      "batch": 1,
+      "mode": "persistent",
+      "ms": 26.099874999999997
+    },
+    {
+      "trial": 3,
+      "bits": 7,
+      "batch": 64,
+      "mode": "owned",
+      "ms": 19.20079199999998,
+      "metrics": {
+        "copiedNodes": 783,
+        "slotsCopied": 68792,
+        "writes": 49152,
+        "snapshots": 256
+      }
+    },
+    {
+      "trial": 3,
+      "bits": 7,
+      "batch": 64,
+      "mode": "persistent",
+      "ms": 24.811249999999973
+    },
+    {
+      "trial": 3,
+      "bits": 7,
+      "batch": 1024,
+      "mode": "owned",
+      "ms": 20.888666000000057,
+      "metrics": {
+        "copiedNodes": 48,
+        "slotsCopied": 4208,
+        "writes": 49152,
+        "snapshots": 16
+      }
+    },
+    {
+      "trial": 3,
+      "bits": 7,
+      "batch": 1024,
+      "mode": "persistent",
+      "ms": 27.193832999999927
+    },
+    {
+      "trial": 4,
+      "bits": 7,
+      "batch": 1,
+      "mode": "persistent",
+      "ms": 27.094708000000082
+    },
+    {
+      "trial": 4,
+      "bits": 7,
+      "batch": 1,
+      "mode": "owned",
+      "ms": 30.48329100000001,
+      "metrics": {
+        "copiedNodes": 49152,
+        "slotsCopied": 4277030,
+        "writes": 49152,
+        "snapshots": 16384
+      }
+    },
+    {
+      "trial": 4,
+      "bits": 7,
+      "batch": 64,
+      "mode": "persistent",
+      "ms": 26.001375000000053
+    },
+    {
+      "trial": 4,
+      "bits": 7,
+      "batch": 64,
+      "mode": "owned",
+      "ms": 19.630292000000054,
+      "metrics": {
+        "copiedNodes": 783,
+        "slotsCopied": 68792,
+        "writes": 49152,
+        "snapshots": 256
+      }
+    },
+    {
+      "trial": 4,
+      "bits": 7,
+      "batch": 1024,
+      "mode": "persistent",
+      "ms": 26.74241600000005
+    },
+    {
+      "trial": 4,
+      "bits": 7,
+      "batch": 1024,
+      "mode": "owned",
+      "ms": 20.78625000000011,
+      "metrics": {
+        "copiedNodes": 48,
+        "slotsCopied": 4208,
+        "writes": 49152,
+        "snapshots": 16
+      }
+    }
+  ]
+}

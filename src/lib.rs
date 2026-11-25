@@ -25,3 +25,5 @@ pub mod checksum;
 pub mod kernel;
 
 pub mod observability;
+
+pub use basinsync_structures as structures;

@@ -5,6 +5,7 @@ edition = "2024"
 rust-version = "1.92"
 
 [dependencies]
+basinsync-structures = { path = "crates/structures" }
 anyhow = "1"
 hmac = "0.12"
 url = "2"
@@ -30,7 +31,11 @@ metrics-exporter-prometheus = { version = "0.18", default-features = false }
 
 [dev-dependencies]
 proptest = "1"
-
 # Tests spend most of their time inside Turso; optimize dependencies only.
 [profile.dev.package."*"]
 opt-level = 2
+
+[workspace]
+members = ["crates/structures"]
+exclude = ["vendor/turso"]
+resolver = "3"

@@ -29,13 +29,14 @@
     auth: [height: number, version: number, token: Uint8Array];
     length: number;
     context?: Record<string, string>;
-    edges: Array<{ auth: [height: number, version: number, token: Uint8Array] }>;
+    edges: Array<{ auth: [height: number, version: number, token: Uint8Array]; revision?: string }>;
   }>;
 }
 ```
 
 Edges identify a child set: each child has lower *height*[~][node-height] and a
-verified stored allocation in either generation. Existing *nodes*[~][node] require matching content
+verified stored allocation in either generation. When supplied, the child
+*revision*[~][revision] must match that allocation. Existing *nodes*[~][node] require matching content
 length, *context*[~][context], and child-id set, even when already referenced by other *nodes*[~][node].
 
 A wrong *Viewpoint*[~][viewpoint] returns the *common 409 response*[~][epilogue-protocol].
@@ -45,7 +46,7 @@ Otherwise return HTTP 200 with nullable maps indexed by input position:
 type Action = { url: string; headers: Record<string, string> };
 {
   errors: Record<number, { code: string; message: string }> | null;
-  results: Record<number, { actions: {
+  results: Record<number, { revision: string; actions: {
     write: Action | null; preview: Action | null; read: Action;
   } }> | null;
   timelines: { basin: { milestone: bigint } };

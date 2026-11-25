@@ -174,6 +174,28 @@ impl State {
                     continue;
                 }
             };
+            let mut stale = false;
+            if let Some(pinned) = request.revisions.get(&index) {
+                for (id, revision) in pinned {
+                    if self
+                        .heap_node(id)?
+                        .is_none_or(|row| &row.revision != revision)
+                    {
+                        stale = true;
+                        break;
+                    }
+                }
+            }
+            if stale {
+                outcome.errors.insert(
+                    index,
+                    NodeError {
+                        code: "child_revision",
+                        message: "child allocation differs from the referenced revision",
+                    },
+                );
+                continue;
+            }
             let current = if let Some(current) = planned.get(&node.id) {
                 Some(current.clone())
             } else if let Some(row) = self.heap_node(&node.id)? {

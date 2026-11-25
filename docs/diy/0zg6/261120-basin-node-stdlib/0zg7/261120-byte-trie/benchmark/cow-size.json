@@ -1,0 +1,67 @@
+{
+  "bun": "1.4.5",
+  "source": {
+    "logical-trie": {
+      "lines": 358,
+      "bytes": 12333,
+      "functions": 39,
+      "branch_loop_sites": 79
+    },
+    "trie-view": {
+      "lines": 287,
+      "bytes": 9583,
+      "functions": 35,
+      "branch_loop_sites": 38
+    },
+    "cow": {
+      "lines": 228,
+      "bytes": 6877,
+      "functions": 25,
+      "branch_loop_sites": 20
+    },
+    "cow-values": {
+      "lines": 107,
+      "bytes": 3453,
+      "functions": 11,
+      "branch_loop_sites": 18
+    },
+    "cow-proxy": {
+      "lines": 289,
+      "bytes": 8594,
+      "functions": 36,
+      "branch_loop_sites": 40
+    }
+  },
+  "bundles": {
+    "base": {
+      "lines": 2400,
+      "bytes": 81356,
+      "min_bytes": 45870,
+      "gzip_bytes": 14541
+    },
+    "view": {
+      "lines": 2621,
+      "bytes": 89041,
+      "min_bytes": 50326,
+      "gzip_bytes": 15709
+    },
+    "explicit": {
+      "lines": 2625,
+      "bytes": 88690,
+      "min_bytes": 50588,
+      "gzip_bytes": 15987
+    },
+    "proxy": {
+      "lines": 2868,
+      "bytes": 95829,
+      "min_bytes": 54620,
+      "gzip_bytes": 17043
+    },
+    "all": {
+      "lines": 3093,
+      "bytes": 103673,
+      "min_bytes": 59151,
+      "gzip_bytes": 18272
+    }
+  }
+}

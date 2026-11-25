@@ -1,0 +1,6 @@
+{
+  "source": "ptr-io/foglog/stream-load/dictionary.ts",
+  "sha384": "175321f2d8aa894ad83378534ca83406c13aa6c14643f9323118953f2b8b14062c278243e1892a7ae8cbe874d88f4a64",
+  "direct": "TypeError: new SAUTable().openWindow is not a function. (In 'new SAUTable().openWindow({\n  select: [],\n  by: [\n    [\"desc\", []]\n  ]\n}, () => {})', 'new SAUTable().openWindow' is undefined)",
+  "core": "ReferenceError: cWrite is not defined"
+}

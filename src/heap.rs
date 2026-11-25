@@ -29,7 +29,7 @@ impl Default for Limits {
     fn default() -> Self {
         Self {
             max_height: 128,
-            max_degree: 128,
+            max_degree: 320,
             max_token_bytes: 64,
         }
     }
@@ -73,7 +73,11 @@ struct WireNode {
 #[serde(deny_unknown_fields)]
 pub struct WireEdge {
     auth: Auth,
+    #[serde(default)]
+    revision: Option<WireRevision>,
 }
+#[derive(Deserialize)]
+struct WireRevision(#[serde(deserialize_with = "crate::json0::deserialize_text")] String);
 fn authenticate(auth: Auth, limits: &Limits) -> Result<(u64, String), NodeError> {
     let Auth(height, version, token) = auth;
     if height > limits.max_height {
@@ -101,7 +105,15 @@ pub fn authenticate_edges(
     limits: &Limits,
     parent_height: Option<u64>,
 ) -> Result<BTreeSet<String>, NodeError> {
+    Ok(authenticate_pinned_edges(wire, limits, parent_height)?.0)
+}
+pub fn authenticate_pinned_edges(
+    wire: Vec<WireEdge>,
+    limits: &Limits,
+    parent_height: Option<u64>,
+) -> Result<(BTreeSet<String>, BTreeMap<String, String>), NodeError> {
     let mut edges = BTreeSet::new();
+    let mut revisions = BTreeMap::new();
     for edge in wire {
         let (height, id) = authenticate(edge.auth, limits)?;
         if parent_height.is_some_and(|p| height >= p) {
@@ -109,6 +121,22 @@ pub fn authenticate_edges(
                 "invalid_height",
                 "parent height must exceed every child height",
             ));
+        }
+        if let Some(wire_revision) = edge.revision {
+            // Decode text without leaking authentication material in errors.
+            let revision = wire_revision.0;
+            if valid_revision(&revision).is_err() {
+                return Err(invalid(
+                    "invalid_revision",
+                    "expected a canonical UUIDv4 node revision",
+                ));
+            }
+            if revisions
+                .insert(id.clone(), revision.clone())
+                .is_some_and(|old| old != revision)
+            {
+                return Err(invalid("revision_collision", "conflicting child revisions"));
+            }
         }
         edges.insert(id);
         if edges.len() > limits.max_degree {
@@ -118,7 +146,7 @@ pub fn authenticate_edges(
             ));
         }
     }
-    Ok(edges)
+    Ok((edges, revisions))
 }
 pub fn marker_retainer(flow: &str, viewpoint: &Viewpoint) -> String {
     retainer(flow, viewpoint).replacen("_a_", "_m_", 1)
@@ -131,6 +159,7 @@ pub struct Child {
 }
 
 pub struct Request {
+    pub revisions: BTreeMap<usize, BTreeMap<String, String>>,
     pub flow: String,
     pub viewpoint: Viewpoint,
     pub nodes: Vec<Result<Node, NodeError>>,
@@ -143,17 +172,20 @@ impl Request {
             serde_json::from_slice(bytes).map_err(|_| anyhow::anyhow!("invalid heap request"))?;
         wire.flow = event::normalize_flow(&wire.flow)?;
         crate::epilogue::check_flow_key(&wire.flow, &wire.viewpoint)?;
+        let mut revisions = BTreeMap::new();
         let nodes = wire
             .nodes
             .into_iter()
-            .map(|value| {
+            .enumerate()
+            .map(|(index, value)| {
                 let wire: WireNode = serde_json::from_value(value).map_err(|_| {
                     invalid("invalid_node", "invalid node fields or authentication")
                 })?;
                 let context = canonical_context(&wire.context)
                     .map_err(|_| invalid("invalid_context", "invalid S3 context metadata"))?;
                 let (height, id) = authenticate(wire.auth, limits)?;
-                let edges = authenticate_edges(wire.edges, limits, Some(height))?;
+                let (edges, pinned) = authenticate_pinned_edges(wire.edges, limits, Some(height))?;
+                revisions.insert(index, pinned);
                 if wire.length > i64::MAX as u64 {
                     return Err(invalid(
                         "invalid_length",
@@ -169,6 +201,7 @@ impl Request {
             })
             .collect();
         Ok(Self {
+            revisions,
             flow: wire.flow,
             viewpoint: wire.viewpoint,
             nodes,
@@ -428,6 +461,8 @@ pub struct Actions {
 }
 #[derive(Serialize)]
 pub struct NodeResult {
+    #[serde(serialize_with = "crate::json0::serialize_text")]
+    pub revision: String,
     pub actions: Actions,
 }
 #[derive(Serialize)]
@@ -456,7 +491,13 @@ impl Outcome {
                 },
                 read: range_get::presign_whole(bucket, &key(OLD, &node.id, &node.revision)).await?,
             };
-            results.insert(index, NodeResult { actions });
+            results.insert(
+                index,
+                NodeResult {
+                    revision: node.revision,
+                    actions,
+                },
+            );
         }
         Ok(Response {
             errors: (!self.errors.is_empty()).then_some(self.errors),
@@ -476,6 +517,43 @@ mod tests {
         );
         Request::parse(serde_json::json!({"flow":flow,"viewpoint":"0x0","nodes":[{"auth":[0,0,token],"length":length,"edges":[]}]}).to_string().as_bytes(),&Limits::default()).unwrap()
     }
+    #[test]
+    fn revision_pins_and_responses_use_json0_strings() {
+        let revision = "00000000-0000-4000-8000-000000000001";
+        let wire = serde_json::json!([{"auth":[0,0,"0*"],"revision":format!("0{revision}")}]);
+        let (ids, pinned) = authenticate_pinned_edges(
+            serde_json::from_value(wire).unwrap(),
+            &Limits::default(),
+            Some(1),
+        )
+        .unwrap();
+        assert_eq!(pinned[ids.first().unwrap()], revision);
+        for wire in [
+            serde_json::json!([{"auth":[0,0,"0*"],"revision":revision}]),
+            serde_json::json!([{"auth":[0,0,"0*"],"revision":"bad-revision"}]),
+        ] {
+            let result = serde_json::from_value(wire).map_err(|_| ()).and_then(|v| {
+                authenticate_pinned_edges(v, &Limits::default(), Some(1)).map_err(|_| ())
+            });
+            assert!(result.is_err());
+        }
+        let result = NodeResult {
+            revision: revision.into(),
+            actions: Actions {
+                write: None,
+                preview: None,
+                read: Access {
+                    url: "https://example.com/node".into(),
+                    headers: Default::default(),
+                },
+            },
+        };
+        assert_eq!(
+            serde_json::to_value(result).unwrap()["revision"],
+            format!("0{revision}")
+        );
+    }
+
     #[test]
     fn ordered_node_ids_and_per_node_validation() {
         let child = node_id(0, 0, b"child");
@@ -575,6 +653,7 @@ mod tests {
                 length: n as u64,
             };
             let request = Request {
+                revisions: Default::default(),
                 flow: format!("f-{}", step % 4),
                 viewpoint: Viewpoint::zero(),
                 nodes: vec![Ok(node.clone()), Ok(node)],
@@ -642,6 +721,20 @@ mod tests {
             ),
         ] {
             assert_eq!(parse(edges).nodes[0].as_ref().unwrap_err().code, code);
+        }
+        for degree in [320, 321] {
+            let edges: Vec<_> = (0..degree)
+                .map(|i| serde_json::json!({"auth":auth(0,format!("child-{i}").as_bytes())}))
+                .collect();
+            let request = Request::parse(
+                serde_json::json!({"flow":"f","viewpoint":"0x0","nodes":[{"auth":auth(1,b"parent"),"length":1,"edges":edges}]}).to_string().as_bytes(),
+                &Limits::default(),
+            ).unwrap();
+            if degree == 320 {
+                assert_eq!(request.nodes[0].as_ref().unwrap().edges.len(), 320);
+            } else {
+                assert_eq!(request.nodes[0].as_ref().unwrap_err().code, "degree_limit");
+            }
         }
     }
 }
