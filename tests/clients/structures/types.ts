@@ -160,7 +160,7 @@ type SyncDirectoryContents_M0 = TrieNode_S0<{
 type SyncFile_M1 = [
   folder: false,
   crc64nvme: Uint8Array,
-  edge: BasinEdge_S0<SyncBlock_M1>,
+  edge: BasinEdge_S0<SyncBlock_M2>,
 ];
 
 type SyncLink_M0<LazyT extends BasinNode_S0<string, string>> = {
@@ -171,12 +171,15 @@ type SyncLink_M0<LazyT extends BasinNode_S0<string, string>> = {
   [Symbol.unscopables]?: LazyT;
 };
 
-interface SyncBlock_M1 extends BasinNode_S0<
-  "sync.memoremix.com", ".sync-block/", null,
+interface SyncBlock_M2 extends BasinNode_S0<
+  "sync.memoremix.com", ".sync-block/", { pageSize: U32 },
   {
-    1: [
+    2: [
       summary: null,
-      contents: SyncSector_M1 | BasinEdge_S0<SyncSector_M1>,
+      contents: [
+        contentDefined: SyncSector_M1 | BasinEdge_S0<SyncSector_M1>,
+        pageDefined: SyncSector_M1 | BasinEdge_S0<SyncSector_M1>,
+      ],
       leading: Array<null | SyncPageLink_M0>,
       lagging: Array<null | SyncPageLink_M0>,
     ];
@@ -286,32 +289,3 @@ type BPlusHint_S0<
   sha384: Uint8Array;
 };
 
-export type ProllyTreelistPolicy_S0 = {
-  boundary: "low" | "mixed";
-  min: U32;
-  target: U32;
-  max: U32;
-  branchTarget: U32;
-  branchMax: U32;
-  runAnchors: boolean;
-};
-
-export type ProllyTreelistSummary_S0 = {
-  size: bigint;
-  uniform: U32 | null; // repeated byte, 0..255, otherwise null
-  crc64nvme: Uint8Array;
-  content: Uint8Array; // domain-separated SHA-384 of bytes or ordered child content IDs/sizes
-};
-
-export interface ProllyTreelist_S0 extends BasinNode_S0<
-  "sync.memoremix.com",
-  ".prolly-treelist/",
-  { depth: U32; closed: boolean; policy: ProllyTreelistPolicy_S0 },
-  {
-    0: [
-      summary: ProllyTreelistSummary_S0,
-      bytes: Uint8Array | null,
-      children: Array<BasinEdge_S0<ProllyTreelist_S0, ProllyTreelist_S0[5], { 0: [ProllyTreelistSummary_S0] }>> | null,
-    ];
-  }
-> {}

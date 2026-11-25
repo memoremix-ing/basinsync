@@ -73,13 +73,28 @@ func run() error {
 				rows = append(rows, s.Entry{Key: key, Value: a[1]})
 			}
 			root, err = s.Build(basin, rows, s.CountConsumer(7))
+		} else if kind == "mixed" {
+			pages := []s.PageInput{}
+			for _, v := range req["pages"].([]any) {
+				a := v.([]any)
+				pages = append(pages, s.PageInput{Index: a[0].(*big.Int), Bytes: a[1].([]byte)})
+			}
+			block, e := s.BuildMixedBlockWithPageSize(basin, req["content"].([]byte), pages, int(req["pageSize"].(int64)))
+			if e != nil {
+				return e
+			}
+			root, err = s.VolumeFromBlocks(basin, map[string]s.BlockRoot{"/mixed": block})
 		} else if kind == "pages" {
 			pages := []s.PageInput{}
 			for _, v := range req["pages"].([]any) {
 				a := v.([]any)
 				pages = append(pages, s.PageInput{Index: a[0].(*big.Int), Bytes: a[1].([]byte)})
 			}
-			block, e := s.BuildBlock(basin, pages)
+			size := 4096
+			if n, ok := req["pageSize"]; ok {
+				size = int(n.(int64))
+			}
+			block, e := s.BuildMixedBlockWithPageSize(basin, nil, pages, size)
 			if e != nil {
 				return e
 			}
@@ -164,6 +179,21 @@ func run() error {
 			}
 			for _, e := range entries {
 				rows = append(rows, []any{hex.EncodeToString(e.Key), e.Value})
+			}
+		} else if kind == "mixed" {
+			bytes, e := s.ReadFile(basin, root, "/mixed", false)
+			if e != nil {
+				return e
+			}
+			rows = append(rows, []any{"/mixed", bytes})
+			for _, q := range req["queries"].([]any) {
+				at := q.(*big.Int).Uint64()
+				basin.ClearCache()
+				value, e := s.ReadRange(basin, root, "/mixed", at, 33, true)
+				if e != nil {
+					return e
+				}
+				rows = append(rows, []any{fmt.Sprintf("/range/%d", at), value})
 			}
 		} else if kind == "pages" {
 			for _, q := range req["queries"].([]any) {

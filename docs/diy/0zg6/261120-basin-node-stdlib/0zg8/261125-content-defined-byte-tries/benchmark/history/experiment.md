@@ -1,15 +1,18 @@
 [comparison]: <comparison.html>
+[diy/0zg6/261120-basin-node-stdlib/0zg8/261125-content-defined-byte-tries]: <../../README.md>
 [file-comparison-large]: <file-comparison-large.json>
 [file-comparison-link]: <file-comparison-link.json>
 [file-comparison-positions]: <file-comparison-positions.json>
 [file-comparison]: <file-comparison.json>
 [initial-diff]: <initial-diff.md>
 [page-index]: <page-index.md>
-[sha384]: <../../../../../../glossary/sha384.md>
-[trie]: <../../../../../../glossary/trie.md>
+[sha384]: <../../../../../../../glossary/sha384.md>
+[trie]: <../../../../../../../glossary/trie.md>
 [workloads]: <workloads.md>
 
-# Matched file-diff experiment
+# Candidate file-diff measurements
+
+Historical candidate comparison; the *current tutorial*[~][diy/0zg6/261120-basin-node-stdlib/0zg8/261125-content-defined-byte-tries] selects content-defined byte tries.
 
 2026-11-25, Apple M2/macOS 27.0.1, Bun 1.4.5. Compare keyless byte treelists with
 hash-pruned *byte tries*[~][trie]. *Workload parameters*[~][workloads]. Main matrix: 864 cases, 4 MiB files, three trials,
@@ -113,12 +116,12 @@ inherent trie cost. Treelist updates reuse opaque suffixes; a run boundary must 
 successor-byte lookahead to stop rechunking promptly. Roots are still assembled from
 a scan of routing descriptors, rather than a fully logarithmic editor.
 
-Recommendation: retain the existing page-trie VFS default, and pursue the keyless
-mixed/run-aware treelist for general byte-list editing and diffing. Confidence is
-moderate. It handles unaligned shifts well and makes key renumbering unnecessary;
-tight fixed tries remain strong for page-aligned overwrites and some dispersed
-workloads. Neither globally minimal edits, move/copy instructions, live-network
-behavior, native interoperability nor production SyncBlock integration is established.
+Conclusion: content-defined chunking explains much of the improvement for
+unaligned shifts, and the CDC trie is competitive with treelist routing. The current
+block design selects trie routing with a content-defined prefix and page-defined
+suffix. Tight fixed tries remain strong for page-aligned overwrites. These candidate
+measurements do not benchmark the combined block format or establish production
+performance, global edit-script minimality or move/copy instructions.
 
 Explore the *comparison*[~][comparison] and *raw matrix*[~][file-comparison]. Earlier
 *file-diff*[~][initial-diff] and *page-index*[~][page-index] controls retain their

@@ -73,6 +73,7 @@ cases.push({
 cases.push({
   kind: "pages",
   seed,
+  pageSize: 16384,
   pages: [
     [0n, new Uint8Array()],
     [7n, Uint8Array.from({ length: 16384 }, (_, i) => i & 255)],
@@ -193,6 +194,12 @@ cases.push({
   ],
   directories: ["/empty"],
 });
+for (const [contentLength, suffixLength, pageSize] of [[0,0,4096],[0,9000,4096],[901,0,4096],[1000000,0,4096],[250000,9000,4096],[500001,40000,16384]]) {
+  let x=0x13579bdf;
+  const content=Uint8Array.from({length:contentLength},()=>{x^=x<<13;x^=x>>>17;x^=x<<5;return x>>>24});
+  const suffix=Uint8Array.from({length:suffixLength},(_,i)=>i%251);
+  cases.push({kind:"mixed",seed,content,pageSize,pages:Array.from({length:Math.ceil(suffixLength/pageSize)},(_,i)=>[BigInt(i),suffix.slice(i*pageSize,(i+1)*pageSize)]),queries:[0n,BigInt(Math.max(0,contentLength-12)),BigInt(contentLength),BigInt(contentLength+suffixLength+1)]});
+}
 // Reproducible generated contracts augment the named boundary/regression cases.
 const generated = Number(process.env.PROPTEST_CASES ?? 8);
 assert(Number.isSafeInteger(generated) && generated > 0, "positive PROPTEST_CASES required");

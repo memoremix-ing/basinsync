@@ -1,9 +1,9 @@
-[crc64nvme]: <../../../../../../glossary/crc64nvme.md>
+[crc64nvme]: <../../../../../../../glossary/crc64nvme.md>
 [diff-results]: <diff-results.json>
 [initial-diff-comparison]: <initial-diff-comparison.html>
 [page-index]: <page-index.md>
-[prolly-tree]: <../../../../../../glossary/prolly-tree.md>
-[sha384]: <../../../../../../glossary/sha384.md>
+[prolly-tree]: <../../../../../../../glossary/prolly-tree.md>
+[sha384]: <../../../../../../../glossary/sha384.md>
 
 # Initial file-diff experiment
 

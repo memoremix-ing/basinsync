@@ -38,6 +38,8 @@ Apply these when implementing or benchmarking this tutorial family:
 - For sequence diffs, check patch reconstruction and patch bytes alongside retrieval
   cost. Separate chunking, routing and refinement changes; include shifted, scattered,
   periodic and uniform content before interpreting a fast comparison as a useful diff.
+- Keep container/checksum version domains independent, and make physical units such
+  as page stride explicit rather than inferring them from nested payloads.
 - Distinguish logical fanout from stored packing. Count-based inline budgets can
   over-fetch large values; measure bytes and GETs before favoring wider branches.
 - For embedded structural values, count nested inline data per stored node and

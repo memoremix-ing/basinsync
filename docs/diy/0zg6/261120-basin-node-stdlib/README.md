@@ -9,7 +9,7 @@ prerequisites:
 [diy/0zg6/261120-basin-node-stdlib/0zg7/261120-byte-trie]: <0zg7/261120-byte-trie/README.md>
 [diy/0zg6/261120-basin-node-stdlib/0zg7/261123-b-tree]: <0zg7/261123-b-tree/README.md>
 [diy/0zg6/261120-basin-node-stdlib/0zg7/261123-bitmapped-vector-trie]: <0zg7/261123-bitmapped-vector-trie/README.md>
-[diy/0zg6/261120-basin-node-stdlib/0zg8/261125-prolly-treelist]: <0zg8/261125-prolly-treelist/README.md>
+[diy/0zg6/261120-basin-node-stdlib/0zg8/261125-content-defined-byte-tries]: <0zg8/261125-content-defined-byte-tries/README.md>
 [envbuf]: <../../../glossary/envbuf.md>
 [flexbuffers]: <../../../glossary/flexbuffers.md>
 [node]: <../../../glossary/node.md>
@@ -44,7 +44,7 @@ The default physical *degree limit*[~][node-degree] is 320.
 
 *B-tree*[~][diy/0zg6/261120-basin-node-stdlib/0zg7/261123-b-tree].
 
-*Keyless prolly treelists*[~][diy/0zg6/261120-basin-node-stdlib/0zg8/261125-prolly-treelist] experiments with content-defined packing, byte-size navigation and shifted file comparisons.
+*Content-defined byte tries*[~][diy/0zg6/261120-basin-node-stdlib/0zg8/261125-content-defined-byte-tries] combine a content-defined prefix with a page-defined suffix in each file block.
 
 The *format reference*[~][node-format] records shared capability derivation and storage conventions.
 

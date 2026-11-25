@@ -1,0 +1,6 @@
+[
+  {"pattern":"random","seed":324508639,"length":1000000,"lengths":[204011,33776,137595,79328,108391,76835,151858,82683,125523]},
+  {"pattern":"zeros","seed":0,"length":300000,"lengths":[262144,37856]},
+  {"pattern":"runs","seed":0,"length":49152,"lengths":[16384,16384,16384]},
+  {"pattern":"zeros","seed":0,"length":0,"lengths":[]}
+]

@@ -10,10 +10,10 @@ import {
 import { Trie, Consumer } from "./structures/trie";
 import { Vector } from "./structures/vector";
 import { BTree } from "./structures/btree";
-import { Volume, buildBlock } from "./structures/volume";
+import { Volume, buildBlock, buildMixedBlock } from "./structures/volume";
 import { parse, stringify } from "./json0";
 export type Archive = {
-  kind: "trie" | "volume" | "pages" | "vector" | "btree";
+  kind: "trie" | "volume" | "mixed" | "pages" | "vector" | "btree";
   root: Edge;
   objects: [Edge, Uint8Array][];
   queries?: bigint[];
@@ -25,12 +25,14 @@ export const count: Consumer<unknown, bigint> = {
   combine: (xs) => xs.reduce((a, b) => a + b, 0n),
 };
 export async function build(input: {
-  kind: "trie" | "volume" | "pages" | "vector" | "btree";
+  kind: "trie" | "volume" | "mixed" | "pages" | "vector" | "btree";
   seed: Uint8Array;
   entries?: [string, unknown][];
   files?: [string, Uint8Array][];
   directories?: string[];
   pages?: [bigint, Uint8Array][];
+  content?: Uint8Array;
+  pageSize?: number;
   items?: [bigint, unknown][];
   length?: bigint;
   bits?: number;
@@ -57,10 +59,12 @@ export async function build(input: {
         ? (await BTree.build(b, input.entries!, count)).root
         : input.kind === "trie"
           ? (await Trie.build(b, input.entries!, count)).root
+          : input.kind === "mixed"
+            ? (await Volume.fromBlocks(b, [["/mixed", await buildMixedBlock(b, input.content!, input.pages!, {}, input.pageSize ?? 4096)]])).root
           : input.kind === "pages"
             ? (
                 await Volume.fromBlocks(b, [
-                  ["/sparse", await buildBlock(b, input.pages!)],
+                  ["/sparse", await buildBlock(b, input.pages!, input.pageSize ?? 4096)],
                 ])
               ).root
             : (await Volume.build(b, input.files!, input.directories)).root;
@@ -101,6 +105,10 @@ export async function verify(a: Archive) {
   } else if (a.kind === "trie") {
     for await (const [k, v] of new Trie(basin, a.root, count).entries())
       rows.push([hex(k), v]);
+  } else if (a.kind === "mixed") {
+    const volume = new Volume(basin, a.root);
+    rows.push(["/mixed", await volume.read("/mixed")]);
+    for (const at of a.queries ?? []) { basin.clearCache(); rows.push([`/range/${at}`, await volume.read("/mixed", { start: Number(at), length: 33 })]); }
   } else if (a.kind === "pages") {
     const volume = new Volume(basin, a.root);
     for (const page of a.queries!) {

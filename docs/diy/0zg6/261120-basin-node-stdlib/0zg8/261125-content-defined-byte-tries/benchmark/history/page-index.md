@@ -1,9 +1,9 @@
-[crc64nvme]: <../../../../../../glossary/crc64nvme.md>
+[crc64nvme]: <../../../../../../../glossary/crc64nvme.md>
 [page-index-comparison]: <page-index-comparison.html>
-[prolly-tree]: <../../../../../../glossary/prolly-tree.md>
+[prolly-tree]: <../../../../../../../glossary/prolly-tree.md>
 [results]: <results.json>
-[sha384]: <../../../../../../glossary/sha384.md>
-[trie]: <../../../../../../glossary/trie.md>
+[sha384]: <../../../../../../../glossary/sha384.md>
+[trie]: <../../../../../../../glossary/trie.md>
 
 # Client page-index experiment
 

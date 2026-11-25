@@ -124,6 +124,10 @@ impl<S: Storage + Send + 'static> SyncVolume<S> {
             } else {
                 let reader =
                     volume::PageReader::open(&mut *self.basin.lock().unwrap(), &self.root, path)?;
+                ensure!(
+                    reader.page_size == PAGE_SIZE,
+                    "database block page-size mismatch"
+                );
                 let count = reader.count;
                 ensure!(count > 0, "empty Turso database");
                 let file = tempfile::tempfile_in(cow::data_root()?)?;
@@ -288,7 +292,7 @@ fn full_block<S: Storage>(
             .collect::<Result<Vec<_>>>()?
     };
     let _profile = profile::span("checkpoint.blocks");
-    volume::build_block_with_algorithm(b, pages, inline_pages, algorithm)
+    volume::build_block_with_page_size(b, pages, inline_pages, algorithm, PAGE_SIZE)
 }
 // All file workers and their uploads have completed before this publication.
 fn publish_blocks<S: Storage>(
@@ -540,6 +544,30 @@ mod tests {
             bytes.copy_from_slice(&self.bytes[offset as usize..offset as usize + bytes.len()]);
             Ok(())
         }
+    }
+    #[test]
+    fn database_mount_rejects_content_prefixes_and_incorrect_page_stride() -> Result<()> {
+        for prefix in [true, false] {
+            let mut b = Basin::new(MemoryStorage::default(), vec![42; 32])?;
+            let block = if prefix {
+                volume::build_mixed_block_with_page_size(
+                    &mut b,
+                    &[1],
+                    vec![(0.into(), vec![0; PAGE_SIZE])],
+                    volume::ChunkPolicy::default(),
+                    PAGE_SIZE,
+                )?
+            } else {
+                volume::build_block(&mut b, vec![(0.into(), vec![0; 4096])])?
+            };
+            let root = volume::from_blocks(&mut b, vec![("/db".into(), block)], vec![])?;
+            assert!(
+                SyncVolume::new(b, root, LoadMode::LazyPages)
+                    .open("/db")
+                    .is_err()
+            );
+        }
+        Ok(())
     }
     #[test]
     fn sparse_growth_reopens_as_the_complete_snapshot_after_resume() -> Result<()> {
