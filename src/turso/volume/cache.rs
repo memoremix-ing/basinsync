@@ -7,9 +7,10 @@ use crate::structures::{
 use anyhow::Result;
 use std::{
     fs,
-    io::Write,
+    io::{Read, Write},
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
+    time::SystemTime,
 };
 
 #[derive(Clone)]
@@ -83,6 +84,7 @@ impl<S: Storage> DiskCache<S> {
         let _guard = self.lock.lock().unwrap();
         let path = self.path(edge)?;
         if path.exists() {
+            let _ = fs::File::open(&path).and_then(|file| file.set_modified(SystemTime::now()));
             return Ok(());
         }
         self.make_room(bytes.len() as u64)?;
@@ -161,12 +163,23 @@ impl<S: Storage + Clone + Send> Storage for DiskCache<S> {
         }
         let _profile = profile::span("cache.disk");
         let path = self.path(edge)?;
-        if let Ok(metadata) = fs::metadata(&path)
-            && metadata.len() <= self.budget
-            && metadata.len() == basin::footer(edge)?.field("length")?.number()? as u64
-            && let Ok(bytes) = fs::read(&path)
-            && let Ok(object) = VerifiedObject::new(edge, bytes)
-        {
+        let hit = || -> Result<VerifiedObject> {
+            let file = fs::File::open(&path)?;
+            let length = file.metadata()?.len();
+            anyhow::ensure!(
+                length <= self.budget
+                    && length == basin::footer(edge)?.field("length")?.number()? as u64,
+                "cached object length mismatch"
+            );
+            let mut bytes = Vec::new();
+            (&file).take(length + 1).read_to_end(&mut bytes)?;
+            let object = VerifiedObject::new(edge, bytes)?;
+            // Persistent approximate LRU. Touch the opened inode, so an eviction
+            // and replacement at this path cannot refresh an unrelated file.
+            let _ = file.set_modified(SystemTime::now());
+            Ok(object)
+        };
+        if let Ok(object) = hit() {
             return Ok(object);
         }
         let _ = fs::remove_file(&path);
