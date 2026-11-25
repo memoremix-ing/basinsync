@@ -7,6 +7,7 @@ import {decodeBulkOrder} from "./bulkorder";
 import {trimRetryMargins,coordinateLength} from "./events";
 import {append,hex} from "./crc32c";
 import { objectKeys } from "./object-keys";
+import { passed } from "./scenarios";
 import { committedKeys } from "./listing";
 const f=await fixture("crc32c");
 try {
@@ -43,5 +44,5 @@ try {
   for(const mode of ["sequential","bulk-parallel","range-prefetch","bidirectional"])assert.equal((await f.recover(bucket,mode)).crc32c,hex(prefix[count+1]));
   await f.s3.send(new PutObjectCommand({Bucket:bucket,Key:key(BigInt(count+1)),Body:body,Metadata:{...next.Metadata,crc32c:hex(prefix[count+1]^1)}}));
   await assert.rejects(()=>f.recover(bucket,"sequential"),/CRC32C/);
-  console.log(`put of success: independent cumulative CRC32C verification, Timeline and BulkOrder metadata, archive restart, snapshot-only seeding, continuation, and corrupt-checksum rejection. Artifacts: ${f.artifacts}`);
+  passed("0zg4 timeline recovery", `independent cumulative CRC32C verification, Timeline and BulkOrder metadata, archive restart, snapshot-only seeding, continuation, and corrupt-checksum rejection. Artifacts: ${f.artifacts}`);
 }finally{await f.close();}

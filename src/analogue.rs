@@ -125,7 +125,7 @@ impl Index {
             ..self.boundary(usize::try_from(highest - &self.lowest)?))
     }
     pub fn decode(message: &[u8]) -> Result<Self> {
-        let tuple = flexbuffers::Reader::get_root(message)?.get_vector()?;
+        let tuple = crate::flexbuffer::root(message)?.get_vector()?;
         ensure!(
             tuple.len() == 4
                 && flexbuffer::read(tuple.index(0)?)?

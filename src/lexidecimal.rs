@@ -4,7 +4,7 @@ use num_bigint::{BigInt, BigUint, Sign};
 
 const HEX: &[u8; 16] = b"0123456789abcdef";
 
-fn size_prefix(size: usize, negative: bool) -> String {
+pub fn size_prefix(size: usize, negative: bool) -> String {
     let size = format!("{size:x}");
     let width = size.len().next_power_of_two();
     // A usize-sized allocation needs at most sixteen hexadecimal size digits.

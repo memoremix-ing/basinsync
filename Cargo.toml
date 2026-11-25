@@ -30,6 +30,8 @@ metrics-exporter-prometheus = { version = "0.18", default-features = false }
 
 [dev-dependencies]
 proptest = "1"
+cddl = "0.10.7"
+ciborium = "0.2"
 
 # Tests spend most of their time inside Turso; optimize dependencies only.
 [profile.dev.package."*"]

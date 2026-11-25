@@ -61,14 +61,15 @@ publication. For status `latest`, HEAD its known *Flow*[~][flow]
 message-range URL; otherwise retain the *Timeline*[~][timeline]
 *Range GET*[~][range-get]. Test URL selection and copied contents directly.
 
-Before writing the *Timeline*[~][timeline], read the latest
+To catch up before writing the *Timeline*[~][timeline], read the latest
 *Basin*[~][basin] *Viewpoint*[~][viewpoint] and corresponding
 *Milestone*[~][milestone]. Load its snapshot when needed and successfully ingest
 all subsequent *DifferentialEvents*[~][differential-event]. Use that
 *Milestone*[~][milestone] as the exponential-search seed. With no backup, recover
 from the beginning. Preserve ordered publication across the two-batch pipeline.
-For status, honor the *probe freshness window*[~][basin-timeline]; when due,
-probe the next *Milestone*[~][milestone] first. Discover a newer
+Writes from a drained pipeline always probe; for status, honor the
+*probe freshness window*[~][basin-timeline]. Either way, probe the next
+*Milestone*[~][milestone] first. Discover a newer
 *Basin*[~][basin] backup and refresh only when that successor exists.
 
 Test pinned-image equality against full frame replay, snapshot-plus-suffix
@@ -76,9 +77,10 @@ recovery, large and delayed uploads, concurrent backup workers, interrupted copi
 replies, and corrupt backups. Run the *development checks*[~][development] and
 compare *background backup overhead*[~][0004-backup-overhead].
 
-`BASINSYNC_DATA_DIR` defaults to `.local/state`; each writer uses its own
-reconstructed on-disk cache. `BASINSYNC_BACKUP_INTERVAL_MS` defaults to 1000;
-zero disables background backups for comparisons. Export with bounded buffers
+`BASINSYNC_DATA_DIR` defaults to `.local/state`; writers may share it, each
+keeping its own reconstructed on-disk cache in a private subdirectory.
+`BASINSYNC_BACKUP_INTERVAL_MS` defaults to 1000, and the first periodic backup
+waits one interval; zero disables background backups for comparisons. Export with bounded buffers
 and stream uploads. *Epilogue compaction*[~][epilogue-compaction],
 *Timeline eviction*[~][timeline-eviction], and
 *Prologue vacuuming*[~][prologue-vacuuming] remain for later tutorials.

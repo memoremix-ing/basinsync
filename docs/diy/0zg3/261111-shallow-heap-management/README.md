@@ -34,7 +34,7 @@ counts incoming edges for eventual collection in *UserSpace*[~][userspace].
 Implement the *staging endpoint*[~][heap-protocol]. Require the *Flow's*[~][flow]
 singular expected next *Viewpoint*[~][viewpoint]. Accept only *height*[~][node-height]
 zero, version zero, and empty edge lists. Configure `BASINSYNC_HEAP_MAX_HEIGHT`
-(128) and `BASINSYNC_HEAP_MAX_TOKEN_BYTES` (64).
+(128) and `BASINSYNC_HEAP_MAX_TOKEN_BYTES` (64); empty tokens are valid.
 
 Each submitted *node*[~][node] may include `context: Record<string, string>`
 (default `{}`). Validate its *context*[~][context] and bind `x-amz-meta-ctx-` headers
@@ -63,8 +63,9 @@ CREATE INDEX userspace_edges_retainer ON userspace_edges(retainer, node);
 ```
 
 For each valid *node*[~][node], insert its id, length, current reservation time,
-and empty etag/promotion values, then its staging *retainer*[~][retainer] edge.
-On collision, require matching length and *context*[~][context], and no incoming `n-` edges; add the
+and empty etag/promotion values (server-written times are UTC RFC 3339 text;
+`''` means unset), then its staging *retainer*[~][retainer] edge.
+On collision, require matching length and *context*[~][context]; add the
 staging edge idempotently. Report errors by input index while retaining valid
 entries in the same transaction.
 

@@ -60,7 +60,7 @@ mod tests {
     fn context_is_json0_text_and_valid_s3_metadata() {
         let details: CommitDetails = serde_json::from_value(serde_json::json!({
             "flow":"f", "viewpoint":"0x0", "edges":[], "sha384":"0*",
-            "context":{"Kind":"00x-literal", "empty":"", "0-key":"0"}
+            "context":{"Kind":"00x-literal", "empty":"", "0-key":"00"}
         }))
         .unwrap();
         let headers = context_headers(&details.context).unwrap();
@@ -119,9 +119,9 @@ mod tests {
             (BigUint::from(1u8) << 128usize).to_string()
         );
         assert_eq!(details.sha384, [0, 255]);
-        for wire in ["0*AP8", "0*AP8=", "0%AP8=", "0%AP8", "0* A\tP8\n"] {
+        for wire in ["0*AP8", "0*AP8=", "0%AP8=", "0%AP8"] {
             let details: CommitDetails = serde_json::from_value(serde_json::json!({
-                "flow": "0", "viewpoint": "0x0", "edges":[],"sha384": wire,
+                "flow": "00", "viewpoint": "0x0", "edges":[],"sha384": wire,
             }))
             .unwrap();
             assert_eq!(details.flow, "0");
@@ -134,6 +134,8 @@ mod tests {
             r#"{"flow":"f","viewpoint":0,"edges":[],"sha384":"0*"}"#,
             r#"{"flow":"f","viewpoint":"0x0","edges":[],"sha384":"00*"}"#,
             r#"{"flow":"f","viewpoint":"0x0","edges":[],"sha384":"0*?"}"#,
+            r#"{"flow":"f","viewpoint":"0x0","edges":[],"sha384":"0* AP8"}"#,
+            r#"{"flow":"f","viewpoint":"0x0","edges":[],"sha384":"0*AP9"}"#,
             r#"{"flow":"f","flow":"g","viewpoint":"0x0","edges":[],"sha384":"0*"}"#,
             r#"{"flow":"f","viewpoint":"0x0","edges":[],"sha384":"0*","extra":0}"#,
         ] {

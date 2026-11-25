@@ -12,7 +12,8 @@ padding between an envelope's message and footer.
 Feeds default to a trailing 24-byte margin with an eight-byte `u64` message,
 in *FlexBuffers'*[~][flexbuffers] little-endian order, starting at zero.
 If publication returns the *empty sentinel's*[~][empty-sentinel] *ETag*[~][etag],
-increment and replace that same margin until distinct; never wrap the counter.
+increment and replace that same margin until distinct, without a retry limit;
+never wrap the counter.
 Preserve the feed prefix and retry with `If-Match` on the observed validator.
 
 Standalone margins instead contain one `u8`, counting from 1 through 7.

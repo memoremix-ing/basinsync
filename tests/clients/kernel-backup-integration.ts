@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {GetObjectCommand, ListObjectsV2Command, DeleteObjectCommand, PutObjectCommand} from "@aws-sdk/client-s3";
-import {fixture,eventually} from "./analogue-fixture";
+import {within,fixture,eventually} from "./analogue-fixture";
 import {commit,epilogueStatus,sha384} from "./client";
 import {toObject} from "./flexbuffer";
 import {message} from "./envbuf";
@@ -8,6 +8,7 @@ import {fromKey} from "./timeline";
 import {deltasAt,eventTuples,entriesAt,type WalDelta} from "./events";
 import {ingestWal} from "./wal";
 import { objectKeys } from "./object-keys";
+import { passed } from "./scenarios";
 
 type Node={id:string;revision:string;length:number;sha384:string};
 type Graph={version:string;milestone:string;coordinate:string;crc32c:string;parent:string;databases:Record<string,Node>};
@@ -25,7 +26,7 @@ try {
   });
   const app=await f.server(bucket,{BASINSYNC_BACKUP_INTERVAL_MS:"30"},proxy);
   assert.equal((await commit(app.url,"kernel",new Uint8Array([1,2]),0n)).status,201);
-  await entered.promise;
+  await within(entered.promise,"entered");
   assert.equal((await commit(app.url,"kernel",new Uint8Array([3,4]),1n)).status,201);
   release.resolve();
   const cp=await eventually(()=>latest(bucket),cp=>!!cp&&BigInt(cp.graph.milestone)>=3n);assert(cp);
@@ -64,7 +65,7 @@ try {
     return next();
   });
   const first=await f.server(interrupted,{BASINSYNC_BACKUP_INTERVAL_MS:"30"},broken);
-  assert.equal((await commit(first.url,"interrupted",new Uint8Array([7]),0n)).status,201);await attempted.promise;await f.stop(first.process);
+  assert.equal((await commit(first.url,"interrupted",new Uint8Array([7]),0n)).status,201);await within(attempted.promise,"attempted");await f.stop(first.process);
   assert.equal(await latest(interrupted),null);
   const pending=await f.recover(interrupted,"sequential");assert(BigInt(pending.milestone)>=3n);
   reject=false;const restarted=await f.server(interrupted,{BASINSYNC_BACKUP_INTERVAL_MS:"30"},broken);
@@ -76,7 +77,7 @@ try {
   const draining=await f.bucket(),uploadEntered=Promise.withResolvers<void>(),uploadRelease=Promise.withResolvers<void>();let paused=false;
   const blocked=f.relay(async(request,next)=>{if(!paused&&request.method==="PUT"&&new URL(request.url).pathname.includes(`/${objectKeys.kernelHeap}young/`)){paused=true;uploadEntered.resolve();await uploadRelease.promise;}return next();});
   const closing=await f.server(draining,{BASINSYNC_BACKUP_INTERVAL_MS:"30"},blocked);
-  assert.equal((await commit(closing.url,"drain",new Uint8Array([8]),0n)).status,201);await uploadEntered.promise;
+  assert.equal((await commit(closing.url,"drain",new Uint8Array([8]),0n)).status,201);await within(uploadEntered.promise,"uploadEntered");
   const stopped=f.stop(closing.process);await Bun.sleep(50);assert.equal(closing.process.exitCode,null);uploadRelease.resolve();await stopped;
   assert(await latest(draining));assert.equal((await f.recover(draining,"sequential")).flows.drain,"0");
   // Independent processes may lose the Timeline race; their published roots stay gapless.
@@ -97,7 +98,7 @@ try {
   const failed=await f.bucket();let fail=true;const failure=Promise.withResolvers<void>();
   const badUpload=f.relay(async(request,next)=>{if(fail&&request.method==="PUT"&&new URL(request.url).pathname.includes(`/${objectKeys.kernelHeap}young/`)){fail=false;failure.resolve();return new Response("image unavailable",{status:500});}return next();});
   const retry=await f.server(failed,{BASINSYNC_BACKUP_INTERVAL_MS:"60"},badUpload);
-  assert.equal((await commit(retry.url,"retry",new Uint8Array([1]),0n)).status,201);await failure.promise;
+  assert.equal((await commit(retry.url,"retry",new Uint8Array([1]),0n)).status,201);await within(failure.promise,"failure");
   assert.equal((await commit(retry.url,"retry",new Uint8Array([2]),1n)).status,201);const tip=(await epilogueStatus(retry.url,"retry")).timelines.basin.milestone;
   await eventually(()=>latest(failed),cp=>!!cp&&BigInt(cp.graph.milestone)>=tip);await f.stop(retry.process);
   // A legacy application fixture supplies a large database, not a second server backup mode.
@@ -109,5 +110,5 @@ try {
   const big=await f.server(large,{BASINSYNC_BACKUP_INTERVAL_MS:"30"},observing);
   const largeRoot=await eventually(()=>latest(large),Boolean);assert(largeRoot);assert(largeRoot.graph.databases["default.turso"].length>8*1024*1024);assert.equal(largePuts,1);assert.equal(posts,0);await f.stop(big.process);
   assert.equal((await f.recover(large,"sequential")).flows.large,"0");
-  console.log(`put of success: paired KernelSpace backup nodes, durable internal reservations, commitkernel, foreground progress, prefix-only eviction, and interrupted root repair; ${f.artifacts}`);
+  passed("0zg7 backup nodes", `paired KernelSpace backup nodes, durable internal reservations, commitkernel, foreground progress, prefix-only eviction, and interrupted root repair; ${f.artifacts}`);
 }finally{await f.close();}

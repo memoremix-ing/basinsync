@@ -565,7 +565,8 @@ impl Prepared {
         bucket: &Bucket,
         prefix: &Prefix,
     ) -> Result<(Prefix, Vec<u8>)> {
-        check_write_base(bucket, prefix).await?;
+        // The conditional PUT is the race guard; the preparer already probed for
+        // successors when it last settled.
         ensure!(
             self.milestone == &prefix.milestone + 1u8
                 && self.crc32c_base == prefix.crc32c
@@ -944,30 +945,6 @@ async fn replay(bucket: &Bucket, state: &mut Basin, tail: BigUint) -> Result<()>
     Ok(())
 }
 
-/// Before a conditional publication, read the latest recovery anchor and ensure
-/// the locally ingested prefix covers it and has no unseen successor.
-pub async fn check_write_base(bucket: &Bucket, prefix: &Prefix) -> Result<()> {
-    if let Some(checkpoint) = crate::epilogue::latest_checkpoint(bucket).await? {
-        ensure!(
-            checkpoint.milestone <= prefix.milestone,
-            "Basin backup advanced beyond writer"
-        );
-        if checkpoint.milestone == prefix.milestone {
-            ensure!(
-                Some(checkpoint.digest.as_str()) == prefix.digest()
-                    && checkpoint.coordinate == prefix.coordinate
-                    && checkpoint.crc32c == prefix.crc32c,
-                "backup prefix mismatch"
-            );
-        }
-    }
-    ensure!(
-        !exists(bucket, &(&prefix.milestone + 1u8)).await?,
-        "Timeline advanced beyond writer"
-    );
-    Ok(())
-}
-
 pub async fn recover(bucket: &Bucket) -> Result<Basin> {
     recover_with(bucket, crate::recovery::Config::default()).await
 }
@@ -983,6 +960,8 @@ pub async fn recover_with(bucket: &Bucket, config: crate::recovery::Config) -> R
 }
 
 /// Avoid snapshot discovery when a read's settled prefix is still current.
+/// Probe the next Milestone first; read the recovery anchor and search for the
+/// tail only when another writer has published past this state.
 pub async fn refresh_if_advanced(bucket: &Bucket, state: &mut Basin) -> Result<()> {
     let next = &state.milestone + 1u8;
     if exists(bucket, &next).await? {
@@ -1446,10 +1425,7 @@ mod group_tests {
         )?;
         let (reserved, vp) =
             stager.prepare_kernel(crate::kernel::Operation::Reserve(graph.clone()))?;
-        let command = crate::kernel::Commit {
-            viewpoint: vp.decimal(),
-            graph: graph.clone(),
-        };
+        let command = crate::kernel::Commit::new(vp.decimal(), graph.clone())?;
         let before = stager.prefix();
         assert!(
             stager

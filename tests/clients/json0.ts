@@ -28,7 +28,7 @@ export const replacer = function (
     }
 
     case "string": {
-      return value.length > 1 && value.codePointAt(0) === 0x30 // "0".codePointAt
+      return value.codePointAt(0) === 0x30 // "0".codePointAt
         ? `0${value}`
         : value;
     }
@@ -51,9 +51,20 @@ export const replacer = function (
   }
 };
 
+// Padding is optional but, when present, exact; whitespace (which
+// fromBase64 would skip) and nonzero unused bits are rejected.
+function strictBase64(text: string, alphabet: "base64" | "base64url"): Uint8Array {
+  const digits = alphabet === "base64url" ? /^[A-Za-z0-9_-]*={0,2}$/ : /^[A-Za-z0-9+/]*={0,2}$/;
+  if (!digits.test(text)) throw new Error("Invalid base64 characters.");
+  if (text.includes("=") ? text.length % 4 !== 0 : text.length % 4 === 1) throw new Error("Invalid base64 padding.");
+  const padded = text.includes("=") ? text : text + "=".repeat((4 - (text.length % 4)) % 4);
+  return Uint8Array.fromBase64(padded, { alphabet, lastChunkHandling: "strict" });
+}
+
 export const reviver = (_key: string, value: unknown): unknown => {
-  if (typeof value !== "string" || value.length < 2) return value;
+  if (typeof value !== "string") return value;
   if (value.codePointAt(0) !== 0x30) return value; // "0".codePointAt
+  if (value.length < 2) throw new Error("Invalid string encoding: lone 0.");
   const point = value.codePointAt(1);
 
   switch (point) {
@@ -63,15 +74,11 @@ export const reviver = (_key: string, value: unknown): unknown => {
 
     // "*".codePointAt -- Uint8Array (url-safe)
     case 0x2a: {
-      return Uint8Array.fromBase64(value.slice(2), {
-        alphabet: "base64url",
-      });
+      return strictBase64(value.slice(2), "base64url");
     }
     // "%".codePointAt -- Uint8Array
     case 0x25: {
-      return Uint8Array.fromBase64(value.slice(2), {
-        alphabet: "base64",
-      });
+      return strictBase64(value.slice(2), "base64");
     }
 
     // "x".codePointAt -- +bigint

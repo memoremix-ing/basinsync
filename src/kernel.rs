@@ -134,6 +134,7 @@ impl Graph {
         Ok(flexbuffers::to_vec(self)?)
     }
     pub fn decode(bytes: &[u8]) -> Result<Self> {
+        crate::flexbuffer::check_layout(bytes)?;
         let graph: Self = flexbuffers::from_slice(bytes)?;
         graph.validate()?;
         Ok(graph)
@@ -158,11 +159,59 @@ impl Graph {
         })
     }
 }
+/// A `commitkernel` command. Like a Commitflow marker it carries the root
+/// message's exact bytes, so its digest never depends on re-encoding: other
+/// writers may lay out the same FlexBuffers map differently.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(try_from = "CommitWire", into = "CommitWire")]
 pub struct Commit {
     pub viewpoint: String,
     pub graph: Graph,
+    pub blob: Vec<u8>,
+}
+impl Commit {
+    pub fn new(viewpoint: String, graph: Graph) -> Result<Self> {
+        let blob = graph.encode()?;
+        Ok(Self {
+            viewpoint,
+            graph,
+            blob,
+        })
+    }
+    pub fn from_blob(viewpoint: String, blob: Vec<u8>) -> Result<Self> {
+        Ok(Self {
+            viewpoint,
+            graph: Graph::decode(&blob)?,
+            blob,
+        })
+    }
+}
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CommitWire {
+    viewpoint: String,
+    sha384: String,
+    #[serde(with = "serde_bytes")]
+    blob: Vec<u8>,
+}
+impl TryFrom<CommitWire> for Commit {
+    type Error = anyhow::Error;
+    fn try_from(wire: CommitWire) -> Result<Self> {
+        ensure!(
+            wire.sha384 == event::digest(&wire.blob),
+            "commitkernel digest mismatch"
+        );
+        Self::from_blob(wire.viewpoint, wire.blob)
+    }
+}
+impl From<Commit> for CommitWire {
+    fn from(commit: Commit) -> Self {
+        Self {
+            viewpoint: commit.viewpoint,
+            sha384: event::digest(&commit.blob),
+            blob: commit.blob,
+        }
+    }
 }
 #[derive(Clone)]
 pub enum Operation {

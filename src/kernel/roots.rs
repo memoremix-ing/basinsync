@@ -15,7 +15,7 @@ impl Index {
             viewpoint: Viewpoint::parse(&command.viewpoint)?,
             upstream: upstream.clone(),
             covered: command.graph.milestone.parse()?,
-            sha384: event::digest(&command.graph.encode()?),
+            sha384: event::digest(&command.blob),
         };
         result.validate()?;
         Ok(result)
@@ -91,7 +91,7 @@ impl Index {
             Self::from_command(&command, &self.upstream)? == *self,
             "commitkernel index mismatch"
         );
-        command.graph.encode()
+        Ok(command.blob)
     }
 }
 
@@ -155,12 +155,9 @@ impl Cache {
                 blob
             }
         };
-        let graph = index.graph(&blob)?;
+        index.graph(&blob)?;
         Ok((
-            Commit {
-                viewpoint: index.viewpoint.decimal(),
-                graph,
-            },
+            Commit::from_blob(index.viewpoint.decimal(), blob.clone())?,
             blob,
         ))
     }

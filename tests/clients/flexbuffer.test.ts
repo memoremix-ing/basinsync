@@ -12,7 +12,7 @@ const payload = (wire: Uint8Array) => {
 const rawExtension = (bytes: number[]) => new Uint8Array([bytes.length, ...bytes, bytes.length, 48, 1]);
 
 type Extension = {bigint?:string;wellKnownSymbol?:string;globalSymbol?:string;wire:number[]};
-const shared = vectors<{extensions:Extension[];invalid:number[][];unsupportedWellKnownSymbols:string[]}>("flexbuffer");
+const shared = vectors<{extensions:Extension[];invalid:number[][];fixedLengthVectors:number[][];unsupportedWellKnownSymbols:string[]}>("flexbuffer");
 
 test("shared extension vectors", () => {
   for (const {bigint, wellKnownSymbol, globalSymbol, wire} of shared.extensions) {
@@ -21,6 +21,8 @@ test("shared extension vectors", () => {
     expect(toObject<typeof value>(new Uint8Array(wire))).toBe(value);
   }
   for (const wire of shared.invalid) expect(() => toObject(new Uint8Array(wire))).toThrow();
+  // Fixed-length unsigned vectors are ordinary arrays, never extensions.
+  for (const wire of shared.fixedLengthVectors) expect(Array.isArray(toObject(new Uint8Array(wire)))).toBe(true);
   for (const name of shared.unsupportedWellKnownSymbols) expect(() => toObject(rawExtension([...new TextEncoder().encode(`#${name}`)]))).toThrow();
   expect(toReference(encode(-1n)).isBigint()).toBe(true);
 });

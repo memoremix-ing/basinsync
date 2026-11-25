@@ -184,7 +184,7 @@ mod canonical_tests {
         .unwrap();
         assert_eq!(value["headers"]["x-amz-meta-ctx-bigint"], "00x1");
         assert_eq!(value["headers"]["x-amz-meta-ctx-symbol"], "00#species");
-        assert_eq!(value["headers"]["Content-Length"], "0");
+        assert_eq!(value["headers"]["Content-Length"], "00");
     }
     #[test]
     fn prefix_header_names_follow_signed_header_order() {

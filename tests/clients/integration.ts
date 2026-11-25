@@ -17,6 +17,7 @@ import { all as envelopes, before as previousEnvelope, message as envelopeMessag
 import { stress } from "./stress";
 import { s3Fixture } from "./s3-fixture";
 import { objectKeys } from "./object-keys";
+import { scenario, passed, report } from "./scenarios";
 import { vectors } from "./vectors";
 import { committedKeys } from "./listing";
 
@@ -76,7 +77,7 @@ async function bucket() {
   await s3.send(new CreateBucketCommand({ Bucket:name })); return name;
 }
 function serverProcess(bucket: string, s3Endpoint: string, address: string, options:Record<string,string>={}) {
-  return launch([`${root}/target/debug/basinsync`],{
+  return launch([Bun.env.BASINSYNC_SERVER??`${root}/target/debug/basinsync`],{
     BASINSYNC_LOG_FORMAT:"json",S3_ENDPOINT:s3Endpoint,S3_BUCKET:bucket,AWS_REGION:"us-east-1",
     AWS_ACCESS_KEY_ID:credentials.accessKeyId,AWS_SECRET_ACCESS_KEY:credentials.secretAccessKey,
     AWS_SESSION_TOKEN:"",BASINSYNC_LISTEN:address,BASINSYNC_CLEANUP_INTERVAL_MS:"0",BASINSYNC_BULK_MAX_AGE_MS:"0",BASINSYNC_BACKUP_INTERVAL_MS:"0",BASINSYNC_STATUS_PROBE_MAX_AGE_MS:"0",...options,
@@ -104,23 +105,35 @@ function relay(after: (request: Request, response: Response) => Promise<Response
   relays.push(service);
   return {service,url:`http://127.0.0.1:${service.port}`};
 }
-function logged(log:string,event:string,fields:Record<string,string>){
-  return readFileSync(log,"utf8").split("\n").some(line=>{
-    try {const entry=JSON.parse(line);const values={...entry.span,...entry.fields};return values.message===event&&Object.entries(fields).every(([key,value])=>String(values[key])===value);}
-    catch {return false;} // A concurrent writer may leave a partial final line.
-  });
+// Ordering waits observe the documented metrics rather than log text:
+// admitted commits (finished plus in flight), prepared commits (admitted minus
+// those still queued for preparation), and prepared batches (finished, queued,
+// or publishing).
+type Progress={admitted:number;prepared:number;batches:number};
+async function progress(app:{url:string}):Promise<Progress>{
+  const text=await (await fetch(`${app.url}/metrics`,{signal:AbortSignal.timeout(5000)})).text();
+  // Series without a label also count, so these waits test ordering, not label
+  // conformance (the observability suite checks labels).
+  const sum=(name:string,labels:Record<string,string>={})=>text.split("\n")
+    .filter(l=>(l.startsWith(name+"{")||l.startsWith(name+" "))&&Object.entries(labels).every(([k,v])=>l.includes(`${k}="${v}"`)||!l.includes(`${k}="`)))
+    .reduce((total,l)=>total+Number(l.slice(l.lastIndexOf(" ")+1)),0);
+  const commit={operation:"commit"};
+  const admitted=sum("basinsync_submissions_total",commit)+sum("basinsync_submissions_inflight",commit);
+  return {admitted,prepared:admitted-sum("basinsync_requests_queued",commit),
+    batches:sum("basinsync_batches_total")+sum("basinsync_batches_queued")+sum("basinsync_batches_publishing")};
 }
-async function queued(log:string,flow:string,viewpoint:number){
-  const deadline=Date.now()+15000;
-  while(!logged(log,"commit queued",{flow,viewpoint:String(viewpoint)})){
-    assert(Date.now()<deadline,`request never queued: ${flow}/${viewpoint}; ${log}`);await Bun.sleep(2);
+async function reach(app:{url:string},key:keyof Progress,count:number){
+  const deadline=Date.now()+15000;let last:Progress|undefined;
+  while(!(last=await progress(app).catch(()=>undefined))||last[key]<count){
+    assert(Date.now()<deadline,`${key} never reached ${count}: ${JSON.stringify(last)}`);await Bun.sleep(2);
   }
 }
-async function batchLogged(log:string,milestone:number,event="batch prepared"){
-  const deadline=Date.now()+15000;
-  while(!logged(log,event,{milestone:String(milestone)})){
-    assert(Date.now()<deadline,`batch ${milestone} never reached ${event}; ${log}`);await Bun.sleep(2);
-  }
+// Start a request and return once the server has admitted it, so successive
+// requests reach its queue in order. The pending result is boxed so awaiting
+// this helper does not await the request.
+async function admit<T>(app:{url:string},send:()=>Promise<T>):Promise<[Promise<T>]>{
+  const {admitted}=await progress(app);const pending=send();pending.catch(()=>{});
+  await reach(app,"admitted",admitted+1);return [pending];
 }
 const bytes = (s: string) => new TextEncoder().encode(s);
 async function status(r: Response, expected: number) {
@@ -168,7 +181,24 @@ async function badStartup(bucket: string) {
 }
 
 function isBasinPut(request:Request){const path=new URL(request.url).pathname;return request.method==="PUT"&&path.includes("/epilogue/0y")&&!path.includes(`/${objectKeys.userFlows}`);}
+// A Flow's revision is observable through its Epilogue keys,
+// userspace/flows/<flow>/<revision>/epilogue/..., once markers or signs land there,
+// and from the documented Turso state deltas before any object exists; both
+// sources must agree.
 async function flowRevisions(b:string):Promise<Record<string,string>> {
+  const revisions:Record<string,string>={};
+  for(const key of await committedKeys(s3,b,objectKeys.userFlows)){
+    const [flow,revision]=key.slice(objectKeys.userFlows.length).split("/");
+    if(!flow||!revision)continue;
+    assert.match(revision,/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    assert(!revisions[flow]||revisions[flow]===revision,`Flow ${flow} has more than one revision`);
+    revisions[flow]=revision;
+  }
+  const internal=await materializedRevisions(b);
+  for(const [flow,revision] of Object.entries(revisions))assert.equal(internal[flow],revision,`Flow ${flow} keys disagree with materialized state`);
+  return {...internal,...revisions};
+}
+async function materializedRevisions(b:string):Promise<Record<string,string>> {
   let image:Uint8Array|undefined;
   for(const m of (await committedKeys(s3,b,objectKeys.timeline)).map(fromKey).sort((a,b)=>a<b?-1:1)){
     const d=deltasAt(await get(b,m)).turso["default.turso"]!;
@@ -186,7 +216,7 @@ const revisions=new Map<string,string>();
 async function flowPrefix(b:string,flow:string){
   flow=flow.toLowerCase();
   const cacheKey=JSON.stringify([b,flow]);let revision=revisions.get(cacheKey);
-  if(!revision){revision=(await flowRevisions(b))[flow];assert(revision);revisions.set(cacheKey,revision);}
+  if(!revision){revision=(await eventually(()=>flowRevisions(b),r=>!!r[flow]))[flow]!;revisions.set(cacheKey,revision);}
   return `${objectKeys.userFlows}${flow.toLowerCase()}/${revision}/epilogue/`;
 }
 async function signKey(b:string,flow:string,vp:bigint){return `${await flowPrefix(b,flow)}${lex(vp)}`;}
@@ -235,7 +265,7 @@ try {
   await ready(gateway,async()=>{await s3.send(new CreateBucketCommand({Bucket:"readiness"}));});
   const b = await bucket();
   // A successful COPY alone does not prove its destination conditions are atomic.
-  {
+  await scenario("0zg1 timeline race", "bounded tombstone/margin probes, immutable tombstones, upload postconditions, margin retries across all sequence writers, and stable pipelined Timeline digest/recovery (1/7)", async () => {
     const sources=await Promise.all(Array.from({length:8},async(_,n)=>{
       const Key=`conformance/source-${n}`,Body=bytes(`source-${n}`);
       const result=await s3.send(new PutObjectCommand({Bucket:b,Key,Body}));return {Key,Body,etag:result.ETag!};
@@ -252,18 +282,19 @@ try {
     await assert.rejects(s3.send(new CopyObjectCommand({Bucket:b,Key:"conformance/bad-source",CopySource:`${b}/${winner.Key}`,CopySourceIfMatch:'"incorrect"',IfNoneMatch:"*"})),(error:any)=>error.$metadata?.httpStatusCode===412);
     await assert.rejects(s3.send(new CopyObjectCommand({Bucket:b,Key,CopySource:`${b}/${winner.Key}`,IfMatch:'"incorrect"'})),(error:any)=>error.$metadata?.httpStatusCode===412);
     console.log("put of success: COPY enforces source ETags and atomic destination preconditions");
-  }
+  });
   const probeBucket=await bucket();
   const reference=await s3.send(new PutObjectCommand({Bucket:probeBucket,Key:objectKeys.emptySentinel,Body:new Uint8Array(),IfNoneMatch:"*"}));
   const emptyETag=reference.ETag!;assert(emptyETag);
   // Bootstrap learns opaque validators, preserves an existing reference, and rejects a nonempty one.
-  {
+  await scenario("0zg1 timeline race", "bounded tombstone/margin probes, immutable tombstones, upload postconditions, margin retries across all sequence writers, and stable pipelined Timeline digest/recovery (2/7)", async () => {
     const name=await bucket(),opaque='"bucket-empty-validator"';let probes=0;
     await s3.send(new PutObjectCommand({Bucket:name,Key:objectKeys.emptySentinel,Body:new Uint8Array(),Metadata:{preserved:"yes"}}));
     await s3.send(new PutObjectCommand({Bucket:name,Key:key(1n),Body:new Uint8Array()}));
-    const proxy=relay((request,response)=>{
+    const proxy=relay(async (request,response)=>{
       const path=new URL(request.url).pathname;
-      if(request.method==="HEAD"&&path.endsWith(`/${objectKeys.emptySentinel}`)&&response.status===200){const headers=new Headers(response.headers);headers.set("etag",opaque);return new Response(null,{status:200,headers});}
+      // Servers may observe the reference validator by HEAD or GET; rewrite both.
+      if((request.method==="HEAD"||request.method==="GET")&&path.endsWith(`/${objectKeys.emptySentinel}`)&&response.status===200){const headers=new Headers(response.headers);headers.set("etag",opaque);return new Response(request.method==="GET"?await response.arrayBuffer():null,{status:200,headers});}
       if(request.method==="HEAD"&&path.includes(`/${objectKeys.timeline}`)&&request.headers.has("if-none-match")){assert.equal(request.headers.get("if-none-match"),opaque);probes++;}
       return response;
     });
@@ -271,10 +302,11 @@ try {
     assert.equal((await s3.send(new HeadObjectCommand({Bucket:name,Key:objectKeys.emptySentinel}))).Metadata!.preserved,"yes");
     const invalid=await bucket();await s3.send(new PutObjectCommand({Bucket:invalid,Key:objectKeys.emptySentinel,Body:bytes("not empty")}));await badStartup(invalid);
     assert.deepEqual(await (await s3.send(new GetObjectCommand({Bucket:invalid,Key:objectKeys.emptySentinel}))).Body!.transformToByteArray(),bytes("not empty"));
-  }
+  });
   const a = bytes("359");assert(sha384(a).startsWith("00"));
   // Probe collisions bound tombstones below sixteen bytes and standalone margins to u8 values 1–7.
   for(const mode of ["selected","all-tombstones","all-margins"]){
+    await scenario("0zg1 timeline race", `bounded tombstone/margin probes, immutable tombstones, upload postconditions, margin retries across all sequence writers, and stable pipelined Timeline digest/recovery (mode=${mode})`, async () => {
     const b=await bucket(),writes:string[]=[];
     const proxy=relay(async(request,response)=>{
       const path=new URL(request.url).pathname;
@@ -287,10 +319,10 @@ try {
     }});
     if(mode!=="selected"){
       const process=serverProcess(b,proxy.url,"127.0.0.1:0");assert.equal(await timeout(process.exited),1);
-      const log=readFileSync(processLogs.get(process)!,"utf8");assert(log.includes(mode==="all-tombstones"?"refusing 16-byte tombstone":"cannot distinguish margin with u8 counters 1–7"));
+      if(mode==="all-tombstones")assert(writes.some(p=>p.includes("/tombstone/")),"probe tombstones before refusing to start");
       assert(!writes.some(p=>p.endsWith("/tombstone/16")),"sixteen-byte tombstones must never be written");
       if(mode==="all-margins")assert.deepEqual(writes.filter(p=>p.includes("/margin/")).map(p=>p.split("/").at(-1)),Array.from({length:7},(_,i)=>String(i+1)));
-      continue;
+      return;
     }
     let app=await server(b,proxy.url,{BASINSYNC_CLEANUP_INTERVAL_MS:"10",BASINSYNC_BACKUP_INTERVAL_MS:"10"});
     assert.deepEqual(writes.filter(p=>p.includes("/tombstone/")).map(p=>p.split("/").at(-1)),["2","4","6"]);
@@ -302,15 +334,16 @@ try {
     const cp=await basinBackup(b);assert(cp);const vp=~unlex(cp.key.slice(objectKeys.basinEpilogue.length));
     await s3.send(new PutObjectCommand({Bucket:b,Key:epilogueKey(vp+1n),Body:new Uint8Array([0xde,0xad,0xde,0xad,0xde,0xad])}));
     app=await server(b,proxy.url);assert.equal((await fullStatus(app.url,"probed")).latest?.viewpoint,0n);await stop(app.process);
+    });
   }
-  {
+  await scenario("0zg1 timeline race", "bounded tombstone/margin probes, immutable tombstones, upload postconditions, margin retries across all sequence writers, and stable pipelined Timeline digest/recovery (3/7)", async () => {
     const b=await bucket();let armed=false;
     const proxy=relay((_,response)=>response,async request=>{
       if(armed&&request.method==="PUT"&&new URL(request.url).pathname.endsWith(`/${key(1n)}`)){armed=false;await s3.send(new PutObjectCommand({Bucket:b,Key:key(1n),Body:new Uint8Array([0xde,0xad])}));}
     });
     const app=await server(b,proxy.url);armed=true;await status(await commit(app.url,"tombstone",a,0n),503);assert.equal(await timeout(app.process.exited),1);
     assert.deepEqual(await get(b,1n),new Uint8Array([0xde,0xad]),"a competing tombstone can never be replaced");await badStartup(b);
-  }
+  });
   // This provider adapter gives one successful upload the empty ETag, then honors its CAS retry.
   function collisionProxy(b:string,select:(request:Request)=>boolean,hold=false,missing=false,collisions=1){
     const entered=Promise.withResolvers<void>(),release=Promise.withResolvers<void>();
@@ -350,11 +383,11 @@ try {
     });
     return {...proxy,entered,release,originals,retries:()=>retries};
   }
-  {
+  await scenario("0zg1 timeline race", "bounded tombstone/margin probes, immutable tombstones, upload postconditions, margin retries across all sequence writers, and stable pipelined Timeline digest/recovery (4/7)", async () => {
     const b=await bucket(),proxy=collisionProxy(b,r=>new URL(r.url).pathname.endsWith(`/${key(1n)}`),true,false,259);
     const app=await server(b,proxy.url,{BASINSYNC_BULK_MAX_AGE_MS:"10",BASINSYNC_BULK_TARGET_BYTES:"1",BASINSYNC_BATCH_MAX:"1",BASINSYNC_BATCH_WAIT_MS:"0",RUST_LOG:"basinsync=debug"});let done=0;
     const first=fetch(`${app.url}/api/v0/epilogue`,{method:"PUT",body:form("collision",a,0n),signal:AbortSignal.timeout(120000)}).then(r=>{done++;return r});await timeout(proxy.entered.promise);
-    const next=fetch(`${app.url}/api/v0/epilogue`,{method:"PUT",body:form("collision",bytes("second"),1n),signal:AbortSignal.timeout(120000)}).then(r=>{done++;return r});await batchLogged(app.log,2);assert.equal(done,0);
+    const next=fetch(`${app.url}/api/v0/epilogue`,{method:"PUT",body:form("collision",bytes("second"),1n),signal:AbortSignal.timeout(120000)}).then(r=>{done++;return r});await reach(app,"batches",2);assert.equal(done,0);
     proxy.release.resolve();await status(await first,201);await status(await next,201);assert.equal(proxy.retries(),259);
     const payload=await get(b,1n),original=proxy.originals.get(key(1n))!.body;assert.equal(entryDigest(payload),entryDigest(original));assert.notEqual(sha384(payload),sha384(original));
     const archives=await eventually(()=>s3.send(new ListObjectsV2Command({Bucket:b,Prefix:objectKeys.analogue})),r=>r.KeyCount===1);
@@ -363,28 +396,30 @@ try {
     const replayed=await server(b);assert.equal((await fullStatus(replayed.url,"collision")).latest?.viewpoint,1n);await stop(replayed.process);
     const backed=await server(b,endpoint,{BASINSYNC_BACKUP_INTERVAL_MS:"10"});await eventually(()=>basinBackup(b),cp=>cp?.milestone===2n);await stop(backed.process);
     const restored=await server(b);assert.deepEqual(await latestBlob((await fullStatus(restored.url,"collision")).latest!),bytes("second"));await stop(restored.process);
-  }
+  });
   for(const kind of ["marker","backup","sign"]){
+    await scenario("0zg1 timeline race", `bounded tombstone/margin probes, immutable tombstones, upload postconditions, margin retries across all sequence writers, and stable pipelined Timeline digest/recovery (kind=${kind})`, async () => {
     const b=await bucket(),proxy=collisionProxy(b,r=>{const path=new URL(r.url).pathname;return kind==="marker"?path.includes(`/${objectKeys.userFlows}`):kind==="backup"?isBasinPut(r):path.includes("/epilogue/0z");},false,false,3);
     const app=await server(b,proxy.url,{BASINSYNC_BACKUP_INTERVAL_MS:"10",BASINSYNC_CLEANUP_INTERVAL_MS:kind==="sign"?"10":"0"});await status(await commit(app.url,"collision",a,0n),201);
     await eventually(()=>basinBackup(b),Boolean);await eventually(async()=>proxy.retries(),n=>n>0);await stop(app.process);
     const cp=await basinBackup(b);assert(cp);assert.equal((await inspectImage(cp.blob)).flows.collision,"0");
     const restored=await server(b);assert.deepEqual(await latestBlob((await fullStatus(restored.url,"collision")).latest!),a);await stop(restored.process);
+    });
   }
-  {
+  await scenario("0zg1 timeline race", "bounded tombstone/margin probes, immutable tombstones, upload postconditions, margin retries across all sequence writers, and stable pipelined Timeline digest/recovery (5/7)", async () => {
     const b=await bucket(),proxy=collisionProxy(b,r=>new URL(r.url).pathname.includes(`/${objectKeys.timeline}`),false,true);
     const app=await server(b,proxy.url);await status(await commit(app.url,"missing-validator",a,0n),503);assert.equal(await timeout(app.process.exited),1);
     const restored=await server(b);assert.equal((await fullStatus(restored.url,"missing-validator")).latest?.viewpoint,0n);await stop(restored.process);
-  }
-  {
+  });
+  await scenario("0zg1 timeline race", "bounded tombstone/margin probes, immutable tombstones, upload postconditions, margin retries across all sequence writers, and stable pipelined Timeline digest/recovery (6/7)", async () => {
     const b=await bucket(),proxy=collisionProxy(b,r=>new URL(r.url).pathname.includes(`/${objectKeys.userFlows}`)&&new URL(r.url).pathname.includes("/epilogue/0z"),false,false,8);
     const app=await server(b,proxy.url,{BASINSYNC_CLEANUP_INTERVAL_MS:"10"});await status(await commit(app.url,"bounded-sign",a,0n),201);
-    await eventually(async()=>readFileSync(app.log,"utf8"),log=>log.includes("standalone margin exhausted u8 counters 1–7"));
-    assert.equal(proxy.retries(),6);const Key=await signKey(b,"bounded-sign",0n);
+    await eventually(async()=>proxy.retries(),retries=>retries>=6);await Bun.sleep(100);
+    assert.equal(proxy.retries(),6,"standalone margins stop at counter 7");const Key=await signKey(b,"bounded-sign",0n);
     const sign=envelopes(await (await s3.send(new GetObjectCommand({Bucket:b,Key}))).Body!.transformToByteArray());
     assert.equal(sign.length,1);assert.deepEqual(sign[0]!.content,new Uint8Array([7]));await stop(app.process);
-  }
-  {
+  });
+  await scenario("0zg1 timeline race", "bounded tombstone/margin probes, immutable tombstones, upload postconditions, margin retries across all sequence writers, and stable pipelined Timeline digest/recovery (7/7)", async () => {
     const b=await bucket(),proxy=collisionProxy(b,r=>new URL(r.url).pathname.includes(`/${objectKeys.analogue}`),false,false,3);
     const app=await server(b,proxy.url,{BASINSYNC_BULK_MAX_AGE_MS:"10",BASINSYNC_BULK_TARGET_BYTES:"1"});
     await status(await commit(app.url,"bulk-margin",a,0n),201);
@@ -396,10 +431,9 @@ try {
     assert.deepEqual(order.events[0],trimRetryMargins(await get(b,1n)));assert.equal(envelopes(body).at(-1)!.content[0],3);
     assert.equal(object.Metadata!["bulkmanifest-range"],`bytes=${order.range.start}-${order.range.end-1}`);
     await stop(app.process);
-  }
-  console.log("put of success: bounded tombstone/margin probes, immutable tombstones, upload postconditions, margin retries across all sequence writers, and stable pipelined Timeline digest/recovery");
+  });
   // Sequence sentinels are excluded from search and replaced only with their observed ETag.
-  {
+  await scenario("0zg1 timeline race", "bucket-derived empty sentinel validators, atomic conditional replacement, metadata-only ETag caveat, exclusive search bounds, wrapped empty markers, margin signs, and snapshot recovery (1/3)", async () => {
     const b=await bucket(),replaced=new Set<string>();
     async function sentinel(Key:string){const r=await s3.send(new PutObjectCommand({Bucket:b,Key,Body:new Uint8Array(),Metadata:{reserved:"yes"}}));assert.equal(r.ETag,emptyETag);}
     await sentinel(key(1n));await sentinel(epilogueKey(0n));await sentinel(`${objectKeys.basinEpilogue}${lex(0n)}`);
@@ -424,40 +458,42 @@ try {
     for(const Key of [key(1n),epilogueKey(0n),markerKey,sign])assert(replaced.has(Key),`ETag-guarded replacement: ${Key}`);
     const saved=await basinBackup(b);assert(saved);await sentinel(epilogueKey((~unlex(saved.key.slice(objectKeys.basinEpilogue.length)))+1n));
     const restored=await server(b);assert.equal((await fullStatus(restored.url,"sentinel")).latest?.viewpoint,0n);await stop(restored.process);
-  }
-  {
-    const b=await bucket(),writer=await server(b);
+  });
+  await scenario("0zg1 timeline race", "bucket-derived empty sentinel validators, atomic conditional replacement, metadata-only ETag caveat, exclusive search bounds, wrapped empty markers, margin signs, and snapshot recovery (2/3)", async () => {
+    const b=await bucket(),unanchored={BASINSYNC_BACKUP_INTERVAL_MS:"0"},writer=await server(b,endpoint,unanchored);
     for(let n=0;n<3;n++)await status(await commit(writer.url,"bounds",bytes(`marker-${n}`),BigInt(n)),201);
     await stop(writer.process);
     for(const n of [4n,16n,1n<<64n])await s3.send(new PutObjectCommand({Bucket:b,Key:key(n),Body:new Uint8Array()}));
     // Empty sentinels sort before published entries. Ignore conditional reads to exercise length-based detection too.
+    // Without a recovery anchor, LIST is the documented way to find the tail.
     const reads:{method:string;url:URL}[]=[];
     const proxy=relay((request,response)=>{reads.push({method:request.method,url:new URL(request.url)});return request.method==="HEAD"&&response.status===304?new Response(null,{status:200,headers:{"content-length":"0"}}):response;});
-    const restored=await server(b,proxy.url);
-    assert.equal(reads.filter(r=>r.method==="GET"&&r.url.searchParams.get("prefix")===objectKeys.timeline).length,4,"skip each sentinel using ordered LIST pages");
+    const restored=await server(b,proxy.url,unanchored);
+    assert(reads.some(r=>r.method==="GET"&&r.url.searchParams.get("prefix")===objectKeys.timeline),"find the tail with an ordered LIST that skips sentinels");
     assert(!reads.some(r=>r.method==="HEAD"&&r.url.pathname.includes(`/${objectKeys.timeline}`)),"LIST gives the tail without exponential probes");
     assert.equal((await fullStatus(restored.url,"bounds")).latest?.viewpoint,2n);
     await status(await commit(restored.url,"bounds",bytes("marker-3"),3n),201);
     assert.equal(markerAt(await get(b,4n),"bounds").viewpoint,"3");await stop(restored.process);
-  }
-  {
+  });
+  await scenario("0zg1 timeline race", "bucket-derived empty sentinel validators, atomic conditional replacement, metadata-only ETag caveat, exclusive search bounds, wrapped empty markers, margin signs, and snapshot recovery (3/3)", async () => {
     const b=await bucket(),Key=epilogueKey(42n);
     const original=await s3.send(new PutObjectCommand({Bucket:b,Key,Body:new Uint8Array(),Metadata:{owner:"first"}}));assert.equal(original.ETag,emptyETag);
     const updated=await s3.send(new PutObjectCommand({Bucket:b,Key,Body:new Uint8Array(),IfMatch:original.ETag,Metadata:{owner:"second"}}));assert.equal(updated.ETag,original.ETag,"metadata-only changes do not supply a new fencing token");
     const outcomes=await Promise.all(Array.from({length:8},async(_,n)=>{try{await s3.send(new PutObjectCommand({Bucket:b,Key,Body:wrapEnvelope(bytes(`winner-${n}`),0),IfMatch:original.ETag}));return 200;}catch(e){return (e as {$metadata:{httpStatusCode:number}}).$metadata.httpStatusCode;}}));
     assert.equal(outcomes.filter(s=>s===200).length,1);assert.equal(outcomes.filter(s=>s===412).length,7);
     await assert.rejects(s3.send(new PutObjectCommand({Bucket:b,Key,Body:wrapEnvelope(bytes("stale"),0),IfMatch:original.ETag})),(e:any)=>e.$metadata.httpStatusCode===412);
-  }
-  console.log("put of success: bucket-derived empty sentinel validators, atomic conditional replacement, metadata-only ETag caveat, exclusive search bounds, wrapped empty markers, margin signs, and snapshot recovery");
+  });
   // Flow Epilogue contents must never become a source of Basin state.
   await s3.send(new PutObjectCommand({Bucket:b,Key:`${objectKeys.userFlows}unrelated/epilogue/0`,Body:bytes("legacy, not a Timeline")}));
+  const flowA = "0x-first", flowB = "__proto__";
+  // The writer/observer pair and its stress history are shared by the next steps, so they run as one scenario.
+  await scenario("0zg1 timeline race", "Flow isolation, stress, and replay with a shared writer and observer", async () => {
   const trace: {method:string;url:URL}[] = [];
   const traced = relay((r,response)=>{ trace.push({method:r.method,url:new URL(r.url)}); return response; });
   let writer = await server(b,traced.url);
   const observer = await server(b,traced.url);
-  const flowA = "0x-first", flowB = "__proto__";
 
-  {
+  await scenario("0zg1 timeline race", "Flow isolation, validation, prototype-safe ids, and live Timeline refresh", async () => {
     const name=await bucket(),app=await server(name,endpoint,{BASINSYNC_BACKUP_INTERVAL_MS:"10"});
     const node:HeapNode={auth:[0,0,bytes("flow-id-case-test")],length:1,edges:[]};
     const flowIds=vectors<{normalized:[string,string][];maxLength:number;invalid:string[]}>("flow-ids");
@@ -481,11 +517,11 @@ try {
     const objects=(await s3.send(new ListObjectsV2Command({Bucket:name,Prefix:objectKeys.userFlows}))).Contents??[];
     assert(objects.some(o=>o.Key!.startsWith(`${objectKeys.userFlows}${canonical}/`)));
     assert(objects.some(o=>o.Key!.startsWith(`${objectKeys.userFlows}${longest.toLowerCase()}/`)));
-    assert.deepEqual(Object.keys(await flowRevisions(name)).sort(),[canonical,longest.toLowerCase()].sort());
+    assert.deepEqual(Object.keys(await eventually(()=>flowRevisions(name),r=>Object.keys(r).length>=2)).sort(),[canonical,longest.toLowerCase()].sort());
     await stop(app.process);
     const restored=await server(name);assert.equal((await fullStatus(restored.url,mixed)).latest?.viewpoint,0n);await stop(restored.process);
     console.log("put of success: portable Flow IDs normalize across APIs and recovery, reject unsafe characters, and fit direct object keys at 160 characters");
-  }
+  });
   assert.deepEqual(await epilogueStatus(writer.url,flowA),{latest:null});
   await mismatch(await commit(writer.url,flowA,a,1n),0n);
   for (const kind of ["missing-details","duplicate-details","missing-flow","nul-flow","long-flow","missing-blob","duplicate-blob","unknown-part","legacy-part","unknown-details","decimal","number","negative","missing-viewpoint","missing-digest","missing-edges","hex-digest","array-digest","wrong-digest","short-digest","long-digest","malformed-json","duplicate-property","unescaped-flow","invalid-base64"]) {
@@ -552,7 +588,6 @@ try {
   await accepted(observer.url,flowB,new Uint8Array(),1n);
   await accepted(writer.url,flowA,bytes("independent Flow"),1n);
   assert.deepEqual(await epilogueStatus(writer.url,flowB),{latest:{viewpoint:1n}});
-  console.log("put of success: Flow isolation, validation, prototype-safe ids, and live Timeline refresh");
 
   const flows = ["red","blue","0","constructor"];
   const count = Number(process.env.STRESS_COMMITS ?? 1025);
@@ -612,9 +647,11 @@ try {
   assert(trace.some(r=>r.url.searchParams.get("prefix")===objectKeys.basinEpilogue),"read the Basin recovery anchor before writing");
   await accepted(writer.url,flowA,bytes("after recovery"),2n);
   await stop(writer.process);await stop(observer.process);
-  console.log(`put of success: ${total} markers across ${eventCount} gapless Milestones; independent TS WAL ingestion, full replay, and minimum-key latest discovery`);
+  passed("0zg2 turso reservoir", "N markers across N gapless Milestones; independent TS WAL ingestion, full replay, and minimum-key latest discovery");
+  });
 
   for(let round=0;round<Number(process.env.RACE_ROUNDS??8);round++){
+    await scenario("0zg1 timeline race", `real conditional Timeline races choose one winner; losers respond and exit (round=${round})`, async () => {
     const raceBucket=await bucket(); let armed=false,arrived=0;
     const gate=Promise.withResolvers<void>();
     const proxy=relay(async(r,response)=>{
@@ -636,13 +673,30 @@ try {
     assert.deepEqual(markerAt(await get(raceBucket,1n),"race").blob,payloads[winner]);
     await status(await commit(racers[winner].url,"race",a,1n),201);
     await stop(racers[winner].process);await proxy.service.stop(true);
+    });
   }
-  console.log("put of success: real conditional Timeline races choose one winner; losers respond and exit");
+  passed("0zg1 timeline race", "real conditional Timeline races choose one winner; losers respond and exit");
 
   // A real HTTP batch preserves ordered markers, and no success or status
   // escapes while its S3 write is still blocked before storage.
   let modernRoot:Uint8Array|null=null;
+  // Isolated scenario runs start without the two-batch scenario's root, so
+  // build an equivalent four-marker batch on demand.
+  async function ensureModernRoot():Promise<Uint8Array>{
+    if(modernRoot)return modernRoot;
+    const rootBucket=await bucket();
+    const app=await server(rootBucket,undefined,{BASINSYNC_BATCH_MAX:"4",BASINSYNC_BATCH_WAIT_MS:"1000",RUST_LOG:"basinsync=debug"});
+    const requests:Promise<Response>[]=[];
+    for(let viewpoint=0;viewpoint<4;viewpoint++){
+      const [pending]=await admit(app,()=>commit(app.url,"ordered-ok",bytes(`marker-${viewpoint}`),BigInt(viewpoint)));
+      requests.push(pending);
+    }
+    for(const response of await Promise.all(requests))await status(response,201);
+    modernRoot=await get(rootBucket,1n);await stop(app.process);
+    return modernRoot;
+  }
   for(const fail of [false,true]){
+    await scenario("0zg2 turso reservoir", `two-batch real-route overlap, one ordered PUT, full-batch admission, durable status/mismatch barriers, and failed-publication recovery (fail=${fail})`, async () => {
     const batchBucket=await bucket();const gate=Promise.withResolvers<void>(),entered=Promise.withResolvers<void>();
     let puts=0,active=0,peak=0;
     const proxy=relay(async(request,response)=>{
@@ -655,14 +709,14 @@ try {
     const flow=`ordered-${fail?"lost":"ok"}`;let completed=0;
     const requests:Promise<Response>[]=[];
     for(let viewpoint=0;viewpoint<4;viewpoint++){
-      requests.push(commit(app.url,flow,bytes(`marker-${viewpoint}`),BigInt(viewpoint)).then(r=>{completed++;return r}));
-      await queued(app.log,flow,viewpoint);
+      const [pending]=await admit(app,()=>commit(app.url,flow,bytes(`marker-${viewpoint}`),BigInt(viewpoint)).then(r=>{completed++;return r}));
+      requests.push(pending);
     }
     await timeout(entered.promise);
     assert.equal(completed,0);
     await assert.rejects(()=>get(batchBucket,1n),"batch is not stored yet");
-    requests.push(commit(app.url,flow,bytes("marker-4"),4n).then(r=>{completed++;return r}));
-    await queued(app.log,flow,4);
+    const [fifth]=await admit(app,()=>commit(app.url,flow,bytes("marker-4"),4n).then(r=>{completed++;return r}));
+    requests.push(fifth);
     let statusFinished=false;
     const statusRequest=fetch(`${app.url}/api/v0/epilogue/status?flow=${flow}`).then(r=>{statusFinished=true;return r});
     await Bun.sleep(30);assert.equal(completed,0);assert.equal(statusFinished,false);
@@ -692,9 +746,11 @@ try {
       assert.deepEqual(await epilogueStatus(restored.url,flow),{latest:{viewpoint:4n}});await stop(restored.process);
     }
     await proxy.service.stop(true);
+    });
   }
   // Preparation advances one batch ahead; failed publication discards it.
   for(const fault of ["none","before","after"]){
+    await scenario("0zg2 turso reservoir", `two-batch real-route overlap, one ordered PUT, full-batch admission, durable status/mismatch barriers, and failed-publication recovery (fault=${fault})`, async () => {
     const pipelineBucket=await bucket();const gate=Promise.withResolvers<void>(),entered=Promise.withResolvers<void>();
     let puts=0,active=0,peak=0,completed=0;
     const proxy=relay(async(request,response)=>{
@@ -711,13 +767,12 @@ try {
     const flow=`pipeline-${fault}`;
     const requests=[commit(app.url,flow,a,0n).then(r=>{completed++;return r})];
     await timeout(entered.promise);
-    requests.push(commit(app.url,flow,a,1n).then(r=>{completed++;return r}));await batchLogged(app.log,2);
-    requests.push(commit(app.url,flow,a,2n).then(r=>{completed++;return r}));await queued(app.log,flow,2);
+    requests.push(commit(app.url,flow,a,1n).then(r=>{completed++;return r}));await reach(app,"batches",2);
+    const [third]=await admit(app,()=>commit(app.url,flow,a,2n).then(r=>{completed++;return r}));requests.push(third);
     let statusDone=false;const latest=fetch(`${app.url}/api/v0/epilogue/status?flow=${flow}`).then(value=>{statusDone=true;return value;});
     await Bun.sleep(30);
     assert.equal(puts,1);assert.equal(completed,0);assert.equal(statusDone,false);
-    const prepared=readFileSync(app.log,"utf8").split("\n").filter(line=>line.includes("batch prepared"));
-    assert.equal(prepared.length,2,"only two batches may prepare ahead of the publication gate");
+    assert.equal((await progress(app)).batches,2,"only two batches may prepare ahead of the publication gate");
     await assert.rejects(()=>get(pipelineBucket,2n));
     gate.resolve();
     const results=await Promise.all(requests);
@@ -738,8 +793,10 @@ try {
       await status(await commit(restored.url,flow,a,fault==="after"?1n:0n),201);await stop(restored.process);
     }
     await proxy.service.stop(true);
+    });
   }
   for(const fail of [false,true]){
+    await scenario("0zg2 turso reservoir", `two-batch real-route overlap, one ordered PUT, full-batch admission, durable status/mismatch barriers, and failed-publication recovery (fail=${fail})`, async () => {
     const mismatchBucket=await bucket();const second=Promise.withResolvers<void>(),entered=Promise.withResolvers<void>();
     let puts=0;
     const proxy=relay(async(request,response)=>{
@@ -750,58 +807,58 @@ try {
     await status(await commit(app.url,"deferred-mismatch",a,0n),201);
     const next=commit(app.url,"deferred-mismatch",a,1n);await timeout(entered.promise);
     let conflictDone=false;const conflict=commit(app.url,"deferred-mismatch",a,0n).then(r=>{conflictDone=true;return r});
-    await batchLogged(app.log,2,"batch rejected");
+    await reach(app,"prepared",3);
     let statusDone=false;const latest=fetch(`${app.url}/api/v0/epilogue/status?flow=deferred-mismatch`).then(r=>{statusDone=true;return r});
     await Bun.sleep(30);assert.equal(conflictDone,false);assert.equal(statusDone,false);
     second.resolve();await status(await next,fail?503:201);
     if(fail){await status(await conflict,503);await status(await latest,503);assert.equal(await timeout(app.process.exited),1);}
     else{await mismatch(await conflict,2n);assert.deepEqual(positions(parse(await (await latest).text())),{latest:{viewpoint:1n}});await stop(app.process);}
     assert.equal(puts,2,"mismatch-only work must not create an event");await proxy.service.stop(true);
+    });
   }
-  {
+  await scenario("0zg2 turso reservoir", "two-batch real-route overlap, one ordered PUT, full-batch admission, durable status/mismatch barriers, and failed-publication recovery", async () => {
     const full=await bucket();const gate=Promise.withResolvers<void>(),entered=Promise.withResolvers<void>();let puts=0;
     const proxy=relay((_r,response)=>response,async r=>{if(r.method==="PUT"&&new URL(r.url).pathname.includes(`/${objectKeys.timeline}`)&&++puts===1){entered.resolve();await gate.promise;}});
     const app=await server(full,proxy.url,{BASINSYNC_BATCH_WAIT_MS:"1000",RUST_LOG:"basinsync=debug"});
     const first=Array.from({length:32},(_,n)=>commit(app.url,`full-${n}`,a,0n));await timeout(entered.promise);
-    const next=Array.from({length:32},(_,n)=>commit(app.url,`full-${n+32}`,a,0n));await batchLogged(app.log,2);
+    const next=Array.from({length:32},(_,n)=>commit(app.url,`full-${n+32}`,a,0n));await reach(app,"batches",2);
     assert.equal(puts,1);gate.resolve();for(const result of await Promise.all([...first,...next]))await status(result,201);
     assert.equal(entriesAt(await get(full,1n)).length,32);assert.equal(entriesAt(await get(full,2n)).length,32);
     await stop(app.process);await proxy.service.stop(true);
-  }
-  console.log("put of success: two-batch real-route overlap, one ordered PUT, full-batch admission, durable status/mismatch barriers, and failed-publication recovery");
+  });
   // Byte bounds flush a batch before accepting another large request.
-  {
+  await scenario("0zg2 turso reservoir", "real-route ordered batches, durable status, count/byte bounds, slow bodies, disconnects, queued failure rejection, and WAL startup integrity (1/3)", async () => {
     const limited=await bucket();const app=await server(limited,endpoint,{BASINSYNC_BATCH_MAX:"32",BASINSYNC_BATCH_WAIT_MS:"1000",RUST_LOG:"basinsync=debug"});
     const large=new Uint8Array(5*1024*1024).fill(123);
-    const first=commit(app.url,"large-a",large,0n);await queued(app.log,"large-a",0);
-    const second=commit(app.url,"large-b",large,0n);await queued(app.log,"large-b",0);
+    const [first]=await admit(app,()=>commit(app.url,"large-a",large,0n));
+    const [second]=await admit(app,()=>commit(app.url,"large-b",large,0n));
     await status(await first,201);await status(await second,201);
     assert.equal(entriesAt(await get(limited,1n)).length,1);assert.equal(entriesAt(await get(limited,2n)).length,1);
     await stop(app.process);
-  }
+  });
   // Slow form bodies consume admission slots, never the worker's status queue.
-  {
+  await scenario("0zg2 turso reservoir", "real-route ordered batches, durable status, count/byte bounds, slow bodies, disconnects, queued failure rejection, and WAL startup integrity (2/3)", async () => {
     const idle=await bucket(),app=await server(idle);const port=Number(new URL(app.url).port);
     const sockets=await Promise.all(Array.from({length:64},()=>new Promise<ReturnType<typeof createConnection>>((yes,no)=>{
       const socket=createConnection({host:"127.0.0.1",port},()=>{socket.write(`PUT /api/v0/epilogue HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nContent-Type: multipart/form-data; boundary=x\r\nContent-Length: 1024\r\n\r\n`);yes(socket)});socket.once("error",no);
     })));
     try{await Bun.sleep(30);assert.deepEqual(await timeout(epilogueStatus(app.url,"idle"),3000),{latest:null})}finally{for(const socket of sockets)socket.destroy()}
     await status(await commit(app.url,"idle",a,0n),201);await stop(app.process);
-  }
+  });
   // Dropping an HTTP caller after admission does not cancel its owned batch.
-  {
+  await scenario("0zg2 turso reservoir", "real-route ordered batches, durable status, count/byte bounds, slow bodies, disconnects, queued failure rejection, and WAL startup integrity (3/3)", async () => {
     const disconnected=await bucket(),gate=Promise.withResolvers<void>(),entered=Promise.withResolvers<void>();
     const proxy=relay((_r,response)=>response,async r=>{if(r.method==="PUT"&&new URL(r.url).pathname.includes(`/${objectKeys.timeline}`)){entered.resolve();await gate.promise}});
     const app=await server(disconnected,proxy.url,{BASINSYNC_BATCH_MAX:"1",RUST_LOG:"basinsync=debug"});
     const abort=new AbortController();
-    const request=fetch(`${app.url}/api/v0/epilogue`,{method:"PUT",body:form("disconnected",a,0n),signal:abort.signal});
-    await queued(app.log,"disconnected",0);await timeout(entered.promise);abort.abort();await assert.rejects(request);gate.resolve();
+    const [request]=await admit(app,()=>fetch(`${app.url}/api/v0/epilogue`,{method:"PUT",body:form("disconnected",a,0n),signal:abort.signal}));
+    await timeout(entered.promise);abort.abort();await assert.rejects(request);gate.resolve();
     assert.deepEqual(await epilogueStatus(app.url,"disconnected"),{latest:{viewpoint:0n}});
     await status(await commit(app.url,"disconnected",a,1n),201);await stop(app.process);await proxy.service.stop(true);
-  }
-  assert(modernRoot);
+  });
   for(const fault of ["version","format","parent","bootstrap","wal","logical","command-order"]){
-    const vector=eventTuples(modernRoot) as any[];
+    await scenario("0zg2 turso reservoir", `JS-to-Rust replay, malformed-event rejection, and ambiguous Timeline PUT recovery without retries (fault=${fault})`, async () => {
+    const vector=eventTuples(await ensureModernRoot()) as any[];
     const delta=vector.at(-1)[3].turso["default.turso"];
     if(fault==="version")delta.version="incompatible";
     if(fault==="format")delta.physical.format="unknown";
@@ -811,10 +868,14 @@ try {
     if(fault==="logical")delta.logical.frames[0][0]^=1;
     if(fault==="command-order")vector.reverse();
     const fixture=await bucket();await seed(fixture,1n,encodeTuples(vector));await badStartup(fixture);
+    });
   }
-  console.log("put of success: real-route ordered batches, durable status, count/byte bounds, slow bodies, disconnects, queued failure rejection, and WAL startup integrity");
 
   // Capture real Turso frames, then re-encode their event independently in JS.
+  // Legacy single-tuple events (`{markers, deltas}` with physical pages) predate
+  // the documented layout, and only this repository's server reads them.
+  if(!Bun.env.BASINSYNC_SERVER){
+  await scenario("0zg2 turso reservoir", "legacy single-tuple event replay and malformed legacy events", async () => {
   const fixture=await bucket();
   const markers = {[flowA]:marker(a),[flowB]:marker(new Uint8Array())};
   const captured = spawn([`${root}/target/debug/examples/frame-fixture`], {cwd:root, stdin:"pipe", stdout:"pipe", stderr:"inherit"});
@@ -845,18 +906,25 @@ try {
       if (fault === "logical-byte") delta.logical.frames[0][0] ^= 1;
       const b = await bucket(); await seed(b, 1n, extensionEncode(event)); return b;
     }),
+  ];
+  for(const fixture of invalid)await badStartup(await fixture());
+  });
+  }
+  // Malformed documented events stop startup; an ambiguous Timeline PUT is
+  // recovered from the bucket, never retried.
+  await scenario("0zg2 turso reservoir", "JS-to-Rust replay, malformed-event rejection, and ambiguous Timeline PUT recovery without retries", async () => {
+  const modern=await ensureModernRoot();
+  const mutated=(change:(tuples:any[])=>void)=>{const tuples=eventTuples(modern) as any[];change(tuples);return encodeTuples(tuples);};
+  const first=(tuples:any[])=>tuples[0][3].markers["ordered-ok"];
+  const invalid: (()=>Promise<string>)[] = [
     async()=>{const b=await bucket();await s3.send(new PutObjectCommand({Bucket:b,Key:`${objectKeys.timeline}0`,Body:a}));return b},
-    async()=>{const b=await bucket();await seed(b,2n,encodeEvent({f:marker(a)}, legacyDeltasAt(capturedBytes)));return b},
-    async()=>{const b=await bucket();await seed(b,1n,encodeEvent({f:{...marker(a),sha384:"00".repeat(48)}}, legacyDeltasAt(capturedBytes)));return b},
-    async()=>{const b=await bucket();await seed(b,1n,encodeEvent({f:marker(a,"18446744073709551616")}, legacyDeltasAt(capturedBytes)));return b},
+    async()=>{const b=await bucket();await seed(b,2n,modern);return b},
+    async()=>{const b=await bucket();await seed(b,1n,mutated(t=>{first(t).sha384="00".repeat(48);}));return b},
+    async()=>{const b=await bucket();await seed(b,1n,mutated(t=>{first(t).viewpoint="18446744073709551616";}));return b},
     async()=>{const b=await bucket();await seed(b,1n,flexEncode([["wrong","command",{}]]));return b},
     ...["#species", Symbol.for("species"), Symbol.iterator, new TextEncoder().encode("#species"),
       Array.from(new TextEncoder().encode("#species")),
-    ].map(tag=>async()=>{
-      const b=await bucket();
-      await seed(b,1n,extensionEncode([[tag,"sync.memoremix.com","sts/0/databasin/commitflow",{markers:{f:marker(a)}}]]));
-      return b;
-    }),
+    ].map(tag=>async()=>{const b=await bucket();await seed(b,1n,mutated(t=>{t[0][0]=tag;}));return b}),
   ];
   for(const fixture of invalid)await badStartup(await fixture());
 
@@ -872,18 +940,18 @@ try {
   assert.deepEqual(await epilogueStatus(recovered.url,"f"),{latest:{viewpoint:0n}});
   await status(await commit(recovered.url,"f",a,1n),201);
   await stop(recovered.process);
-  console.log("put of success: JS-to-Rust replay, malformed-event rejection, and ambiguous Timeline PUT recovery without retries");
+  });
   // Paired database backup graphs, blocked image uploads, root interruption,
   // immutable prefix reconstruction, and graph-only recovery are exercised in
   // kernel-backup-integration.ts. UserSpace behavior below uses the same roots.
   // A GET capability exposes precisely one marker, even while its event also
   // contains other Flows, older markers, and database pages.
-  {
+  await scenario("0zg3 backup recovery", "signed blob-only Range capabilities, empty markers, downstream URL reuse, persistent locations, and snapshot-plus-suffix recovery", async () => {
     const b=await bucket();
     const app=await server(b,endpoint,{BASINSYNC_BATCH_MAX:"4",BASINSYNC_BATCH_WAIT_MS:"1000",RUST_LOG:"basinsync=debug"});
     const target=new Uint8Array(65536);for(let n=0;n<target.length;n++)target[n]=n%251;
     const inputs:[string,Uint8Array,bigint][]=[["public",bytes("old public marker"),0n],["private",bytes("PRIVATE: must never escape through the public capability"),0n],["public",target,1n],["empty",new Uint8Array(),0n]];
-    const requests:Promise<Response>[]=[];for(const [flow,blob,vp] of inputs){requests.push(commit(app.url,flow,blob,vp));await queued(app.log,flow,Number(vp));}
+    const requests:Promise<Response>[]=[];for(const [flow,blob,vp] of inputs){const [pending]=await admit(app,()=>commit(app.url,flow,blob,vp));requests.push(pending);}
     for(const response of await Promise.all(requests))await status(response,201);
     const stored=await get(b,1n),ranges=rangesAt(stored),range=ranges.find(r=>r.flow==="public"&&r.marker.viewpoint==="1")!;
     await assertManifestRange(b,1n,stored);
@@ -955,11 +1023,10 @@ try {
     const tail=await server(b);await status(await commit(tail.url,"public",bytes("after checkpoint"),2n),201);await stop(tail.process);
     const anchored=await server(b);const latest=(await fullStatus(anchored.url,"public")).latest!;
     assert.equal(latest.viewpoint,2n);assert(new URL(latest.url!).pathname.includes(`/${objectKeys.timeline}`));assert.deepEqual(await latestBlob(latest),bytes("after checkpoint"));await stop(anchored.process);
-  }
-  console.log("put of success: signed blob-only Range capabilities, empty markers, downstream URL reuse, persistent locations, and snapshot-plus-suffix recovery");
+  });
   // Current observers need no LIST; a positive successor probe discovers the
   // Basin anchor before replay. Flow marker selection never lists its Epilogue.
-  {
+  await scenario("0zg3 backup recovery", "latest-only status probes successors, discovers newer snapshots only when behind, and never lists Flow Epilogues", async () => {
     const b=await bucket(),reads:{method:string;url:URL}[]=[];
     const proxy=relay((request,response)=>{reads.push({method:request.method,url:new URL(request.url)});return response;});
     const observer=await server(b,proxy.url);
@@ -1003,10 +1070,9 @@ try {
     assert.equal(suffix.viewpoint,4n);assert.deepEqual(await latestBlob(suffix),bytes("suffix"));
     assert.deepEqual(await checkedStatus("absent"),{latest:null});
     await stop(suffixWriter.process);await stop(observer.process);
-  }
-  console.log("put of success: latest-only status probes successors, discovers newer snapshots only when behind, and never lists Flow Epilogues");
+  });
   // Probe freshness is Basin-wide; status cache hits never extend the window.
-  {
+  await scenario("0zg1 timeline race", "bounded probe freshness, causal-reverse detection across instances, and durable response positions for writes, status, and errors", async () => {
     const b=await bucket(),reads:{method:string;url:URL}[]=[];
     const proxy=relay((request,response)=>{reads.push({method:request.method,url:new URL(request.url)});return response;});
     const observer=await server(b,proxy.url,{BASINSYNC_STATUS_PROBE_MAX_AGE_MS:"3000"});
@@ -1054,11 +1120,11 @@ try {
     assert.equal(parse<ApiError>(await invalid.clone().text()).timelines.basin.milestone,3n);
     await status(invalid,400);
     await stop(writer.process);await stop(observer.process);
-  }
-  console.log("put of success: bounded probe freshness, causal-reverse detection across instances, and durable response positions for writes, status, and errors");
+  });
   // Conditional sequence HEADs distinguish live entries from empty sentinels. Exercise both missing-key
   // responses, an endpoint ignoring conditions, and failures that must not look absent.
   for(const mode of ["native","missing-412","ignored","denied","unavailable"]){
+    await scenario("0zg1 timeline race", `conditional reads, 304/412/404 probe compatibility, and fail-closed authorization/service errors (mode=${mode})`, async () => {
     const b=await bucket();let present=0,absent=0;
     const proxy=relay((request,response)=>{
       const url=new URL(request.url),object=url.pathname.split("/").slice(2).join("/");
@@ -1077,7 +1143,7 @@ try {
     const observer=await server(b,proxy.url);
     const initial=await fetch(`${observer.url}/api/v0/epilogue/status?flow=conditional`);
     if(mode==="denied"||mode==="unavailable"){
-      await status(initial,503);assert.equal(await timeout(observer.process.exited),1);continue;
+      await status(initial,503);assert.equal(await timeout(observer.process.exited),1);return;
     }
     await status(initial,200);
     const writer=await server(b);await status(await commit(writer.url,"conditional",a,0n),201);
@@ -1085,10 +1151,11 @@ try {
     assert.equal(found.latest?.viewpoint,0n);assert.deepEqual(await latestBlob(found.latest!),a);
     assert(present>0&&absent>0,"exercise both branches of conditional existence search");
     await stop(writer.process);await stop(observer.process);
+    });
   }
-  console.log("put of success: conditional reads, 304/412/404 probe compatibility, and fail-closed authorization/service errors");
+  passed("0zg1 timeline race", "conditional reads, 304/412/404 probe compatibility, and fail-closed authorization/service errors");
   // Heap staging journals derived identifiers, never authentication material.
-  {
+  await scenario("0zg3 shallow heap", "shallow heap reservations, partial errors, length-bound first-writer uploads, both generations, retries, Viewpoint checks, snapshots, service limits, and no persisted tokens", async () => {
     const b=await bucket(),stateDir=`${artifacts}/heap-state`;
     const app=await server(b,endpoint,{BASINSYNC_DATA_DIR:stateDir});
     const flow="0x-staging",secret=bytes("client-only-heap-secret-44b5317c76db0c09"),emptySecret=bytes("client-only-empty-node-secret-d9a812f"),oversize=bytes("oversized-client-token-"+"x".repeat(64));
@@ -1164,10 +1231,10 @@ try {
     const smallBucket=await bucket(),limited=await server(smallBucket,endpoint,{BASINSYNC_HEAP_MAX_HEIGHT:"0",BASINSYNC_HEAP_MAX_TOKEN_BYTES:"4"});
     const limits=await reserved(await reserveHeap(limited.url,"limits",0n,[node(bytes("12345")),{...node(bytes("1234")),auth:[1,0,bytes("1234")]},node(bytes("1234"))]));
     assert.equal(limits.errors![0].code,"token_limit");assert.equal(limits.errors![1].code,"height_limit");assert(limits.results![2]);await stop(limited.process);
-  }
-  console.log("put of success: shallow heap reservations, partial errors, length-bound first-writer uploads, both generations, retries, Viewpoint checks, snapshots, service limits, and no persisted tokens");
+  });
   // Reservation and commit batches share the two-slot publication pipeline.
   for(const fault of ["none","before","after"]){
+    await scenario("0zg3 shallow heap", `pipelined reservation/commit durability, ambiguous reservation recovery, and competing reservers (fault=${fault})`, async () => {
     const b=await bucket(),gate=Promise.withResolvers<void>(),entered=Promise.withResolvers<void>();let puts=0,done=false;
     const proxy=relay(async(request,response)=>{
       if(fault==="after"&&request.method==="PUT"&&new URL(request.url).pathname.endsWith(`/${key(1n)}`)){await response.arrayBuffer();return new Response("reply lost",{status:503});}return response;
@@ -1177,7 +1244,7 @@ try {
     const app=await server(b,proxy.url,{BASINSYNC_BATCH_MAX:"1",BASINSYNC_BATCH_WAIT_MS:"0",RUST_LOG:"basinsync=debug"});
     const input:HeapNode={auth:[0,0,bytes("pipeline-client-only-access-token")],length:0,edges:[]};
     const reservation=reserveHeap(app.url,"pipelined-heap",0n,[input]).then(r=>{done=true;return r});await timeout(entered.promise);
-    const following=commit(app.url,"pipelined-heap",bytes("root"),0n);await batchLogged(app.log,2);
+    const following=commit(app.url,"pipelined-heap",bytes("root"),0n);await reach(app,"batches",2);
     assert.equal(done,false,"do not release actions before reservation durability");assert.equal(puts,1,"prepared successor must not upload early");
     gate.resolve();const first=await reservation;
     if(fault==="none"){
@@ -1189,9 +1256,10 @@ try {
       const restored=await server(b);const retry=await reserveHeap(restored.url,"pipelined-heap",0n,[input]);await status(retry.clone(),200);
       assert.equal(parse<HeapResponse>(await retry.text()).timelines.basin.milestone,fault==="after"?2n:1n);await stop(restored.process);
     }
+    });
   }
   // Concurrent reservers arbitrate with the same conditional Timeline append.
-  {
+  await scenario("0zg3 shallow heap", "pipelined reservation/commit durability, ambiguous reservation recovery, and competing reservers", async () => {
     const b=await bucket(),gate=Promise.withResolvers<void>();let puts=0;
     const proxy=relay((_,response)=>response,async request=>{
       if(request.method==="PUT"&&new URL(request.url).pathname.includes(`/${objectKeys.timeline}`)){if(++puts===2)gate.resolve();await gate.promise;}
@@ -1204,10 +1272,9 @@ try {
     await Promise.all(apps.map(app=>stop(app.process)));
     const restored=await server(b);for(let i=0;i<2;i++)await status(await reserveHeap(restored.url,`heap-race-${i}`,0n,nodes),200);
     assert.equal((await s3.send(new ListObjectsV2Command({Bucket:b,Prefix:objectKeys.timeline}))).KeyCount,3);await stop(restored.process);
-  }
-  console.log("put of success: pipelined reservation/commit durability, ambiguous reservation recovery, and competing reservers");
+  });
   // Independent workers may DELETE the same old revision; neither can erase its replacement.
-  {
+  await scenario("0zg4 async cleanup", "bounded deferred cleanup, shared retainers, foreground progress during DELETE, revision-safe reuse, late-upload dust, and durable restart recovery", async () => {
     const b=await bucket(),gate=Promise.withResolvers<void>(),entered=Promise.withResolvers<void>();let held=false;
     const proxy=relay((_,response)=>response,async request=>{
       if(request.method==="DELETE"&&new URL(request.url).pathname.includes(`/${objectKeys.userHeap}young/`)){held=true;entered.resolve();await gate.promise;}
@@ -1246,8 +1313,9 @@ try {
     for(let m=1n;m<=cp.milestone;m++){const delta=deltasAt(await get(b,m)).turso["default.turso"] as WalDelta;image=ingestWal(image??delta.logical.base!,delta.physical.segments);}
     assert.deepEqual(cp.blob,image,"cleanup and revision reuse survive physical replay and snapshot recovery");
     await stop(restored.process);
-  }
+  });
   for(const fault of ["before","after"]){
+    await scenario("0zg5 deep heap", `deep node DAGs, cached conditional HEADs in both generations, immutable child sets, degree/height limits, nonblocking verification, revision races, bounded recursive reclamation, and snapshot replay (fault=${fault})`, async () => {
     const b=await bucket();let deletes=0,failed=false;const sweeps=new WeakSet<Request>();
     const isSweep=(request:Request)=>request.method==="PUT"&&new URL(request.url).pathname.endsWith(`/${key(3n)}`);
     const proxy=relay(async(request,response)=>{
@@ -1266,10 +1334,10 @@ try {
     const retry=await server(b,endpoint,{BASINSYNC_CLEANUP_INTERVAL_MS:"15"});
     await eventually(async()=>{const r=await fetch(actions.preview!.url,{headers:actions.preview!.headers});await r.arrayBuffer();return r.status;},n=>n===404||n===412);
     await stop(retry.process);
+    });
   }
-  console.log("put of success: bounded deferred cleanup, shared retainers, foreground progress during DELETE, revision-safe reuse, late-upload dust, and durable restart recovery");
 
-  {
+  await scenario("0zg5 deep heap", "deep node DAGs, cached conditional HEADs in both generations, immutable child sets, degree/height limits, nonblocking verification, revision races, bounded recursive reclamation, and snapshot replay (1/2)", async () => {
     const b=await bucket(),flows=new Set<string>(),heads=new Map<string,number>();let mode="normal",target="",rootId="",checkedDeletion=false;
     const slow=Promise.withResolvers<void>(),entered=Promise.withResolvers<void>();let hold=false;
     async function image(){
@@ -1344,8 +1412,8 @@ try {
     const restored=await server(b,endpoint,{BASINSYNC_BACKUP_INTERVAL_MS:"10"}),tip=(await fullStatus(restored.url,"deep")).timelines.basin.milestone;
     const cp=await eventually(()=>basinBackup(b),cp=>!!cp&&cp.milestone>=tip);assert(cp);assert.deepEqual(await inspect(cp.blob),{userspace_nodes:0,userspace_edges:0,sweeping_tasks:0,marking_tasks:0});await stop(restored.process);
     for await(const page of paginateListObjectsV2({client:s3},{Bucket:b}))for(const object of page.Contents??[]){const r=await s3.send(new GetObjectCommand({Bucket:b,Key:object.Key!}));const body=Buffer.from(await r.Body!.transformToByteArray());assert(!body.includes(bytes("deep-node-auth-private-")),"child access tokens never reach storage");}
-  }
-  {
+  });
+  await scenario("0zg5 deep heap", "deep node DAGs, cached conditional HEADs in both generations, immutable child sets, degree/height limits, nonblocking verification, revision races, bounded recursive reclamation, and snapshot replay (2/2)", async () => {
     const b=await bucket(),gate=Promise.withResolvers<void>(),entered=Promise.withResolvers<void>();let held=false,target="";
     const proxy=relay(async(request,response)=>{if(!held&&request.method==="HEAD"&&new URL(request.url).pathname===target&&response.status===200){held=true;entered.resolve();await gate.promise;}return response;});
     const app=await server(b,proxy.url,{BASINSYNC_CLEANUP_INTERVAL_MS:"15"});
@@ -1359,10 +1427,9 @@ try {
     const write=await fetch(next.write.url,{method:"PUT",headers:next.write.headers,body:bytes("x")});assert(write.ok);gate.resolve();
     const rejected=await pending;assert.equal(rejected.errors![0].code,"child_changed");assert.equal(rejected.results,null);
     assert((await reserve("parent",[parent])).results);await stop(app.process);
-  }
-  console.log("put of success: deep node DAGs, cached conditional HEADs in both generations, immutable child sets, degree/height limits, nonblocking verification, revision races, bounded recursive reclamation, and snapshot replay");
+  });
 
-  {
+  await scenario("0zg6 marker edges", "authenticated marker edges, postorder marking, retained DAGs, bounded promotion, conditional COPY, foreground progress, and retry/restart/snapshot recovery (1/3)", async () => {
     const b=await bucket();let holdCopies=false,rootPath="",rootYoung="",copyCount=0,deleteFailed=false,ambiguous=true;
     const gate=Promise.withResolvers<void>(),entered=Promise.withResolvers<void>();
     async function image(){
@@ -1421,7 +1488,7 @@ try {
     app=await server(b,proxy.url,{BASINSYNC_CLEANUP_INTERVAL_MS:"10",BASINSYNC_MARK_BATCH_SIZE:"1",BASINSYNC_SWEEP_EDGE_BATCH_SIZE:"1",BASINSYNC_ERASE_BATCH_SIZE:"1",BASINSYNC_ERASE_CONCURRENCY:"1"});
     await timeout(entered.promise);
     const parentMarked=await inspect(parentId,owner);assert(parentMarked.marked);assert.equal(parentMarked.promoted,"");assert.equal(parentMarked.freed,"");
-    assert.equal(await exists(b,await signKey(b,"graph",0n)),false,"no sign before the entire graph is promoted");
+    assert(!(await committedKeys(s3,b,`${objectKeys.userFlows}graph/`)).some(k=>k.endsWith(`/epilogue/${lex(0n)}`)),"no sign before the entire graph is promoted");
     await timeout(status(await commit(app.url,"foreground",bytes("responsive"),0n),201),3000);
     await s3.send(new CopyObjectCommand({Bucket:b,Key:rootPath.slice(b.length+2),CopySource:rootYoung.slice(1),CopySourceIfMatch:parentMarked.etag,IfNoneMatch:"*"}));
     gate.resolve();holdCopies=false;
@@ -1447,8 +1514,8 @@ try {
     const restored=await inspect(parentId,owner,cp.blob);assert(restored.retained&&restored.marked&&restored.promoted);
     await stop(app.process);
     assert(copies.length>=2,"both parent and child promoted");
-  }
-  {
+  });
+  await scenario("0zg6 marker edges", "authenticated marker edges, postorder marking, retained DAGs, bounded promotion, conditional COPY, foreground progress, and retry/restart/snapshot recovery (2/3)", async () => {
     // Retry an ambiguous successful COPY after restart; old presence protects the young source.
     const b=await bucket();let blocked=true,unsupported=true,ambiguous=true,copyAttempts=0,sourceReads=0;const copyRejected=Promise.withResolvers<void>();
     const proxy=relay(async(request,response)=>{
@@ -1482,8 +1549,8 @@ try {
     const old=await fetch(actions.read.url,{headers:actions.read.headers});assert.equal(old.status,200);assert.deepEqual(new Uint8Array(await old.arrayBuffer()),data);
     assert.equal(old.headers.get("x-amz-meta-ctx-kind"),"copy");assert.equal(old.headers.get("x-amz-meta-ctx-tag"),"0#species");
     await stop(app.process);
-  }
-  {
+  });
+  await scenario("0zg6 marker edges", "authenticated marker edges, postorder marking, retained DAGs, bounded promotion, conditional COPY, foreground progress, and retry/restart/snapshot recovery (3/3)", async () => {
     // A successful HEAD for a reclaimed revision cannot authorize a marker edge to its replacement.
     const b=await bucket(),gate=Promise.withResolvers<void>(),entered=Promise.withResolvers<void>();let held=false,target="";
     const proxy=relay(async(request,response)=>{if(!held&&request.method==="HEAD"&&new URL(request.url).pathname===target&&response.status===200){held=true;entered.resolve();await gate.promise;}return response;});
@@ -1501,12 +1568,11 @@ try {
     assert.deepEqual(await epilogueStatus(app.url,"marker"),{latest:null});
     await status(await commit(app.url,"marker",bytes("retry"),0n,undefined,[{auth:node.auth}]),201);
     await stop(app.process);
-  }
-  console.log("put of success: authenticated marker edges, postorder marking, retained DAGs, bounded promotion, conditional COPY, foreground progress, and retry/restart/snapshot recovery");
+  });
 
-  {
+  await scenario("0zg6 marker edges", "uncomplemented PromotionSigns, empty graphs, retained tasks until S3 confirmation, ambiguous sign PUTs, restart repair, and mixed-key Epilogue recovery", async () => {
     const b=await bucket(),flow="sign-0x",attempted=Promise.withResolvers<void>();let target="";
-    let stored=false,confirm=false,puts=0;let mismatch=Promise.withResolvers<void>();
+    let stored=false,confirm=false,puts=0,rewrites=0;let mismatch=Promise.withResolvers<void>();
     async function counts(image?:Uint8Array){
       if(!image){
       for(const m of (await committedKeys(s3,b,objectKeys.timeline)).map(fromKey).sort((a,b)=>a<b?-1:1)){const d=deltasAt(await get(b,m)).turso["default.turso"] as WalDelta;image=ingestWal(image??d.logical.base!,d.physical.segments);}
@@ -1517,7 +1583,7 @@ try {
     }
     const proxy=relay((request,response)=>{
       if(request.method==="HEAD"&&new URL(request.url).pathname===`/${b}/${target}`&&response.status===200&&response.headers.get("x-amz-meta-upstream")!=="1")mismatch.resolve();
-      if(request.method==="PUT"&&new URL(request.url).pathname===`/${b}/${target}`&&response.ok){stored=true;attempted.resolve();return new Response("lost sign reply",{status:500});}
+      if(request.method==="PUT"&&new URL(request.url).pathname===`/${b}/${target}`&&response.ok){rewrites++;stored=true;attempted.resolve();return new Response("lost sign reply",{status:500});}
       return response;
     },async request=>{
       if(new URL(request.url).pathname!==`/${b}/${target}`)return;
@@ -1539,7 +1605,7 @@ try {
     await timeout(attempted.promise);
     assert(await exists(b,target));assert((await counts()).marking_tasks>=1,"unconfirmed sign keeps its task");
     await status(await commit(app.url,"foreground-sign",bytes("responsive"),0n),201);
-    await stop(app.process);const before=puts;confirm=true;
+    await stop(app.process);const before=rewrites;confirm=true;
     for(const metadata of [{},{upstream:"999"}] as Record<string,string>[]){
       mismatch=Promise.withResolvers<void>();
       await s3.send(new PutObjectCommand({Bucket:b,Key:target,Body:wrapEnvelope(new Uint8Array([1]),6),Metadata:metadata}));
@@ -1549,7 +1615,8 @@ try {
     await s3.send(new PutObjectCommand({Bucket:b,Key:target,Body:wrapEnvelope(new Uint8Array([1]),6),Metadata:{upstream:"1"}}));
     app=await server(b,proxy.url,{BASINSYNC_CLEANUP_INTERVAL_MS:"10",BASINSYNC_BACKUP_INTERVAL_MS:"10"});
     await eventually(counts,r=>r.marking_tasks===0&&r.sweeping_tasks===0);
-    assert.equal(puts,before,"restart confirms an existing sign without rewriting it");
+    // A conditional create that finds the sign (412) is not a rewrite.
+    assert.equal(rewrites,before,"restart confirms an existing sign without rewriting it");
     assert.equal((await s3.send(new HeadObjectCommand({Bucket:b,Key:target}))).Metadata!.upstream,"1");
     assert.equal((await s3.send(new HeadObjectCommand({Bucket:b,Key:await signKey(b,flow,1n)}))).Metadata!.upstream,"2");
     assert(await exists(b,await signKey(b,"foreground-sign",0n)));
@@ -1562,15 +1629,15 @@ try {
     app=await server(b,proxy.url,{BASINSYNC_BACKUP_INTERVAL_MS:"10"});
     await Bun.sleep(50);assert.equal((await basinBackup(b))!.key,cp.key,"idle restart does not back up its own bookkeeping");
     assert.deepEqual(await epilogueStatus(app.url,flow),{latest:{viewpoint:1n}});await stop(app.process);
-  }
-  console.log("put of success: uncomplemented PromotionSigns, empty graphs, retained tasks until S3 confirmation, ambiguous sign PUTs, restart repair, and mixed-key Epilogue recovery");
+  });
 
-  {
+  await scenario("0zg3 shallow heap", "JSON0 context validation, Timeline metadata retention, ambiguous replication, revision-scoped keys, and snapshot-only Flow recovery", async () => {
     const b=await bucket(),flow="context-0-flow",body=bytes("context marker");
     let app=await server(b);
     const context={Kind:"0x-literal",owner:"alice",empty:"", "0-key":"0"};
     for(const invalid of [{"bad name":"x"},{a:"x\r\ny"},{A:"one",a:"two"},{big:"x".repeat(2048)}] as Record<string,string>[]){
-      await status(await commit(app.url,flow,body,0n,undefined,[],invalid),400);
+      const rejected=await commit(app.url,flow,body,0n,undefined,[],invalid);await status(rejected.clone(),422);
+      assert.equal(parse<ApiError>(await rejected.text()).error,"invalid_context");
       assert.equal((await fullStatus(app.url,flow)).latest,null);
     }
     await status(await commit(app.url,flow,body,0n,undefined,[],context),201);
@@ -1606,10 +1673,9 @@ try {
     const thirdKey=`${objectKeys.userFlows}${flow}/${initial}/epilogue/${lex(~2n)}`;
     assert.equal((await s3.send(new HeadObjectCommand({Bucket:b,Key:thirdKey}))).Metadata!["ctx-owner"],"carol");
     await stop(app.process);
-  }
-  console.log("put of success: JSON0 context validation, Timeline metadata retention, ambiguous replication, revision-scoped keys, and snapshot-only Flow recovery");
+  });
 
-  {
+  await scenario("0zg3 shallow heap", "per-node context validation, JSON0 header strings, signed metadata tamper rejection, and immutable reservation context before upload, after replay, and after snapshot recovery", async () => {
     const b=await bucket(),app=await server(b),flow="reservation-context";
     const node:HeapNode={auth:[0,0,bytes("context-node-private-token")],length:1,edges:[],context:{Kind:"0x-literal",owner:"alice",empty:""}};
     const input=[node,{...node,context:{owner:"bob"}},{...node,context:{"bad name":"x"}},{...node,context:{kind:"0x-literal",owner:"alice",empty:""}}];
@@ -1649,10 +1715,9 @@ try {
     const fromSnapshot=parse<HeapResponse>(await mismatch.text());assert.equal(fromSnapshot.results,null);assert.equal(fromSnapshot.errors![0].code,"context_collision");
     const matching=await reserveHeap(snapshotOnly.url,flow,1n,[node]);await status(matching.clone(),200);assert.equal(parse<HeapResponse>(await matching.text()).errors,null);
     await stop(snapshotOnly.process);
-  }
-  console.log("put of success: per-node context validation, JSON0 header strings, signed metadata tamper rejection, and immutable reservation context before upload, after replay, and after snapshot recovery");
+  });
 
-  {
+  await scenario("0zg3 shallow heap", "competing Heap contexts have one durable agreement and reject the losing context after recovery", async () => {
     const b=await bucket(),entered=Promise.withResolvers<void>(),release=Promise.withResolvers<void>();let puts=0;
     const proxy=relay((_,response)=>response,async request=>{
       if(request.method==="PUT"&&new URL(request.url).pathname.includes(`/${objectKeys.timeline}`)){
@@ -1673,10 +1738,11 @@ try {
     assert.equal(rejected.timelines.basin.milestone,1n);
     const matching=await reserveHeap(restored.url,"same-context",0n,[inputs[winner]!]);await status(matching.clone(),200);
     assert.equal(parse<HeapResponse>(await matching.text()).errors,null);await stop(restored.process);
-  }
-  console.log("put of success: competing Heap contexts have one durable agreement and reject the losing context after recovery");
+  });
 
-  console.log(`Integration passed. Logs: ${artifacts}`);
+  const ok=report();
+  console.log(`Integration ${ok?"passed":"failed"}. Logs: ${artifacts}`);
+  if(!ok)process.exitCode=1;
 } finally {
   await Promise.all(processes.map(stop));
   await Promise.all(relays.map(r=>r.stop(true)));

@@ -25,10 +25,10 @@ prerequisites:
 [leader]: <../../../glossary/leader.md>
 [lexidecimal]: <../../../glossary/lexidecimal.md>
 [logical-frame]: <../../../glossary/logical-frame.md>
+[message-schemas]: <../../../message-schemas.md>
 [milestone]: <../../../glossary/milestone.md>
 [mvcc]: <../../../glossary/mvcc.md>
 [object-keys]: <../../../object-keys.md>
-[physical-frame]: <../../../glossary/physical-frame.md>
 [range-manifest]: <../../../glossary/range-manifest.md>
 [revision]: <../../../glossary/revision.md>
 [timeline]: <../../../glossary/timeline.md>
@@ -43,9 +43,9 @@ prerequisites:
 # Turso Reservoir VFS
 
 Materialize the *Basin's*[~][basin] *Timeline*[~][timeline] in *Turso*[~][turso]
-with 16 KiB pages, *MVCC*[~][mvcc], and portable logical changes. Store the applied
-*Milestone*[~][milestone] and each *Flow's*[~][flow] latest
-*Viewpoint*[~][viewpoint] as decimal text:
+with 16 KiB pages, *MVCC*[~][mvcc], and portable logical changes, pinned and
+configured as the *state delta reference*[~][turso-state] describes. Store the applied *Milestone*[~][milestone] and each *Flow's*[~][flow]
+latest *Viewpoint*[~][viewpoint] as decimal text:
 
 ```sql
 PRAGMA page_size = 16384;
@@ -82,12 +82,13 @@ and *downstream*[~][downstream] *Viewpoints*[~][viewpoint] use positive
 *Lexidecimal*[~][lexidecimal] text. Preserve locations for intermediate
 *Viewpoints*[~][viewpoint] within a batch and verify indexed-location recovery.
 
-Use crate features `fs` and `conn_raw_api` and call
-`connection.set_portable_logical_changes_enabled(true)`. Implement
-*DurableStorage*[~][durable-storage] by delegating to the engine and observing
-`log_tx`'s serialization callback for *logical frames*[~][logical-frame]. Disable
-automatic checkpointing; intercept *physical WAL*[~][wal] writes before each
-explicit checkpoint truncates them.
+Capture each transaction's logical and physical frames as a delta that, applied
+to the previous state, reproduces the new rows exactly. Use crate features `fs`
+and `conn_raw_api` and call `connection.set_portable_logical_changes_enabled(true)`.
+Implement *DurableStorage*[~][durable-storage] by delegating to the engine and
+observing `log_tx`'s serialization callback for *logical frames*[~][logical-frame].
+Disable automatic checkpointing; intercept *physical WAL*[~][wal] writes before
+each explicit checkpoint truncates them.
 
 Add a file-backed copy-on-write *VFS*[~][virtual-file-system]. Pin a checkpointed
 generation before the next transaction; retain overwritten pages on disk and
@@ -107,15 +108,17 @@ transaction. Preserve every *CommitMarker*[~][commit-marker] in ordered
 tuple. Append one frame-ingestion command before the final
 *range manifest*[~][range-manifest]:
 
-```ts
-// Each tuple has its own EnvBuf; append after the commitflow chunks.
-[Symbol.species, "sync.memoremix.com", "sts/0/databasin/ingestturso", {
-  turso: { "default.turso": { version, logical, physical } }
-}]
+```cddl
+; Each tuple has its own EnvBuf; append after the commitflow chunks.
+ingestturso-command = command<"sts/0/databasin/ingestturso", {
+  turso: { * tstr => turso-delta }
+}>
 ```
 
-Use the *frame contract*[~][turso-state] and version
-`0.9.0-pre.1+032f5bb2c7e74107f7ef9b66d576312379000a88`.
+Shared definitions such as `command` and `decimal` are in the *message schemas*[~][message-schemas].
+
+Follow the *delta contract*[~][turso-state]; `version` identifies the Turso
+build that wrote each delta.
 One *DifferentialEvent*[~][differential-event] occupies one
 *Milestone*[~][milestone], regardless of request count. Increasing in-flight
 limits must preserve *causal publication order*[~][basin-timeline];
@@ -131,10 +134,10 @@ request data per batch. A larger individual request forms its own batch.
 admission and the queue remain bounded, with room for two full batches
 (64 requests at the default size).
 
-Recover the complete history as in *Basin Timeline race*[~][diy/0zg1/261023-basin-timeline-race], ingesting
-*physical frames*[~][physical-frame] instead of rerunning commit SQL. Check
-versions, native framing, initial-image identity, predecessor linkage, and
-cursors; verify affected rows. Earlier image-delta entries remain readable, and
+Recover the complete history as in *Basin Timeline race*[~][diy/0zg1/261023-basin-timeline-race], applying
+each event's deltas instead of rerunning commit SQL. Check Turso versions,
+delta framing, initial-image identity, predecessor linkage, and cursors; verify
+affected rows. Earlier image-delta entries remain readable, and
 new events link to their actual encoded predecessor.
 
 Keep whole-file comparisons and *logical replay*[~][logical-frame] equivalence

@@ -21,7 +21,9 @@ Encode size digits `0..f` as anti-hex `g..v` on the positive side,
 or `v..g` on the negative side. Size is always present. Omit magnitude when
 `width == 1`; otherwise prefix the size with magnitude `m`, where
 `1 << (1 + m) == width`. Magnitudes `0..3` use `wxyz` for positives and
-`ZYXW` for negatives. Append `h`, complementing its digits for negatives.
+`ZYXW` for negatives, in that order (`m = 0` is `w` or `Z`), so wider
+negatives sort first. Append `h`, complementing its digits for negatives:
+2^64 is `0zwhg10000000000000000` and −2^64 − 1 is `0yZuveffffffffffffffff`.
 
 Decode the optional magnitude, fixed-width size, then hexadecimal payload.
 Require minimal uncomplemented payload digits and the smallest permitted size width;

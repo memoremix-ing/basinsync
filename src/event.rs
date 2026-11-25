@@ -91,7 +91,7 @@ pub fn encode(command: CommitFlow) -> Result<Vec<u8>> {
 }
 
 pub fn decode(bytes: &[u8]) -> Result<CommitFlow> {
-    let root = flexbuffers::Reader::get_root(bytes).context("decode DifferentialEvent")?;
+    let root = crate::flexbuffer::root(bytes).context("decode DifferentialEvent")?;
     let batch = root.get_vector()?;
     ensure!(
         batch.len() == 1,
@@ -239,7 +239,7 @@ fn encode_vector_wal(
 }
 
 fn decode_vector_entry(bytes: &[u8]) -> Result<Entry> {
-    let root = flexbuffers::Reader::get_root(bytes)?.get_vector()?;
+    let root = crate::flexbuffer::root(bytes)?.get_vector()?;
     if root.len() == 1 {
         return Ok(Entry::Legacy(decode(bytes)?));
     }
@@ -505,7 +505,7 @@ impl FlowChunks {
 }
 
 fn tuple(content: &[u8]) -> Result<flexbuffers::VectorReader<&[u8]>> {
-    let tuple = flexbuffers::Reader::get_root(content)?.get_vector()?;
+    let tuple = crate::flexbuffer::root(content)?.get_vector()?;
     ensure!(
         tuple.len() == 4
             && flexbuffer::read(tuple.index(0)?)? == Extension::WellKnownSymbol("species".into()),
@@ -701,7 +701,7 @@ pub fn blob_ranges(bytes: &[u8]) -> Result<Vec<BlobRange>> {
 
 /// Historical image-delta fixtures remain readable without a persistent range index.
 fn historical_ranges(bytes: &[u8]) -> Result<Vec<BlobRange>> {
-    let root = flexbuffers::Reader::get_root(bytes)?.get_vector()?;
+    let root = crate::flexbuffer::root(bytes)?.get_vector()?;
     let mut ranges = Vec::new();
     for item in root.iter() {
         let command = item.get_vector()?;

@@ -4,6 +4,7 @@
 [envbuf]: <envbuf.md>
 [flexbuffers]: <flexbuffers.md>
 [margin]: <margin.md>
+[message-schemas]: <../message-schemas.md>
 [milestone]: <milestone.md>
 [object-keys]: <../object-keys.md>
 
@@ -12,13 +13,13 @@
 A format `101` *EnvBuf*[~][envbuf] indexing complete, trimmed
 *DifferentialEvents*[~][differential-event] in a *BulkOrder*[~][bulk-order]:
 
-```ts
-[Symbol.species, "sync.memoremix.com", "sts/0/databasin/bulkmanifest", {
-  lowest: 42n,
-  coordinate: 65536n,
-  ends: [488, 1360, 1976]
-}]
+```cddl
+bulkmanifest-command = command<"sts/0/databasin/bulkmanifest", {
+  lowest: big, coordinate: big, ends: [+ uint],
+}>
 ```
+
+Shared definitions such as `command` and `decimal` are in the *message schemas*[~][message-schemas].
 
 `lowest` is the first inclusive *Milestone*[~][milestone]; `coordinate` is its
 starting *byte coordinate*[~][byte-coordinate]. Each `ends` entry is one
@@ -29,6 +30,10 @@ the footer's start. Derive the exclusive upper *Milestone*[~][milestone] as
 `lowest + BigInt(ends.length)` and each global end by adding `coordinate`.
 Trimmed events have no trailing retry *margins*[~][margin], so logical and
 physical offsets coincide throughout the event prefix.
+
+For example, `lowest: 42`, `coordinate: 65536`, `ends: [488, 1360, 1976]`
+indexes *Milestones*[~][milestone] 42 through 44 (exclusive upper 45), with
+global ends 66024, 66896, and 67512.
 
 Encode `lowest` and `coordinate` with the *bigint extension*[~][flexbuffers],
 and `ends` as an ordinary signed-integer vector, keeping `VT_VECTOR_UINT`

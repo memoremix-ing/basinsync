@@ -69,6 +69,11 @@ Avoid inline links and bare/autolink URLs in prose, including tables and lists.
 Keep literal links inside code examples unchanged. Check that reference labels
 resolve and local paths match the target filename's casing when editing links.
 
+Keep `docs/` sufficient for a clean-room rebuild: describe requirements,
+interfaces, and formats, not this repository's source layout, vendored
+dependencies, or test harness. Put repository-specific notes in the sibling
+`.docs/` directory, which may link into `docs/` but never the reverse.
+
 Keep all documentation standalone within `docs/`. Local links and embedded assets
 must resolve inside this directory. External links may use only HTTP(S) URLs to
 genuinely independent resources; do not replace a repository-code link with a

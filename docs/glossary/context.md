@@ -15,6 +15,7 @@ Names must be nonempty HTTP header suffixes without NUL and distinct ignoring
 case. Values must be printable ASCII; metadata, including service metadata, must fit
 S3's 2 KiB user-metadata limit. Validate before accepting the request.
 
+Commits keep context names as supplied in their *CommitMarker*[~][commit-marker].
 A *Heap*[~][heap] reservation persists lowercase-key context. Repeated
 reservations must match its keys and values, even before upload; omitted context
 means `{}`.

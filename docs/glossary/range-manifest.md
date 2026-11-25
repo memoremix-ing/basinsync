@@ -4,6 +4,7 @@
 [flexbuffers]: <flexbuffers.md>
 [lexidecimal]: <lexidecimal.md>
 [margin]: <margin.md>
+[message-schemas]: <../message-schemas.md>
 
 # Range manifest
 
@@ -12,12 +13,14 @@ The final *non-margin*[~][margin] *EnvBuf*[~][envbuf] in a command feed. Its
 exclusive end offset relative to the command feed's start, encoded as positive
 *Lexidecimal*[~][lexidecimal]:
 
-```ts
-[Symbol.species, "sync.memoremix.com", "sts/0/databasin/rangemanifest", {
-  coordinate: 0n,
-  envelopes: { [lex_exclusive: string]: [Symbol.species, host, path] | null }
-}]
+```cddl
+rangemanifest-command = command<"sts/0/databasin/rangemanifest", {
+  coordinate: big, envelopes: range-envelopes,
+}>
+range-envelopes = { * tstr => (command-prefix / null) }  ; keys: positive Lexidecimal
 ```
+
+Shared definitions such as `command` and `decimal` are in the *message schemas*[~][message-schemas].
 
 Command values are prefixes without query payloads. A consecutive run of *margin
 envelopes*[~][margin] has one `null` entry at the last envelope's exclusive end.

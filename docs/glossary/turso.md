@@ -7,3 +7,4 @@
 A *SQLite-compatible database engine*[~][turso-manual] written in Rust.
 Its *MVCC*[~][mvcc] journal records row versions; checkpointing materializes them into
 B-tree pages. *DurableStorage*[~][durable-storage] permits a custom logical-log durability backend.
+basinsync uses it to observe each transaction's logical frames.

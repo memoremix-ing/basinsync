@@ -40,8 +40,9 @@ allow independent branches.
 
 Run the bundled *Python linter*[~][check_dag]. Python 3.9+ is required, without
 third-party packages. It locates `diy/` relative to the skill regardless of working
-directory. An optional argument selects another tutorial directory; tutorial-slug
-uniqueness is checked only within the selected tutorial tree. It rejects
+directory. Arguments select tutorial directories instead: the first is the
+public tree, and each later overlay tree may depend on earlier trees but not the
+reverse. Tutorial-slug uniqueness is checked across all selected trees. It rejects
 invalid layouts/heights/dates, repeated tutorial topics, malformed frontmatter,
 missing/duplicate/self prerequisites, cycles, and non-increasing edges. It does
 not judge whether the stated prerequisites are sufficient.

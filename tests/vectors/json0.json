@@ -1,0 +1,32 @@
+{
+  "text": [
+    ["", ""], ["hello", "hello"], ["a0", "a0"],
+    ["0", "00"], ["00", "000"], ["0x1", "00x1"], ["0#species", "00#species"]
+  ],
+  "bigint": [
+    ["0", "0x0"], ["255", "0xff"], ["4096", "0x1000"],
+    ["340282366920938463463374607431768211456", "0x100000000000000000000000000000000"],
+    ["-1", "0~0"], ["-16", "0~f"], ["-257", "0~100"]
+  ],
+  "bytes": [
+    [[], "0*"], [[0], "0*AA"], [[251, 255], "0*-_8"], [[1, 2, 3], "0*AQID"]
+  ],
+  "wellKnownSymbol": [
+    ["asyncIterator", "0#asyncIterator"], ["iterator", "0#iterator"],
+    ["species", "0#species"], ["unscopables", "0#unscopables"]
+  ],
+  "globalSymbol": [
+    ["app.sym", "0$app.sym"], ["", "0$"]
+  ],
+  "decodeOnly": [
+    ["0xFF", {"bigint": "255"}], ["0x00ff", {"bigint": "255"}], ["0~F", {"bigint": "-16"}],
+    ["0*AA==", {"bytes": [0]}], ["0%AA==", {"bytes": [0]}], ["0%AA", {"bytes": [0]}],
+    ["0%+/8", {"bytes": [251, 255]}]
+  ],
+  "invalid": [
+    "0", "0w0z", "0yvf", "0zg0", "0A", "0Z1", "0_custom", "0!", "0a", "01",
+    "0x", "0xg", "0~", "0~z", "0#foo", "0#Symbol.species",
+    "0*AA=", "0*AB", "0* AA", "0*+/8", "0%-_8"
+  ],
+  "unsupportedWellKnownSymbols": ["dispose", "match"]
+}

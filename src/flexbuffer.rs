@@ -3,6 +3,168 @@ use anyhow::{Context, Result, bail, ensure};
 use flexbuffers::{FlexBufferType, Reader};
 use num_bigint::{BigInt, Sign};
 
+/// Parse a stored FlexBuffers document after checking its layout: every value
+/// an offset refers to, with its length prefix or map header, lies inside the
+/// buffer and ends at or before the slot holding that offset. Offsets therefore
+/// point backward, and no value overlaps a slot that refers to it or the root
+/// trailer. Widths, ordering, sharing, and unreferenced padding stay free.
+pub fn root(bytes: &[u8]) -> Result<Reader<&[u8]>> {
+    check_layout(bytes)?;
+    Ok(Reader::get_root(bytes)?)
+}
+
+pub fn check_layout(bytes: &[u8]) -> Result<()> {
+    ensure!(bytes.len() >= 3, "FlexBuffers document is too short");
+    let width = usize::from(bytes[bytes.len() - 1]);
+    ensure!(
+        matches!(width, 1 | 2 | 4 | 8),
+        "invalid FlexBuffers root width"
+    );
+    let slot = bytes
+        .len()
+        .checked_sub(2 + width)
+        .context("FlexBuffers root does not fit")?;
+    let mut walk = Layout {
+        bytes,
+        visits: 0,
+        seen: Default::default(),
+    };
+    walk.value(slot, width, bytes[bytes.len() - 2], 0)
+}
+
+struct Layout<'a> {
+    bytes: &'a [u8],
+    visits: usize,
+    seen: std::collections::HashSet<(usize, u8)>,
+}
+
+impl Layout<'_> {
+    fn uint(&self, at: usize, width: usize) -> Result<usize> {
+        let end = at
+            .checked_add(width)
+            .context("FlexBuffers offset overflow")?;
+        let bytes = self
+            .bytes
+            .get(at..end)
+            .context("FlexBuffers read out of bounds")?;
+        let mut word = [0u8; 8];
+        word[..width].copy_from_slice(bytes);
+        usize::try_from(u64::from_le_bytes(word)).context("FlexBuffers value too large")
+    }
+    /// A referenced byte range must end at or before the slot referring to it.
+    fn range(slot: usize, start: usize, len: usize) -> Result<()> {
+        let end = start
+            .checked_add(len)
+            .context("FlexBuffers range overflow")?;
+        ensure!(
+            end <= slot,
+            "FlexBuffers value overlaps the slot that refers to it"
+        );
+        Ok(())
+    }
+    fn value(&mut self, slot: usize, slot_width: usize, packed: u8, depth: usize) -> Result<()> {
+        ensure!(depth <= 128, "FlexBuffers nesting is too deep");
+        let kind = packed >> 2;
+        let width = 1usize << (packed & 3);
+        // Inline scalars: null, int, uint, float, bool.
+        if matches!(kind, 0..=3 | 26) {
+            return Ok(());
+        }
+        let offset = self.uint(slot, slot_width)?;
+        let target = slot
+            .checked_sub(offset)
+            .context("FlexBuffers offset before the buffer")?;
+        if !self.seen.insert((target, packed)) {
+            return Ok(()); // shared values were already checked
+        }
+        self.visits += 1;
+        ensure!(
+            self.visits <= 4 * self.bytes.len() + 16,
+            "FlexBuffers document has too many references"
+        );
+        let prefixed = |walk: &Self| -> Result<usize> {
+            let at = target
+                .checked_sub(width)
+                .context("FlexBuffers length before the buffer")?;
+            walk.uint(at, width)
+        };
+        match kind {
+            4 => {
+                // Key: NUL-terminated bytes.
+                let end = self.bytes[target..slot]
+                    .iter()
+                    .position(|&b| b == 0)
+                    .context("FlexBuffers key is unterminated before its slot")?;
+                Self::range(slot, target, end + 1)
+            }
+            5 | 25 => {
+                let len = prefixed(self)?;
+                Self::range(slot, target - width, width + len + usize::from(kind == 5))
+            }
+            6..=8 => Self::range(slot, target, width),
+            9 | 10 => {
+                let len = prefixed(self)?;
+                let elements = len
+                    .checked_mul(width)
+                    .context("FlexBuffers length overflow")?;
+                Self::range(slot, target - width, width + elements + len)?;
+                if kind == 9 {
+                    Self::range(
+                        slot,
+                        target
+                            .checked_sub(3 * width)
+                            .context("FlexBuffers map header before the buffer")?,
+                        3 * width,
+                    )?;
+                }
+                for i in 0..len {
+                    let child = self.bytes[target + elements + i];
+                    self.value(target + i * width, width, child, depth + 1)?;
+                }
+                if kind == 9 {
+                    let keys_at = target
+                        .checked_sub(3 * width)
+                        .context("FlexBuffers map header before the buffer")?;
+                    let keys_width = self.uint(keys_at + width, width)?;
+                    ensure!(
+                        matches!(keys_width, 1 | 2 | 4 | 8),
+                        "invalid FlexBuffers key width"
+                    );
+                    let keys_packed = (14 << 2) | keys_width.trailing_zeros() as u8;
+                    self.value(keys_at, width, keys_packed, depth + 1)?;
+                }
+                Ok(())
+            }
+            11..=15 | 36 => {
+                let len = prefixed(self)?;
+                let elements = len
+                    .checked_mul(width)
+                    .context("FlexBuffers length overflow")?;
+                Self::range(slot, target - width, width + elements)?;
+                // Key vectors (and the deprecated string vectors) hold offsets.
+                let child = match kind {
+                    14 => Some(4u8),
+                    15 => Some(5u8),
+                    _ => None,
+                };
+                if let Some(child) = child {
+                    for i in 0..len {
+                        self.value(
+                            target + i * width,
+                            width,
+                            (child << 2) | (packed & 3),
+                            depth + 1,
+                        )?;
+                    }
+                }
+                Ok(())
+            }
+            16..=24 => Self::range(slot, target, (2 + usize::from((kind - 16) / 3)) * width),
+            _ => bail!("unknown FlexBuffers type {kind}"),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum Extension {
     BigInt(BigInt),
@@ -162,11 +324,39 @@ mod tests {
     struct Vectors {
         extensions: Vec<serde_json::Map<String, serde_json::Value>>,
         invalid: Vec<Vec<u8>>,
+        overlapping_layouts: Vec<Vec<u8>>,
+        fixed_length_vectors: Vec<Vec<u8>>,
         unsupported_well_known_symbols: Vec<String>,
     }
 
     fn decoded(wire: &[u8]) -> Option<Extension> {
-        read(Reader::get_root(wire).ok()?).ok()
+        read(root(wire).ok()?).ok()
+    }
+
+    #[test]
+    fn overlapping_layouts_are_rejected_though_plain_readers_accept_them() {
+        let vectors: Vectors =
+            serde_json::from_str(include_str!("../tests/vectors/flexbuffer.json")).unwrap();
+        assert!(!vectors.overlapping_layouts.is_empty());
+        for wire in &vectors.overlapping_layouts {
+            assert!(
+                read(Reader::get_root(wire.as_slice()).unwrap()).is_ok(),
+                "{wire:?}"
+            );
+            assert_eq!(decoded(wire), None, "{wire:?}");
+        }
+    }
+
+    proptest! {
+        /// Writers place every value before the root trailer, so their output passes.
+        #[test]
+        fn writer_output_passes_the_layout_check(
+            values in proptest::collection::vec((any::<i64>(), ".{0,12}", proptest::collection::vec(any::<u8>(), 0..20)), 0..12),
+            keys in proptest::collection::btree_map("[a-z]{1,6}", any::<u32>(), 0..8),
+        ) {
+            let bytes = flexbuffers::to_vec((&values, &keys, serde_bytes::Bytes::new(b"blob"))).unwrap();
+            prop_assert!(check_layout(&bytes).is_ok());
+        }
     }
 
     /// Extension wire vectors shared with the TypeScript client.
@@ -187,7 +377,7 @@ mod tests {
             assert_eq!(encode(&extension).unwrap(), wire);
             assert_eq!(decoded(&wire), Some(extension));
         }
-        for wire in &vectors.invalid {
+        for wire in vectors.invalid.iter().chain(&vectors.fixed_length_vectors) {
             assert_eq!(decoded(wire), None, "{wire:?}");
         }
         for name in &vectors.unsupported_well_known_symbols {

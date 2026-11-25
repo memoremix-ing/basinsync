@@ -32,7 +32,7 @@ revision: delayed DELETEs and acknowledgments must target the old *revision*[~][
 These keys disclose neither *Flow*[~][flow], *Viewpoint*[~][viewpoint], nor *Timeline*[~][timeline] position.
 
 ```sql
-ALTER TABLE userspace_nodes ADD COLUMN revision TEXT NOT NULL;
+ALTER TABLE userspace_nodes ADD COLUMN revision TEXT NOT NULL DEFAULT '';
 ALTER TABLE userspace_nodes ADD COLUMN freed DATETIME NOT NULL DEFAULT '';
 CREATE INDEX userspace_nodes_freed ON userspace_nodes(freed, id);
 CREATE TABLE sweeping_tasks (
@@ -45,6 +45,7 @@ CREATE INDEX sweeping_tasks_prioritized
   ON sweeping_tasks(prioritized, flow, viewpoint);
 ```
 
+Flow task `viewpoint` values are decimal, like `flows.viewpoint`.
 Every commit transaction inserts a *sweeping task*[~][sweeping-task] alongside
 its *Viewpoint*[~][viewpoint] advancement, including intermediate commits in a batch.
 

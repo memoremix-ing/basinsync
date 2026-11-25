@@ -15,6 +15,12 @@ import {sha384} from "./client";
 import {append as crcAppend,hex as crcHex} from "./crc32c";
 import { objectKeys } from "./object-keys";
 
+/** Fail clearly when an awaited server action never happens (e.g. a feature is missing). */
+export async function within<T>(promise:Promise<T>,what:string,ms=60000):Promise<T>{
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  try{return await Promise.race([promise,new Promise<never>((_,no)=>{timer=setTimeout(()=>no(new Error(`timed out after ${ms} ms waiting for ${what}`)),ms);})]);}
+  finally{clearTimeout(timer);}
+}
 export async function eventually<T>(call:()=>Promise<T>,accept:(value:T)=>boolean,ms=15000):Promise<T>{
   const end=Date.now()+ms;let error:unknown;
   while(Date.now()<end){try{const value=await call();if(accept(value))return value;}catch(e){error=e;}await Bun.sleep(10);}
@@ -35,7 +41,7 @@ export async function fixture(label="analogue"){
   async function stop(child:ReturnType<typeof spawn>){if(child.exitCode!==null)return;child.kill("SIGINT");let timer:ReturnType<typeof setTimeout>;try{await Promise.race([child.exited,new Promise<never>((_,no)=>{timer=setTimeout(()=>no(new Error("shutdown timed out")),32000);})]);}finally{clearTimeout(timer!);}assert.equal(child.exitCode,0);}
   async function server(Bucket:string,extra:Record<string,string>={},s3Endpoint=endpoint,release=false){
     const address=`127.0.0.1:${await freePort()}`;
-    const app=launch([`${root}/target/${release?"release":"debug"}/basinsync`],{S3_BUCKET:Bucket,S3_ENDPOINT:s3Endpoint,BASINSYNC_LISTEN:address,BASINSYNC_BATCH_MAX:"1",BASINSYNC_BATCH_WAIT_MS:"0",BASINSYNC_CLEANUP_INTERVAL_MS:"0",BASINSYNC_BACKUP_INTERVAL_MS:"0",BASINSYNC_BULK_MAX_AGE_MS:"0",BASINSYNC_STATUS_PROBE_MAX_AGE_MS:"0",...extra});
+    const app=launch([Bun.env.BASINSYNC_SERVER??`${root}/target/${release?"release":"debug"}/basinsync`],{S3_BUCKET:Bucket,S3_ENDPOINT:s3Endpoint,BASINSYNC_LISTEN:address,BASINSYNC_BATCH_MAX:"1",BASINSYNC_BATCH_WAIT_MS:"0",BASINSYNC_CLEANUP_INTERVAL_MS:"0",BASINSYNC_BACKUP_INTERVAL_MS:"0",BASINSYNC_BULK_MAX_AGE_MS:"0",BASINSYNC_STATUS_PROBE_MAX_AGE_MS:"0",...extra});
     const url=`http://${address}`;
     await eventually(async()=>{assert.equal(app.process.exitCode,null,readFileSync(app.log,"utf8"));return fetch(`${url}/ready`);},r=>r.status===404);
     return {...app,url};

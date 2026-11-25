@@ -218,27 +218,14 @@ pub fn scan(
         ready,
     })
 }
-fn matches(head: &s3::serde_types::HeadObjectResult, node: &Node) -> bool {
-    head.content_length == i64::try_from(node.length).ok()
-        && (head.e_tag.as_deref() == Some(&node.etag)
-            || head
-                .metadata
-                .as_ref()
-                .and_then(|m| m.get("basinsync-source-etag"))
-                .is_some_and(|v| v == &node.etag))
-}
+/// Presence is the whole check: the ETag confirmed at allocation already proves
+/// the upload, so a copy's length and ETag may differ from the original.
 async fn old_exists(bucket: &s3::Bucket, node: &Node) -> Result<bool> {
-    let (head, status) = crate::object_read::if_present(bucket)?
+    let (_, status) = crate::object_read::if_present(bucket)?
         .head_object(heap::key(heap::OLD, &node.id, &node.revision))
         .await?;
     match status {
-        200 => {
-            ensure!(
-                matches(&head, node),
-                "old heap object differs from allocation"
-            );
-            Ok(true)
-        }
+        200 => Ok(true),
         404 | 412 => Ok(false),
         _ => anyhow::bail!("old heap HEAD returned HTTP {status}"),
     }
@@ -252,12 +239,7 @@ async fn source_context(
     let (head, status) = reader
         .head_object(heap::key(heap::YOUNG, &node.id, &node.revision))
         .await?;
-    ensure!(
-        status == 200
-            && head.e_tag.as_deref() == Some(&node.etag)
-            && head.content_length == i64::try_from(node.length).ok(),
-        "young heap metadata differs from allocation"
-    );
+    ensure!(status == 200, "young heap object changed or missing");
     let context = head
         .metadata
         .unwrap_or_default()
@@ -382,31 +364,4 @@ pub async fn promote(bucket: &s3::Bucket, nodes: Vec<Node>, concurrency: usize) 
         }
     }
     completed
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn destination_requires_length_and_original_etag() {
-        let node = Node {
-            id: "node".into(),
-            revision: uuid::Uuid::new_v4().to_string(),
-            etag: "\"source\"".into(),
-            length: 1,
-        };
-        let mut head = s3::serde_types::HeadObjectResult {
-            content_length: Some(1),
-            e_tag: Some("\"unrelated\"".into()),
-            ..Default::default()
-        };
-        assert!(!matches(&head, &node));
-        head.metadata = Some(std::collections::HashMap::from([(
-            "basinsync-source-etag".into(),
-            node.etag.clone(),
-        )]));
-        assert!(matches(&head, &node));
-        head.content_length = Some(2);
-        assert!(!matches(&head, &node));
-    }
 }

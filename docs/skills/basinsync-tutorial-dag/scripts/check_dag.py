@@ -81,9 +81,18 @@ def prerequisites(text):
     return dependencies
 
 
-def lint_tutorials(directory):
-    directory = Path(directory).resolve()
-    errors, graph, names, readmes = [], {}, {}, set()
+def lint_tutorials(directory, *overlays):
+    """Lint one tutorial tree plus optional overlay trees that may depend on it."""
+    errors, graph, names, trees = [], {}, {}, {}
+    for tree, root in enumerate((directory, *overlays)):
+        collect(Path(root).resolve(), tree, errors, graph, names, trees)
+    if not graph:
+        errors.append("no tutorials found")
+    return validate(errors, graph, trees)
+
+
+def collect(directory, tree, errors, graph, names, trees):
+    readmes = set()
 
     # Inspect supporting folders too, without following symlinks out of the bundle.
     def on_error(error):
@@ -127,7 +136,10 @@ def lint_tutorials(directory):
             dependencies = prerequisites(readme.read_text(encoding="utf-8"))
         except (ValueError, OSError) as error:
             errors.append(f"{name}: {error}")
+        if name in graph:
+            errors.append(f"{name}: tutorial path exists in more than one tree")
         graph[name] = (height, dependencies)
+        trees[name] = tree
 
     pending = [directory]
     while pending:
@@ -158,9 +170,9 @@ def lint_tutorials(directory):
     for readme in sorted(readmes):
         if readme[:-len("/README.md")] not in graph:
             errors.append(f"{readme}: expected alternating <height>/<slug> tutorial folders")
-    if not graph:
-        errors.append("no tutorials found")
 
+
+def validate(errors, graph, trees):
     dependents = {name: [] for name in graph}
     indegree = dict.fromkeys(graph, 0)
     edges = 0
@@ -176,6 +188,8 @@ def lint_tutorials(directory):
             if dependency not in graph:
                 errors.append(f"{name}: missing prerequisite {dependency} (paths are case-sensitive)")
                 continue
+            if trees[dependency] > trees[name]:
+                errors.append(f"{name}: prerequisite {dependency} is only in an overlay tree")
             edges += 1
             dependents[dependency].append(name)
             indegree[name] += 1
@@ -197,9 +211,8 @@ def lint_tutorials(directory):
 
 def main(args):
     try:
-        if len(args) > 1:
-            raise ValueError("usage: check_dag.py [tutorial-directory]")
-        result = lint_tutorials(Path(args[0]) if args else DEFAULT_DIRECTORY)
+        directories = [Path(arg) for arg in args] or [DEFAULT_DIRECTORY]
+        result = lint_tutorials(*directories)
         if result["errors"]:
             print("\n".join(result["errors"]), file=sys.stderr)
             return 1

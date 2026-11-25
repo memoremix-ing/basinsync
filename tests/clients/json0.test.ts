@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { randomBytes } from "node:crypto";
 
 import { parse, stringify } from "./json0";
+import { WELL_KNOWN_BY_NAME } from "./symbols";
+import { vectors } from "./vectors";
 
 describe("JSON0", () => {
   test.each(["", "0", "00", "0x1", "0~f", "0*AA", "0$shared", "0#iterator", "0.1e1000", "0w1z", "0yvf", "0zg0", "0X1", "0_custom", "ordinary 🌎"])(
@@ -9,6 +11,13 @@ describe("JSON0", () => {
       expect(parse<typeof value>(stringify(value))).toBe(value);
     },
   );
+
+  test("escapes a literal \"0\" and rejects a lone 0 on the wire", () => {
+    expect(JSON.parse(stringify("0"))).toBe("00");
+    expect(parse<string>('"00"')).toBe("0");
+    expect(() => parse('"0"')).toThrow();
+    expect(parse<string>('""')).toBe("");
+  });
 
   test.each([
     [0n, "0x0"], [256n, "0x100"], [-1n, "0~0"], [-16n, "0~f"], [-257n, "0~100"],
@@ -61,5 +70,24 @@ describe("JSON0", () => {
 
   test("rejects local symbols", () => {
     expect(() => stringify(Symbol("local"))).toThrow("Unrecognized symbol.");
+  });
+
+  test("matches the shared JSON0 vectors", () => {
+    type Pairs<T> = [T, string][];
+    const v = vectors<{ text: Pairs<string>; bigint: Pairs<string>; bytes: Pairs<number[]>; wellKnownSymbol: Pairs<string>;
+      globalSymbol: Pairs<string>; invalid: string[];
+      decodeOnly: [string, { bigint?: string; bytes?: number[] }][] }>("json0");
+    const check = (value: unknown, wire: string) => {
+      expect(JSON.parse(stringify(value))).toBe(wire);
+      expect(parse(JSON.stringify(wire))).toEqual(value);
+    };
+    for (const [text, wire] of v.text) check(text, wire);
+    for (const [n, wire] of v.bigint) check(BigInt(n), wire);
+    for (const [bytes, wire] of v.bytes) check(new Uint8Array(bytes), wire);
+    for (const [name, wire] of v.wellKnownSymbol) check(WELL_KNOWN_BY_NAME[name], wire);
+    for (const [name, wire] of v.globalSymbol) check(Symbol.for(name), wire);
+    for (const [wire, want] of v.decodeOnly)
+      expect(parse(JSON.stringify(wire))).toEqual("bigint" in want ? BigInt(want.bigint!) : new Uint8Array(want.bytes!));
+    for (const wire of v.invalid) expect(() => parse(JSON.stringify(wire))).toThrow();
   });
 });

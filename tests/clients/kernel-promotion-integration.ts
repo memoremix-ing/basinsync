@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {GetObjectCommand,HeadObjectCommand,ListObjectsV2Command,DeleteObjectCommand,PutObjectCommand} from "@aws-sdk/client-s3";
-import {fixture,eventually} from "./analogue-fixture";
+import {within,fixture,eventually} from "./analogue-fixture";
 import {commit,epilogueStatus,sha384} from "./client";
 import {toObject} from "./flexbuffer";
 import {message} from "./envbuf";
@@ -8,6 +8,7 @@ import {encode as lex} from "./lexidecimal";
 import {fromKey,key as timelineKey} from "./timeline";
 import {eventTuples} from "./events";
 import { objectKeys } from "./object-keys";
+import { passed } from "./scenarios";
 import { committedKeys } from "./listing";
 const f=await fixture("kernel-promotion");
 type Node={id:string;revision:string;length:number;sha384:string};
@@ -33,7 +34,7 @@ try{
       return next();
     });
     const app=await f.server(bucket,{BASINSYNC_BACKUP_INTERVAL_MS:"30",BASINSYNC_MARK_BATCH_SIZE:"1",BASINSYNC_ERASE_CONCURRENCY:"1"},proxy);
-    assert.equal((await commit(app.url,"promotion",new Uint8Array([1]),0n)).status,201);await entered.promise;
+    assert.equal((await commit(app.url,"promotion",new Uint8Array([1]),0n)).status,201);await within(entered.promise,"entered");
     const graph=await uploaded(bucket);assert.equal(await exists(bucket,sign),null);
     assert.equal((await commit(app.url,"promotion",new Uint8Array([2]),1n)).status,201,"a blocked COPY must not block foreground preparation");
     release.resolve();const signed=await eventually(()=>exists(bucket,sign),Boolean);assert(signed);
@@ -57,7 +58,7 @@ try{
       return next();
     });
     const app=await f.server(bucket,{BASINSYNC_BACKUP_INTERVAL_MS:"50"},proxy);
-    assert.equal((await commit(app.url,"copy-fault",new Uint8Array([3]),0n)).status,201);await attempt.promise;
+    assert.equal((await commit(app.url,"copy-fault",new Uint8Array([3]),0n)).status,201);await within(attempt.promise,"attempt");
     if(fault!=="lost-reply"){
       await Bun.sleep(70);assert.equal(await exists(bucket,sign),null);assert.equal(deletes,0);await f.stop(app.process);
       const graph=await uploaded(bucket);for(const node of Object.values(graph.databases))assert(await exists(bucket,key(node,"young")));
@@ -78,7 +79,7 @@ try{
       const path=new URL(request.url).pathname;if(request.method==="PUT"&&path.includes(`/${objectKeys.kernelHeap}old/`))copies++;
       if(fail&&request.method==="DELETE"&&path.includes(`/${objectKeys.kernelHeap}young/`)){attempt.resolve();return new Response("DELETE unavailable",{status:500});}return next();
     });
-    const app=await f.server(bucket,{BASINSYNC_BACKUP_INTERVAL_MS:"30"},proxy);assert.equal((await commit(app.url,"delete-fault",new Uint8Array([4]),0n)).status,201);await attempt.promise;assert.equal(await exists(bucket,sign),null);await f.stop(app.process);
+    const app=await f.server(bucket,{BASINSYNC_BACKUP_INTERVAL_MS:"30"},proxy);assert.equal((await commit(app.url,"delete-fault",new Uint8Array([4]),0n)).status,201);await within(attempt.promise,"attempt");assert.equal(await exists(bucket,sign),null);await f.stop(app.process);
     const before=copies;fail=false;const restarted=await f.server(bucket,{BASINSYNC_BACKUP_INTERVAL_MS:"30"},proxy);await eventually(()=>exists(bucket,sign),Boolean);assert.equal(copies,before);await checkGraph(bucket,await root(bucket));await f.stop(restarted.process);
   }
   // Sign confirmation, rather than PUT success, retires the task. No new backup is needed.
@@ -91,7 +92,7 @@ try{
         const response=await next();if(request.method==="PUT"&&response.ok){stored=true;attempt.resolve();await response.arrayBuffer();return new Response("lost sign reply",{status:503});}return response;
       }return next();
     });
-    const app=await f.server(bucket,{BASINSYNC_BACKUP_INTERVAL_MS:"30"},proxy);assert.equal((await commit(app.url,"sign-fault",new Uint8Array([5]),0n)).status,201);await attempt.promise;await f.stop(app.process);
+    const app=await f.server(bucket,{BASINSYNC_BACKUP_INTERVAL_MS:"30"},proxy);assert.equal((await commit(app.url,"sign-fault",new Uint8Array([5]),0n)).status,201);await within(attempt.promise,"attempt");await f.stop(app.process);
     const before=copies;confirm=true;const restarted=await f.server(bucket,{BASINSYNC_BACKUP_INTERVAL_MS:"30"},proxy);await eventually(async()=>signReads,n=>n>1);await Bun.sleep(150);await f.stop(restarted.process);assert.equal(copies,before);
     const remaining=signReads;const settled=await f.server(bucket,{BASINSYNC_BACKUP_INTERVAL_MS:"30"},proxy);await Bun.sleep(120);await f.stop(settled.process);assert.equal(signReads,remaining,"confirmed task removal survives replay");
     const roots=await f.s3.send(new ListObjectsV2Command({Bucket:bucket,Prefix:objectKeys.basinEpilogue}));assert.equal(roots.Contents!.filter(o=>o.Key!.startsWith(`${objectKeys.basinEpilogue}0y`)).length,1,"promotion must not recursively schedule backups");
@@ -136,8 +137,8 @@ try{
   {
     const bucket=await f.bucket(),entered=Promise.withResolvers<void>(),release=Promise.withResolvers<void>();let held=false;
     const proxy=f.relay(async(request,next)=>{if(!held&&request.method==="PUT"&&new URL(request.url).pathname.includes(`/${objectKeys.kernelHeap}old/`)){held=true;entered.resolve();await release.promise;}return next();});
-    const app=await f.server(bucket,{BASINSYNC_BACKUP_INTERVAL_MS:"30"},proxy);assert.equal((await commit(app.url,"copy-drain",new Uint8Array([6]),0n)).status,201);await entered.promise;
+    const app=await f.server(bucket,{BASINSYNC_BACKUP_INTERVAL_MS:"30"},proxy);assert.equal((await commit(app.url,"copy-drain",new Uint8Array([6]),0n)).status,201);await within(entered.promise,"entered");
     const stopped=f.stop(app.process);await Bun.sleep(60);assert.equal(app.process.exitCode,null);release.resolve();await stopped;assert(await exists(bucket,sign));await checkGraph(bucket,await root(bucket));
   }
-  console.log(`put of success: bounded KernelSpace marking, conditional COPY without relaying bytes, verified destinations, DELETE/reply/sign failures, restart, no backup feedback, and shutdown draining; ${f.artifacts}`);
+  passed("0zg7 backup nodes", `bounded KernelSpace marking, conditional COPY without relaying bytes, verified destinations, DELETE/reply/sign failures, restart, no backup feedback, and shutdown draining; ${f.artifacts}`);
 }finally{await f.close();}

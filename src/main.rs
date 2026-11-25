@@ -185,12 +185,14 @@ impl Commit {
             edges,
         } = serde_json::from_slice(&details.ok_or_else(|| Failure::bad("missing details"))?)
             .map_err(|_| Failure::bad("invalid commit details"))?;
-        basinsync::details::context_headers(&context).map_err(Failure::bad)?;
-        let edges = heap::authenticate_edges(edges, limits, None)
-            .map_err(|e| Failure::new(StatusCode::UNPROCESSABLE_ENTITY, e.code, e.message))?;
         let flow = event::normalize_flow(&flow).map_err(Failure::bad)?;
         basinsync::epilogue::check_flow_key(&flow, &viewpoint).map_err(Failure::bad)?;
         let blob = blob.ok_or_else(|| Failure::bad("missing blob"))?;
+        // Structure (400) is settled above; content failures below are 422.
+        basinsync::details::context_headers(&context)
+            .map_err(|e| Failure::new(StatusCode::UNPROCESSABLE_ENTITY, "invalid_context", e))?;
+        let edges = heap::authenticate_edges(edges, limits, None)
+            .map_err(|e| Failure::new(StatusCode::UNPROCESSABLE_ENTITY, e.code, e.message))?;
         let digest = Sha384::digest(&blob);
         if sha384.as_slice() != &digest[..] {
             return Err(Failure::new(

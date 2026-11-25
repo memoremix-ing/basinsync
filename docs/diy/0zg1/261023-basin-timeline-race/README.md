@@ -20,6 +20,7 @@ prerequisites:
 [flow]: <../../../glossary/flow.md>
 [lexidecimal]: <../../../glossary/lexidecimal.md>
 [margin]: <../../../glossary/margin.md>
+[message-schemas]: <../../../message-schemas.md>
 [milestone]: <../../../glossary/milestone.md>
 [range-get]: <../../../glossary/range-get.md>
 [range-manifest]: <../../../glossary/range-manifest.md>
@@ -56,13 +57,17 @@ Wrap each *DifferentialEvent's*[~][differential-event] command feed in one neste
 *EnvBuf-wrapped*[~][envbuf] *FlexBuffers*[~][flexbuffers]
 *commitflow tuple*[~][basin-timeline]:
 
-```ts
-[Symbol.species, "sync.memoremix.com", "sts/0/databasin/commitflow", {
-  markers: { [flow: string]: {
-    viewpoint: string; sha384: string; blob: Uint8Array; context: Record<string, string>
-  } }
-}]
+```cddl
+commitflow-command = command<"sts/0/databasin/commitflow", {
+  markers: { * tstr => commit-marker }
+}>
+commit-marker = {
+  viewpoint: decimal, sha384: hex384, blob: bstr,
+  context: { * tstr => tstr }, edges: [* tstr],
+}
 ```
+
+Shared definitions such as `command` and `decimal` are in the *message schemas*[~][message-schemas].
 
 Preserve *context*[~][context] for later *CommitMarker*[~][commit-marker] replication.
 

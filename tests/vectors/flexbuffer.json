@@ -5,6 +5,9 @@
     {"bigint": "-1", "wire": [2, 126, 0, 2, 48, 1]},
     {"bigint": "-16", "wire": [2, 126, 15, 2, 48, 1]},
     {"bigint": "-257", "wire": [3, 126, 1, 0, 3, 48, 1]},
+    {"wellKnownSymbol": "asyncIterator", "wire": [14, 35, 97, 115, 121, 110, 99, 73, 116, 101, 114, 97, 116, 111, 114, 14, 48, 1]},
+    {"wellKnownSymbol": "iterator", "wire": [9, 35, 105, 116, 101, 114, 97, 116, 111, 114, 9, 48, 1]},
+    {"wellKnownSymbol": "unscopables", "wire": [12, 35, 117, 110, 115, 99, 111, 112, 97, 98, 108, 101, 115, 12, 48, 1]},
     {"wellKnownSymbol": "species", "wire": [8, 35, 115, 112, 101, 99, 105, 101, 115, 8, 48, 1]},
     {"globalSymbol": "", "wire": [1, 36, 1, 48, 1]}
   ],
@@ -15,6 +18,14 @@
     [3, 120, 0, 1, 3, 48, 1],
     [2, 36, 255, 2, 48, 1],
     [2, 0, 120, 0, 0, 1, 4, 49, 1]
+  ],
+  "fixedLengthVectors": [
+    [120, 0, 2, 68, 1]
+  ],
+  "overlappingLayouts": [
+    [106, 2, 120, 1, 48, 1],
+    [0, 2, 120, 1, 48, 1],
+    [3, 120, 1, 48, 1]
   ],
   "unsupportedWellKnownSymbols": ["dispose", "constructor", "__proto__", "match"]
 }

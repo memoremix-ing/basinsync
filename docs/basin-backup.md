@@ -11,6 +11,7 @@
 [kernelspace]: <glossary/kernelspace.md>
 [lexidecimal]: <glossary/lexidecimal.md>
 [marking-task]: <glossary/marking-task.md>
+[message-schemas]: <message-schemas.md>
 [milestone]: <glossary/milestone.md>
 [node]: <glossary/node.md>
 [node-promotion]: <glossary/node-promotion.md>
@@ -22,7 +23,6 @@
 [timeline]: <glossary/timeline.md>
 [timeline-eviction]: <glossary/timeline-eviction.md>
 [tombstone]: <glossary/tombstone.md>
-[turso]: <glossary/turso.md>
 [viewpoint]: <glossary/viewpoint.md>
 
 # Basin backup and recovery
@@ -36,18 +36,19 @@ uncomplemented positions in those same namespaces. *Basin*[~][basin]
 *Viewpoints*[~][viewpoint] count backups independently of *Milestones*[~][milestone].
 A *Basin*[~][basin] root is a *FlexBuffers*[~][flexbuffers] message:
 
-```ts
-{
-  version: string;             // Turso release and revision
-  milestone: string;           // covered decimal Milestone M
-  coordinate: string;          // exclusive decimal coordinate
-  crc32c: string;              // cumulative CRC32C, eight lowercase hex digits
-  parent: string;              // event SHA-384 at M
-  databases: Record<"default.turso" | "kernel.turso", {
-    id: string; revision: string; length: number; sha384: string;
-  }>;
+```cddl
+basin-root = {
+  version: tstr,           ; Turso release and revision
+  milestone: decimal,      ; covered Milestone M
+  coordinate: decimal,     ; exclusive coordinate
+  crc32c: hex-crc32c,      ; cumulative CRC32C
+  parent: hex384,          ; event SHA-384 at M
+  databases: { "default.turso": backup-node, "kernel.turso": backup-node },
 }
+backup-node = { id: tstr, revision: tstr, length: uint, sha384: hex384 }
 ```
+
+Shared definitions such as `command` and `decimal` are in the *message schemas*[~][message-schemas].
 
 Both database images are height-zero *KernelSpace*[~][kernelspace] *nodes*[~][node]
 at the same prefix. Verify their lengths, checksums, and recorded
@@ -64,17 +65,18 @@ x-amz-meta-coordinate: <exclusive Timeline byte coordinate, canonical decimal>
 x-amz-meta-crc32c: <cumulative coordinate-run CRC32C, eight lowercase hex digits>
 x-amz-meta-event-sha384: <digest of DifferentialEvent at that Milestone>
 x-amz-meta-sha384: <digest of CommitMarker bytes>
-x-amz-meta-turso-version: <engine release and revision>
+x-amz-meta-turso-version: <Turso release and revision>
 ```
 
 Retain the *CRC32C*[~][crc32c] as the recovered prefix's accumulator.
 Other digests are hexadecimal *SHA-384*[~][sha384]. Unwrap the raw *EnvBuf message*[~][envbuf], validate metadata and its checksum,
-then validate the root's *Turso*[~][turso] version and recovery prefix.
+then validate the root's Turso version and recovery prefix.
 
 Before publishing a *Basin*[~][basin] *CommitMarker*[~][commit-marker], replicate
 all *Flow*[~][flow] *markers*[~][commit-marker] through its
 *Milestone*[~][milestone] into their *Epilogues*[~][epilogue]. Use
-*conditional creation*[~][conditional-write]; preserve *context*[~][context] metadata and verify existing bytes and context on retry.
+*conditional creation*[~][conditional-write]; preserve *context*[~][context] metadata, add
+`x-amz-meta-sha384` with the blob's hexadecimal *SHA-384*[~][sha384], and verify existing bytes and context on retry.
 Competing backup workers adopt the winning *Viewpoint*[~][viewpoint], keeping
 backed-up *Milestones*[~][milestone] increasing.
 

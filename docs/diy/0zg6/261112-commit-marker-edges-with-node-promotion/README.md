@@ -60,7 +60,7 @@ CREATE INDEX userspace_nodes_promotion ON userspace_nodes(promoted, marked);
 ```
 
 Record the committing *upstream*[~][upstream] *Milestone*[~][milestone] in `upstream`,
-encoded with *Lexidecimal*[~][lexidecimal].
+encoded with *Lexidecimal*[~][lexidecimal]; `viewpoint` stays decimal.
 
 Whereas staging sweeps advance breadth-first, traverse from each
 *marker's*[~][commit-marker] roots depth-first. A *node*[~][node] receives its `marked` timestamp only after

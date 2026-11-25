@@ -1,0 +1,19 @@
+[package]
+name = "basinsync-codec"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Clean-room basinsync codecs: Lexidecimal, Diffuse16, EnvBuf, FlexBuffers extensions, JSON0, CRC32C, SHA-384, object keys"
+
+# One runtime dependency: SHA-384 comes from the audited sha2 crate. Every
+# other codec (including CRC32C) is implemented here so Kani can see it.
+[dependencies]
+sha2 = "0.10"
+
+[dev-dependencies]
+proptest = "1"
+crc32c = "0.6"
+flexbuffers = "25"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }

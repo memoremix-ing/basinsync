@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-python3 docs/skills/basinsync-tutorial-dag/scripts/check_dag.py
+python3 docs/skills/basinsync-tutorial-dag/scripts/check_dag.py docs/diy .docs/diy
 python3 docs/skills/basinsync-tutorial-dag/scripts/test_check_dag.py
 mkdir -p .local/bin
 CGO_ENABLED=0 GOBIN="$PWD/.local/bin" go install github.com/versity/versitygw/cmd/versitygw@v1.11.0

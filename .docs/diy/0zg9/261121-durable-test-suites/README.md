@@ -5,15 +5,15 @@ prerequisites:
 
 [benchmark]: <benchmark/benchmark.md>
 [development]: <../../../development.md>
-[diffuse16]: <../../../glossary/diffuse16.md>
-[diy/0zg2/261023-turso-reservoir-vfs]: <../../0zg2/261023-turso-reservoir-vfs/README.md>
-[envbuf]: <../../../glossary/envbuf.md>
-[flexbuffers]: <../../../glossary/flexbuffers.md>
-[flow]: <../../../glossary/flow.md>
-[lexidecimal]: <../../../glossary/lexidecimal.md>
-[margin]: <../../../glossary/margin.md>
-[object-keys]: <../../../object-keys.md>
-[timeline]: <../../../glossary/timeline.md>
+[diffuse16]: <../../../../docs/glossary/diffuse16.md>
+[diy/0zg2/261023-turso-reservoir-vfs]: <../../../../docs/diy/0zg2/261023-turso-reservoir-vfs/README.md>
+[envbuf]: <../../../../docs/glossary/envbuf.md>
+[flexbuffers]: <../../../../docs/glossary/flexbuffers.md>
+[flow]: <../../../../docs/glossary/flow.md>
+[lexidecimal]: <../../../../docs/glossary/lexidecimal.md>
+[margin]: <../../../../docs/glossary/margin.md>
+[object-keys]: <../../../../docs/object-keys.md>
+[timeline]: <../../../../docs/glossary/timeline.md>
 
 # Durable test suites
 

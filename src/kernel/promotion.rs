@@ -194,28 +194,13 @@ pub(crate) fn apply(conn: &Arc<Connection>, change: &Change) -> Result<()> {
     }
     Ok(())
 }
-fn matches(head: &s3::serde_types::HeadObjectResult, proof: &Proof) -> bool {
-    head.content_length == i64::try_from(proof.node.length).ok()
-        && head.metadata.as_ref().and_then(|m| m.get("sha384")) == Some(&proof.node.sha384)
-        && (head.e_tag.as_deref() == Some(&proof.etag)
-            || head
-                .metadata
-                .as_ref()
-                .and_then(|m| m.get("basinsync-source-etag"))
-                == Some(&proof.etag))
-}
 async fn old_exists(bucket: &s3::Bucket, proof: &Proof) -> Result<bool> {
-    let (head, status) = crate::object_read::if_present(bucket)?
+    // Presence is enough; restore verifies image lengths and checksums.
+    let (_, status) = crate::object_read::if_present(bucket)?
         .head_object(proof.node.key(OLD)?)
         .await?;
     match status {
-        200 => {
-            ensure!(
-                matches(&head, proof),
-                "old KernelSpace object differs from allocation"
-            );
-            Ok(true)
-        }
+        200 => Ok(true),
         404 | 412 => Ok(false),
         _ => anyhow::bail!("kernel destination HEAD returned HTTP {status}"),
     }
@@ -224,13 +209,8 @@ async fn promote_one(bucket: &s3::Bucket, proof: &Proof) -> Result<()> {
     if !old_exists(bucket, proof).await? {
         let mut reader = bucket.clone();
         reader.add_header("if-match", &proof.etag);
-        let (source, status) = reader.head_object(proof.node.key(YOUNG)?).await?;
-        ensure!(
-            status == 200
-                && source.e_tag.as_deref() == Some(&proof.etag)
-                && matches(&source, proof),
-            "young KernelSpace object changed"
-        );
+        let (_, status) = reader.head_object(proof.node.key(YOUNG)?).await?;
+        ensure!(status == 200, "young KernelSpace object changed");
         let metadata = BTreeMap::from([("x-amz-meta-sha384".into(), proof.node.sha384.clone())]);
         if let Err(error) = crate::promotion::conditional_copy(
             bucket,
@@ -483,10 +463,7 @@ mod tests {
             ]),
         )?;
         let (reserved, vp) = stager.prepare_kernel(Operation::Reserve(graph.clone()))?;
-        let command = Commit {
-            viewpoint: vp.decimal(),
-            graph,
-        };
+        let command = Commit::new(vp.decimal(), graph)?;
         let etags = command
             .graph
             .databases
@@ -495,7 +472,7 @@ mod tests {
             .collect();
         let index = roots::Index::from_command(&command, &(stager.prefix().milestone() + 1u8))?;
         let task = Task {
-            blob: command.graph.encode()?,
+            blob: command.blob.clone(),
             commit: command.clone(),
             upstream: index.upstream.clone(),
             index,

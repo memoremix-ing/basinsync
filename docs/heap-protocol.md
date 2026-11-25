@@ -65,3 +65,27 @@ Both *object-key patterns*[~][object-keys] share the stored UUIDv4
 *revision*[~][revision]. Send each action's headers. A nonempty stored *etag*[~][etag] makes `write` null; a valid
 *promotion*[~][node-promotion] timestamp makes `preview` null.
 
+Indexed error codes:
+
+| `code` | Meaning |
+| --- | --- |
+| `invalid_node` | Malformed node fields, edges, or authentication |
+| `invalid_context` | Invalid S3 *context*[~][context] metadata |
+| `invalid_length` | Content length beyond the database integer range |
+| `invalid_height` | An edge's *height*[~][node-height] is not below its parent's |
+| `unsupported_version` | Authentication version other than zero |
+| `height_limit`, `token_limit`, `degree_limit` | A configured service limit is exceeded |
+| `node_freed` | The *node*[~][node] awaits reclamation; retry afterward |
+| `length_collision`, `edges_collision`, `context_collision` | The existing *node*[~][node] differs |
+| `child_unknown` | A child has no reserved allocation |
+| `child_freed` | A child awaits reclamation |
+| `child_missing` | A child's object is absent from both generations |
+| `child_length_mismatch` | A child's object length differs from its reservation |
+| `child_unavailable` | A child's object could not be verified, such as on a denied or failed read |
+| `child_unverified` | A child's allocation has not been verified yet |
+| `child_changed` | A child's allocation changed during verification; retry |
+
+Commit edges that fail the same checks return 422 with these `child_*` codes.
+
+Presigned URLs, here and in status responses, expire within minutes; request
+new ones rather than caching them.

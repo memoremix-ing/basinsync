@@ -196,18 +196,9 @@ async fn backup_graph(
         .await?;
     }
     let etags = crate::kernel::verify(bucket, &graph).await?;
-    let blob = graph.encode()?;
-    internal(
-        queue,
-        crate::kernel::Operation::Commit {
-            command: crate::kernel::Commit {
-                viewpoint: viewpoint.decimal(),
-                graph,
-            },
-            etags,
-        },
-    )
-    .await?;
+    let command = crate::kernel::Commit::new(viewpoint.decimal(), graph)?;
+    let blob = command.blob.clone();
+    internal(queue, crate::kernel::Operation::Commit { command, etags }).await?;
     cache.remember(blob);
     // The watch target now includes the acknowledged commitkernel event.
     Ok(())

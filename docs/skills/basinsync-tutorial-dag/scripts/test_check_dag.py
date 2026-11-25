@@ -159,6 +159,20 @@ class TutorialDagTests(unittest.TestCase):
             self.assertEqual(lint_tutorials(docs / "diy"),
                              {"errors": [], "tutorials": 1, "edges": 0})
 
+    def test_overlay_trees_depend_on_earlier_trees_only(self):
+        with fixture({"public/" + ROOT: frontmatter([]),
+                      "overlay/" + LEFT: frontmatter([ROOT])}) as directory:
+            public, overlay = directory / "public", directory / "overlay"
+            self.assertEqual(lint_tutorials(public, overlay), {"errors": [], "tutorials": 2, "edges": 1})
+            self.assertEqual(cli(public, overlay).returncode, 0)
+            write(public, RIGHT, frontmatter([LEFT]))
+            self.assertIn("only in an overlay tree", "\n".join(lint_tutorials(public, overlay)["errors"]))
+            self.assertIn("missing prerequisite", "\n".join(lint_tutorials(public)["errors"]))
+        with fixture({"public/" + ROOT: frontmatter([]),
+                      "overlay/0zg1/261002-root": frontmatter([])}) as directory:
+            errors = "\n".join(lint_tutorials(directory / "public", directory / "overlay")["errors"])
+            self.assertIn('duplicate tutorial slug "root"', errors)
+
     def test_distinct_slugs_may_share_trailing_words(self):
         with fixture({"0zg0/261001-shared-topic": frontmatter([]),
                       "0zg1/261001-other-shared-topic": frontmatter(["0zg0/261001-shared-topic"])}) as directory:

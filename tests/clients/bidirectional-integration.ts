@@ -7,6 +7,7 @@ import {fromKey} from "./timeline";
 import {trimRetryMargins,manifestRange} from "./events";
 import {wrap,concat,MARGIN,NESTED} from "./envbuf";
 import { objectKeys } from "./object-keys";
+import { passed } from "./scenarios";
 const f=await fixture("bidirectional");
 try {
   const events=await f.generate(64,4096),plain=await f.bucket();await f.seed(plain,events);
@@ -70,5 +71,5 @@ try {
     const fd=openSync(path!,"r+");try{writeSync(fd,new Uint8Array([0]),0,1,0);}finally{closeSync(fd);}
     const result=await pending;assert.equal(result.sha384,expected.sha384);assert(result.stats.cache_misses>0);
   }
-  console.log(`put of success: bidirectional recovery, bounded eviction/refetch, checksum failure, unavailable disk, held archive reads, and byte-coordinate ranges. Artifacts: ${f.artifacts}`);
+  passed("0zg4 bulk-order recovery", `bidirectional recovery, bounded eviction/refetch, checksum failure, unavailable disk, held archive reads, and byte-coordinate ranges. Artifacts: ${f.artifacts}`);
 } finally {await f.close();}

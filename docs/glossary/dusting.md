@@ -6,4 +6,5 @@
 
 Periodically LIST the *young generation*[~][young-generation] to locate objects
 without a viable database allocation for their *node*[~][node] and
-*revision*[~][revision], including objects recreated by late uploads after reclamation.
+*revision*[~][revision], including objects recreated by late uploads after reclamation,
+and young objects whose matching allocation is already promoted.
